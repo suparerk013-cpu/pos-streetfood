@@ -1,250 +1,337 @@
 import { useState } from 'react'
 import { calcCartTotal } from '../lib/cart'
-import { createOrder, InsufficientStockError, PAYMENT_METHOD_LABELS } from '../lib/orders'
+import { createOrder, InsufficientStockError } from '../lib/orders'
 import ModalBackdrop from './ModalBackdrop'
-import Numpad from './Numpad'
+
+const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
+const METHOD_SHORT  = { cash: 'เงินสด', promptpay: 'โมบาย', delivery: 'เดลิ' }
+const METHOD_ICONS  = { cash: '💵', promptpay: '📱', delivery: '🛵' }
+
+const DELIVERY_PLATFORMS = [
+  { key: 'GrabFood',    label: 'GrabFood',    bg: 'bg-green-500',  emoji: '🟢' },
+  { key: 'LINE MAN',   label: 'LINE MAN',    bg: 'bg-lime-500',   emoji: '🟡' },
+  { key: 'Shopee Food', label: 'Shopee Food', bg: 'bg-orange-500', emoji: '🟠' },
+  { key: 'Robinhood',  label: 'Robinhood',   bg: 'bg-purple-500', emoji: '🟣' },
+]
+
+const DIGIT_ROWS = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['ล้าง','0','⌫']]
+const QUICK_AMOUNTS  = [20, 50, 100]
+const QUICK_DISCOUNTS = [5, 10, 20]
+
+function calcDeliveryTotal(cart, platform) {
+  return cart.reduce((sum, item) => {
+    const price = item.delivery_prices?.[platform] ?? item.price
+    return sum + price * item.quantity
+  }, 0)
+}
 
 function CheckoutModal({ cart, onClose, onSuccess }) {
-  const total = calcCartTotal(cart)
-  const [payments, setPayments] = useState([])
-  const [selectedMethod, setSelectedMethod] = useState(null)
+  const subtotal = calcCartTotal(cart)
+  const [method, setMethod]           = useState('cash')
   const [numpadValue, setNumpadValue] = useState('0')
+  const [payments, setPayments]       = useState([])
   const [changePopup, setChangePopup] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [pending, setPending] = useState(false)
-  const [saveError, setSaveError] = useState(null)
+  const [saving, setSaving]           = useState(false)
+  const [saveError, setSaveError]     = useState(null)
+  const [discount, setDiscount]       = useState(0)
+  const [discountMode, setDiscountMode] = useState(false)
 
-  const paidSoFar = payments.reduce((sum, p) => sum + p.amount, 0)
-  const remaining = Math.max(total - paidSoFar, 0)
-  const entered = Number(numpadValue) || 0
+  const total      = Math.max(subtotal - discount, 0)
+  const paidSoFar  = payments.reduce((s, p) => s + p.amount, 0)
+  const remaining  = Math.max(total - paidSoFar, 0)
+  const entered    = Number(numpadValue) || 0
 
-  const quickAmounts = [
-    { label: 'พอดี', value: remaining },
-    { label: '50', value: 50 },
-    { label: '100', value: 100 },
-    { label: '500', value: 500 },
-    { label: '1000', value: 1000 },
-  ]
-
-  const openMethod = (method) => {
-    setSelectedMethod(method)
-    setNumpadValue('0')
-  }
-
-  const confirmPaymentDisabled =
-    entered <= 0 || (selectedMethod === 'promptpay' && entered > remaining)
+  const canAdd = discountMode
+    ? entered <= subtotal
+    : (entered > 0 && remaining > 0 && (method === 'promptpay' ? entered <= remaining : true))
 
   const finalizeOrder = async (finalPayments) => {
     if (saving) return
-    setSaving(true)
-    setSaveError(null)
-    setPending(false)
-    const pendingTimer = setTimeout(() => setPending(true), 6000)
-
+    setSaving(true); setSaveError(null)
     try {
-      const result = await createOrder({ cart, payments: finalPayments, total })
-      clearTimeout(pendingTimer)
-      setSaving(false)
-      onSuccess(result)
+      const result = await createOrder({ cart, payments: finalPayments, total, discount, subtotal })
+      setSaving(false); onSuccess(result)
     } catch (err) {
-      clearTimeout(pendingTimer)
       setSaving(false)
-      setPending(false)
-      if (err instanceof InsufficientStockError) {
-        setSaveError(`${err.message} — กรุณาปิดหน้านี้แล้วปรับจำนวนในตะกร้าก่อนลองใหม่`)
-      } else {
-        setSaveError(
-          'บันทึกบิลไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง — ยอดชำระที่กรอกไว้ยังอยู่ครบ กดปุ่มด้านล่างเพื่อลองบันทึกอีกครั้ง',
-        )
-      }
+      setSaveError(err instanceof InsufficientStockError
+        ? `${err.message} — ปรับจำนวนก่อน`
+        : 'บันทึกไม่สำเร็จ ลองใหม่')
     }
   }
 
-  const handleConfirmPayment = () => {
-    if (confirmPaymentDisabled) return
-
-    const newPayment =
-      selectedMethod === 'cash'
-        ? (() => {
-            const appliedAmount = Math.min(entered, remaining)
-            return {
-              method: 'cash',
-              amount: appliedAmount,
-              cash_received: entered,
-              change: entered - appliedAmount,
-            }
-          })()
-        : { method: 'promptpay', amount: entered }
-
-    const updatedPayments = [...payments, newPayment]
-    const newRemaining = Math.max(total - updatedPayments.reduce((sum, p) => sum + p.amount, 0), 0)
-
-    setPayments(updatedPayments)
-    setSelectedMethod(null)
+  const handleDiscountConfirm = () => {
+    setDiscount(Math.min(entered, subtotal))
+    setDiscountMode(false)
     setNumpadValue('0')
+    setPayments([])
+  }
 
-    if (newPayment.change > 0) {
-      setChangePopup({ amount: newPayment.change, shouldFinalize: newRemaining === 0, finalPayments: updatedPayments })
+  const handleAddPayment = () => {
+    if (!canAdd) return
+    const applied = Math.min(entered, remaining)
+    const change  = method === 'cash' ? Math.max(entered - applied, 0) : 0
+    const pay = method === 'cash'
+      ? { method: 'cash', amount: applied, cash_received: entered, change }
+      : { method: 'promptpay', amount: applied }
+    const updated      = [...payments, pay]
+    const newRemaining = Math.max(total - updated.reduce((s,p) => s + p.amount, 0), 0)
+    setPayments(updated); setNumpadValue('0')
+    if (change > 0) {
+      setChangePopup({ amount: change, shouldFinalize: newRemaining === 0, finalPayments: updated })
     } else if (newRemaining === 0) {
-      finalizeOrder(updatedPayments)
+      finalizeOrder(updated)
     }
   }
 
-  const handleChangePopupDone = () => {
-    const { shouldFinalize, finalPayments } = changePopup
-    setChangePopup(null)
-    if (shouldFinalize) {
-      finalizeOrder(finalPayments)
-    }
+  const handleKey = (key) => {
+    if (key === 'ล้าง') { setNumpadValue('0'); return }
+    if (key === '⌫')   { setNumpadValue(v => v.length > 1 ? v.slice(0,-1) : '0'); return }
+    setNumpadValue(v => v === '0' ? key : v.length < 7 ? v + key : v)
   }
 
-  const canClose = !saving
+  const btnLabel = () => {
+    if (discountMode) {
+      return entered === 0 ? 'ยืนยัน (ไม่มีส่วนลด)' : `🏷️ ส่วนลด ${entered.toLocaleString()} ฿`
+    }
+    if (saving)        return 'กำลังบันทึก...'
+    if (entered === 0) return 'กรอกยอดที่รับ'
+    const applied      = Math.min(entered, remaining)
+    const newRemaining = remaining - applied
+    const change       = method === 'cash' ? Math.max(entered - applied, 0) : 0
+    if (newRemaining === 0 && change === 0) return '✓ ยืนยันชำระครบ'
+    if (newRemaining === 0 && change > 0)  return `✓ ทอน ${change.toLocaleString()} ฿`
+    return `✓ รับ ${applied.toLocaleString()} ฿  (ค้าง ${newRemaining.toLocaleString()})`
+  }
+
+  const openDiscountMode = () => {
+    setDiscountMode(true)
+    setNumpadValue(discount > 0 ? String(discount) : '0')
+  }
+
+  const cancelDiscountMode = () => {
+    setDiscountMode(false)
+    setNumpadValue('0')
+  }
+
+  const showNumpad = discountMode || method !== 'delivery'
 
   return (
     <>
-      <ModalBackdrop onClose={onClose} canClose={canClose}>
-        <div className="flex-1 min-h-0 overflow-y-auto p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-bold text-gray-800">ชำระเงิน</h2>
-            <button
-              type="button"
-              onClick={() => canClose && onClose()}
-              disabled={!canClose}
-              className="w-11 h-11 shrink-0 rounded-full bg-gray-100 text-gray-500 text-lg flex items-center justify-center disabled:opacity-40"
-              aria-label="ปิด"
-            >
-              ×
-            </button>
-          </div>
+      <div
+        className="fixed inset-0 z-50 flex flex-col sm:items-center sm:justify-center bg-black/60"
+        onClick={() => !saving && onClose()}
+      >
+        <div
+          className="flex-1 min-h-0 flex flex-col bg-white w-full overflow-hidden sm:flex-none sm:h-[95vh] sm:max-w-md sm:rounded-3xl sm:shadow-2xl"
+          onClick={(e) => e.stopPropagation()}
+        >
 
-          <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-            <div className="rounded-xl bg-gray-50 px-3 py-2">
-              <p className="text-xs text-gray-400">ยอดรวม</p>
-              <p className="text-xl font-bold text-gray-800">{total.toLocaleString()} ฿</p>
-            </div>
-            <div className="rounded-xl bg-orange-50 px-3 py-2">
-              <p className="text-xs text-orange-500">ยอดค้างจ่าย</p>
-              <p className="text-xl font-bold text-orange-700">
-                {remaining.toLocaleString()} ฿
+          {/* ══ HEADER ══ */}
+          <div className="shrink-0 bg-gradient-to-r from-orange-500 to-red-500 px-4 py-2.5 flex items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">
+                {discount > 0 ? 'ราคาสินค้า → ยอดสุทธิ' : 'ยอดรวม'}
               </p>
+              {discount > 0 ? (
+                <div className="flex items-baseline gap-2 flex-wrap">
+                  <p className="text-white/40 text-xl line-through leading-tight tabular-nums">
+                    {subtotal.toLocaleString()}
+                  </p>
+                  <p className="text-white font-black text-4xl leading-tight tabular-nums">
+                    {total.toLocaleString()}
+                    <span className="text-xl opacity-60 ml-1.5">฿</span>
+                  </p>
+                </div>
+              ) : (
+                <p className="text-white font-black text-4xl leading-tight tabular-nums">
+                  {subtotal.toLocaleString()}
+                  <span className="text-xl opacity-60 ml-1.5">฿</span>
+                </p>
+              )}
+              {discount > 0 && (
+                <p className="text-green-200 text-xs font-semibold">🏷️ ส่วนลด {discount.toLocaleString()} ฿</p>
+              )}
+              {payments.length > 0 && (
+                <p className="text-white/80 text-xs mt-0.5">
+                  {payments.map((p,i)=>(
+                    <span key={i}>{p.platform ?? METHOD_SHORT[p.method]} {p.amount.toLocaleString()} · </span>
+                  ))}
+                  <span className="font-bold">ค้าง {remaining.toLocaleString()} ฿</span>
+                </p>
+              )}
+            </div>
+            <div className="shrink-0 flex flex-col items-end gap-1.5">
+              {payments.length === 0 && !discountMode && (
+                <button
+                  type="button"
+                  onClick={openDiscountMode}
+                  className="rounded-lg bg-white/20 text-white text-[11px] font-bold px-2.5 py-1 active:bg-white/30 whitespace-nowrap">
+                  {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
+                </button>
+              )}
+              <button type="button" onClick={() => !saving && onClose()} disabled={saving}
+                className="w-10 h-10 rounded-full bg-white/20 text-white text-2xl font-bold flex items-center justify-center disabled:opacity-40">
+                ×
+              </button>
             </div>
           </div>
 
-          {payments.length > 0 && (
-            <div className="mb-3 rounded-xl border border-gray-100 divide-y divide-gray-50">
-              {payments.map((p, index) => (
-                <div key={index} className="px-3 py-1.5 flex items-center justify-between text-sm">
-                  <span className="text-gray-600">{PAYMENT_METHOD_LABELS[p.method]}</span>
-                  <span className="font-medium text-gray-800">
-                    {p.amount.toLocaleString()} ฿
-                    {p.change > 0 && (
-                      <span className="text-gray-400"> (ทอน {p.change.toLocaleString()})</span>
-                    )}
-                  </span>
+          {/* ══ METHOD TABS or DISCOUNT BANNER ══ */}
+          {discountMode ? (
+            <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-100">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">🏷️</span>
+                <div>
+                  <p className="text-orange-700 font-bold text-sm leading-none">ป้อนส่วนลด</p>
+                  <p className="text-orange-400 text-[10px]">กรอกจำนวนเงินที่ต้องการลด</p>
                 </div>
+              </div>
+              <button type="button" onClick={cancelDiscountMode}
+                className="text-xs text-gray-500 font-semibold px-3 py-1.5 rounded-xl bg-white border border-gray-200 active:scale-95">
+                ยกเลิก
+              </button>
+            </div>
+          ) : (
+            <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1">
+              {['cash','promptpay','delivery'].map((m) => (
+                <button key={m} type="button"
+                  onClick={() => { setMethod(m); setNumpadValue('0') }}
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 font-bold text-xs transition-all ${
+                    method === m
+                      ? 'border-orange-500 bg-orange-50 text-orange-600'
+                      : 'border-gray-200 bg-white text-gray-500 active:scale-95'
+                  }`}>
+                  <span className="text-sm">{METHOD_ICONS[m]}</span>
+                  {METHOD_SHORT[m]}
+                </button>
               ))}
             </div>
           )}
 
-          {selectedMethod ? (
-            <div>
-              <div className="mb-1.5 flex items-center justify-between">
-                <p className="text-sm font-medium text-gray-600">
-                  ระบุยอด{PAYMENT_METHOD_LABELS[selectedMethod]}
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setSelectedMethod(null)}
-                  className="text-sm text-gray-400"
-                >
-                  ย้อนกลับ
-                </button>
+          {/* ══ NUMPAD AREA ══ */}
+          {showNumpad ? (
+            <div className="flex-1 min-h-0 flex flex-col px-3 pb-3 gap-1.5">
+
+              {/* Display row */}
+              <div className="shrink-0 flex gap-1.5">
+                <div className="flex-1 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-3 py-1.5">
+                  <span className="text-3xl font-extrabold text-gray-800 tabular-nums leading-none">
+                    {Number(numpadValue).toLocaleString()}
+                  </span>
+                  <span className="text-base font-bold text-gray-400">
+                    {discountMode ? '฿ ลด' : '฿'}
+                  </span>
+                </div>
+                {!discountMode && (
+                  <button type="button" onClick={() => setNumpadValue(String(remaining))}
+                    className="shrink-0 rounded-xl bg-orange-500 px-4 text-sm font-bold text-white active:scale-95 shadow-sm">
+                    พอดี
+                  </button>
+                )}
               </div>
 
-              <Numpad
-                value={numpadValue}
-                onChangeValue={setNumpadValue}
-                quickAmounts={quickAmounts}
-              />
-
-              {selectedMethod === 'promptpay' && entered > remaining && (
-                <p className="mt-2 text-center text-sm font-medium text-red-500">
-                  ยอดโอนต้องไม่เกินยอดค้างจ่าย
-                </p>
-              )}
-            </div>
-          ) : (
-            <div>
-              <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => openMethod('cash')}
-                  disabled={remaining <= 0}
-                  className="min-h-[52px] rounded-xl bg-white border-2 border-orange-200 disabled:opacity-40 font-bold text-gray-700 active:scale-95 transition-transform"
-                >
-                  เงินสด
-                </button>
-                <button
-                  type="button"
-                  onClick={() => openMethod('promptpay')}
-                  disabled={remaining <= 0}
-                  className="min-h-[52px] rounded-xl bg-white border-2 border-orange-200 disabled:opacity-40 font-bold text-gray-700 active:scale-95 transition-transform"
-                >
-                  โอน (PromptPay)
-                </button>
-              </div>
-
+              {/* Error */}
               {saveError && (
-                <p className="mb-2 rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">
-                  {saveError}
+                <p className="shrink-0 rounded-lg bg-red-50 px-3 py-1 text-xs text-red-600">{saveError}</p>
+              )}
+              {!discountMode && method === 'promptpay' && entered > remaining && (
+                <p className="shrink-0 text-center text-xs font-semibold text-red-500">
+                  ยอดโอนต้องไม่เกิน {remaining.toLocaleString()} ฿
                 </p>
               )}
-              {pending && !saveError && (
-                <p className="mb-2 rounded-xl bg-yellow-50 px-4 py-2.5 text-sm text-yellow-700">
-                  กำลังเชื่อมต่อกับเซิร์ฟเวอร์ อย่าเพิ่งปิดหน้านี้...
+              {discountMode && entered > subtotal && (
+                <p className="shrink-0 text-center text-xs font-semibold text-red-500">
+                  ส่วนลดต้องไม่เกิน {subtotal.toLocaleString()} ฿
                 </p>
               )}
+
+              {/* Quick amounts */}
+              <div className="shrink-0 flex gap-1.5">
+                {(discountMode ? QUICK_DISCOUNTS : QUICK_AMOUNTS).map((v) => (
+                  <button key={v} type="button" onClick={() => setNumpadValue(String(v))}
+                    className={`flex-1 h-11 rounded-xl font-bold text-base active:scale-95 transition-all ${
+                      discountMode
+                        ? 'bg-green-50 border border-green-100 text-green-700 active:bg-green-100'
+                        : 'bg-blue-50 border border-blue-100 text-blue-700 active:bg-blue-100'
+                    }`}>
+                    {discountMode ? `-${v}` : v}
+                  </button>
+                ))}
+              </div>
+
+              {/* Digit grid */}
+              <div className="flex-1 min-h-0 flex flex-col gap-1.5">
+                {DIGIT_ROWS.map((row, ri) => (
+                  <div key={ri} className="flex-1 flex gap-1.5">
+                    {row.map((d) => (
+                      <button key={d} type="button" onClick={() => handleKey(d)}
+                        className={`flex-1 rounded-2xl font-black text-3xl active:scale-95 transition-all select-none ${
+                          d === 'ล้าง'
+                            ? 'bg-gray-100 text-gray-500 text-lg active:bg-gray-200'
+                            : d === '⌫'
+                            ? 'bg-gray-100 text-gray-600 active:bg-gray-200'
+                            : 'bg-white border-2 border-gray-200 text-gray-800 shadow-sm active:bg-orange-50 active:border-orange-300'
+                        }`}>
+                        {d}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+
+              {/* Confirm button */}
+              <button type="button"
+                onClick={discountMode ? handleDiscountConfirm : handleAddPayment}
+                disabled={(!discountMode && (!canAdd || saving)) || (discountMode && entered > subtotal)}
+                className={`shrink-0 h-14 rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all text-white ${
+                  discountMode
+                    ? 'bg-gradient-to-r from-green-500 to-emerald-500 disabled:from-gray-300 disabled:to-gray-300'
+                    : 'bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300'
+                }`}>
+                {btnLabel()}
+              </button>
+            </div>
+
+          ) : (
+            /* ══ DELIVERY PLATFORMS ══ */
+            <div className="flex-1 min-h-0 flex flex-col px-3 pb-3 gap-2">
+              {saveError && (
+                <p className="shrink-0 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 text-center">{saveError}</p>
+              )}
+              <p className="shrink-0 text-xs font-bold text-gray-400 uppercase tracking-wider text-center pt-1">
+                เลือกแพลตฟอร์ม
+              </p>
+              <div className="flex-1 min-h-0 grid grid-cols-2 gap-2">
+                {DELIVERY_PLATFORMS.map((p) => {
+                  const dTotal = calcDeliveryTotal(cart, p.key)
+                  return (
+                    <button key={p.key} type="button" disabled={saving}
+                      onClick={() => !saving && finalizeOrder([{ method: 'delivery', platform: p.key, amount: dTotal }])}
+                      className={`${p.bg} rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-lg active:scale-95 transition-all disabled:opacity-50`}>
+                      <span className="text-4xl">{p.emoji}</span>
+                      <span className="font-bold text-base">{p.label}</span>
+                      <span className="font-black text-xl tabular-nums">{dTotal.toLocaleString()} ฿</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
           )}
-        </div>
 
-        <div className="shrink-0 border-t border-gray-100 p-4">
-          {selectedMethod ? (
-            <button
-              type="button"
-              onClick={handleConfirmPayment}
-              disabled={confirmPaymentDisabled}
-              className="w-full min-h-[48px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
-            >
-              ยืนยันยอดนี้
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => finalizeOrder(payments)}
-              disabled={remaining > 0 || payments.length === 0 || saving}
-              className="w-full min-h-[52px] rounded-xl bg-green-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
-            >
-              {saving ? 'กำลังบันทึก...' : 'ยืนยันชำระเงิน'}
-            </button>
-          )}
         </div>
-      </ModalBackdrop>
+      </div>
 
+      {/* Change popup */}
       {changePopup && (
         <ModalBackdrop canClose={false} maxWidthClass="max-w-sm">
-          <div className="flex-1 min-h-0 overflow-y-auto p-6 text-center">
-            <p className="text-gray-500 mb-2">เงินทอน</p>
-            <p className="mb-1 text-3xl sm:text-5xl font-bold text-green-600 break-words">
-              {changePopup.amount.toLocaleString()}
-            </p>
-            <p className="text-gray-500">บาท</p>
-
-            <button
-              type="button"
-              onClick={handleChangePopupDone}
-              className="mt-6 w-full min-h-[52px] rounded-xl bg-orange-600 text-white font-bold text-lg active:scale-95 transition-transform"
-            >
+          <div className="p-6 text-center">
+            <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-3xl">💵</div>
+            <p className="text-gray-500 mb-1 font-medium">เงินทอน</p>
+            <p className="text-5xl font-extrabold text-green-600 mb-1">{changePopup.amount.toLocaleString()}</p>
+            <p className="text-gray-400 mb-5">บาท</p>
+            <button type="button"
+              onClick={() => { setChangePopup(null); if (changePopup.shouldFinalize) finalizeOrder(changePopup.finalPayments) }}
+              className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold text-lg shadow-lg active:scale-95">
               เสร็จสิ้น
             </button>
           </div>

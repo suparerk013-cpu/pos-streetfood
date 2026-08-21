@@ -4,15 +4,29 @@ import ModalBackdrop from './ModalBackdrop'
 
 const CATEGORY_KEYS = Object.keys(EXPENSE_CATEGORY_LABELS)
 
+const CATEGORY_ICONS = {
+  raw_material: '🥩',
+  utility_water: '💧',
+  utility_electric: '⚡',
+  rent: '🏠',
+  labor: '👷',
+  other: '📝',
+}
+
 function ExpenseModal({ onClose, onSubmit }) {
-  const [category, setCategory] = useState('other')
+  const [category, setCategory] = useState('raw_material')
+  const [customLabel, setCustomLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(toDateString())
   const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  const isValid = Number(amount) > 0 && date.trim() !== ''
+  const needsLabel = category === 'raw_material' || category === 'other'
+  const labelPlaceholder = category === 'raw_material' ? 'เช่น หมึกสด, หอยสด, มะนาว' : 'เช่น ค่าซ่อมอุปกรณ์'
+  const labelTitle = category === 'raw_material' ? 'ชื่อวัตถุดิบ' : 'ชื่อค่าใช้จ่าย'
+
+  const isValid = Number(amount) > 0 && date.trim() !== '' && (!needsLabel || customLabel.trim() !== '')
   const canClose = !saving
 
   const handleSubmit = async () => {
@@ -20,92 +34,86 @@ function ExpenseModal({ onClose, onSubmit }) {
     setSaving(true)
     setError(null)
     try {
-      await onSubmit({ category, amount: Number(amount), date, note: note.trim() })
+      await onSubmit({
+        category,
+        custom_label: needsLabel ? customLabel.trim() : null,
+        amount: Number(amount),
+        date,
+        note: note.trim(),
+      })
     } catch {
       setSaving(false)
-      setError('บันทึกไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
+      setError('บันทึกไม่สำเร็จ ลองใหม่อีกครั้ง')
     }
   }
 
   return (
     <ModalBackdrop onClose={onClose} canClose={canClose}>
-      <div className="flex-1 min-h-0 overflow-y-auto p-5">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-xl font-bold text-gray-800">บันทึกค่าใช้จ่าย</h2>
-          <button
-            type="button"
-            onClick={() => canClose && onClose()}
-            disabled={!canClose}
-            className="w-11 h-11 shrink-0 rounded-full bg-gray-100 text-gray-500 text-lg flex items-center justify-center disabled:opacity-40"
-            aria-label="ปิด"
-          >
-            ×
-          </button>
-        </div>
+      <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 shrink-0">
+        <h2 className="text-base font-bold text-white">บันทึกค่าใช้จ่าย</h2>
+        <button type="button" onClick={() => canClose && onClose()} disabled={!canClose}
+          className="w-10 h-10 shrink-0 rounded-full bg-white/20 text-white text-xl flex items-center justify-center disabled:opacity-40">×</button>
+      </div>
 
-        <div className="mb-4">
-          <span className="text-sm font-medium text-gray-600">หมวดหมู่</span>
-          <div className="mt-1 grid grid-cols-2 gap-2">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-3">
+        {/* Category selector */}
+        <div>
+          <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">หมวดหมู่</p>
+          <div className="grid grid-cols-3 gap-2">
             {CATEGORY_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => setCategory(key)}
-                className={`min-h-[48px] rounded-xl border-2 font-medium transition-colors ${
-                  category === key
-                    ? 'border-orange-600 bg-orange-50 text-orange-700'
-                    : 'border-gray-200 text-gray-600'
-                }`}
-              >
+              <button key={key} type="button" onClick={() => { setCategory(key); setCustomLabel('') }}
+                className={`min-h-[52px] rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 text-xs font-semibold transition-colors ${
+                  category === key ? 'border-orange-500 bg-orange-50 text-orange-700' : 'border-gray-200 text-gray-500 bg-white'
+                }`}>
+                <span className="text-lg">{CATEGORY_ICONS[key]}</span>
                 {EXPENSE_CATEGORY_LABELS[key]}
               </button>
             ))}
           </div>
         </div>
 
-        <label className="block mb-3">
-          <span className="text-sm font-medium text-gray-600">จำนวนเงิน (บาท)</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={amount}
-            onChange={(event) => setAmount(event.target.value)}
-            placeholder="0"
-            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
-          />
-        </label>
-
-        <label className="block mb-3">
-          <span className="text-sm font-medium text-gray-600">วันที่</span>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
-          />
-        </label>
-
-        <label className="block mb-4">
-          <span className="text-sm font-medium text-gray-600">โน้ต (ถ้ามี)</span>
-          <input
-            type="text"
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="เช่น ค่าน้ำเดือนสิงหาคม"
-            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4"
-          />
-        </label>
-
-        {error && (
-          <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
+        {/* Item name for raw_material or other */}
+        {needsLabel && (
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">
+              {labelTitle} <span className="text-red-500">*</span>
+            </span>
+            <input
+              type="text"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              placeholder={labelPlaceholder}
+              autoFocus
+              className="mt-1 w-full min-h-[48px] rounded-xl border-2 border-orange-300 bg-orange-50 px-4 text-sm focus:outline-none focus:border-orange-500"
+            />
+          </label>
         )}
 
-        <button
-          type="button"
-          onClick={handleSubmit}
-          disabled={!isValid || saving}
-          className="w-full min-h-[56px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
-        >
+        <label className="block">
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">จำนวนเงิน (บาท)</span>
+          <input type="number" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)}
+            placeholder="0"
+            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-xl font-bold focus:outline-none focus:border-orange-400" />
+        </label>
+
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">วันที่</span>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+              className="mt-1 w-full min-h-[48px] rounded-xl border border-gray-200 px-3 text-sm" />
+          </label>
+          <label className="block">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">โน้ต</span>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)}
+              placeholder="ไม่บังคับ"
+              className="mt-1 w-full min-h-[48px] rounded-xl border border-gray-200 px-3 text-sm" />
+          </label>
+        </div>
+
+        {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</p>}
+
+        <button type="button" onClick={handleSubmit} disabled={!isValid || saving}
+          className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-bold text-base shadow-lg shadow-orange-200 active:scale-95 transition-all">
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
       </div>

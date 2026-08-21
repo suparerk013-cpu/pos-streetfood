@@ -2,12 +2,21 @@ import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
 export const EXPENSE_CATEGORY_LABELS = {
+  raw_material: 'วัตถุดิบ',
   utility_water: 'ค่าน้ำ',
   utility_electric: 'ค่าไฟ',
   rent: 'ค่าเช่า',
-  raw_material: 'ค่าวัตถุดิบ',
   labor: 'ค่าแรง',
   other: 'อื่นๆ',
+}
+
+export const EXPENSE_CATEGORY_COLORS = {
+  raw_material: 'bg-orange-100 text-orange-700',
+  utility_water: 'bg-blue-100 text-blue-700',
+  utility_electric: 'bg-yellow-100 text-yellow-700',
+  rent: 'bg-purple-100 text-purple-700',
+  labor: 'bg-green-100 text-green-700',
+  other: 'bg-gray-100 text-gray-600',
 }
 
 export function toDateString(date = new Date()) {
@@ -17,9 +26,10 @@ export function toDateString(date = new Date()) {
   return `${year}-${month}-${day}`
 }
 
-export async function createExpense({ category, amount, note, date }) {
+export async function createExpense({ category, custom_label, amount, note, date }) {
   await addDoc(collection(db, 'expenses'), {
     category,
+    custom_label: custom_label || null,
     amount,
     note: note || null,
     date,

@@ -3,9 +3,14 @@ import { useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
+const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
+
 function EditProductModal({ product, onClose, onSubmit }) {
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
+  const [deliveryPrices, setDeliveryPrices] = useState(
+    Object.fromEntries(PLATFORMS.map((p) => [p, String(product.delivery_prices?.[p] ?? '')]))
+  )
   const [imagePreview, setImagePreview] = useState(product.image_base64 ?? null)
   const [newImageBase64, setNewImageBase64] = useState(null)
   const [processingImage, setProcessingImage] = useState(false)
@@ -42,7 +47,9 @@ function EditProductModal({ product, onClose, onSubmit }) {
     setSaving(true)
     setError(null)
 
-    const updates = { name: name.trim(), price: Number(price) }
+    const dpMap = {}
+    PLATFORMS.forEach((p) => { if (Number(deliveryPrices[p]) > 0) dpMap[p] = Number(deliveryPrices[p]) })
+    const updates = { name: name.trim(), price: Number(price), delivery_prices: dpMap }
     if (newImageBase64) updates.image_base64 = newImageBase64
 
     try {
@@ -100,8 +107,8 @@ function EditProductModal({ product, onClose, onSubmit }) {
           />
         </label>
 
-        <label className="block mb-4">
-          <span className="text-sm font-medium text-gray-600">ราคา (บาท)</span>
+        <label className="block mb-3">
+          <span className="text-sm font-medium text-gray-600">ราคาหน้าร้าน (บาท)</span>
           <input
             type="number"
             inputMode="numeric"
@@ -110,6 +117,26 @@ function EditProductModal({ product, onClose, onSubmit }) {
             className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
           />
         </label>
+
+        {/* Delivery prices */}
+        <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100">
+          <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-3">ราคาเดลิเวอรี่ (ถ้าต่างจากหน้าร้าน)</p>
+          <div className="grid grid-cols-2 gap-2">
+            {PLATFORMS.map((p) => (
+              <label key={p} className="block">
+                <span className="text-xs font-medium text-gray-600">{p}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  value={deliveryPrices[p]}
+                  onChange={(e) => setDeliveryPrices((prev) => ({ ...prev, [p]: e.target.value }))}
+                  placeholder={price || '0'}
+                  className="mt-0.5 w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
+                />
+              </label>
+            ))}
+          </div>
+        </div>
 
         {error && (
           <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>

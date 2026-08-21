@@ -3,6 +3,7 @@ import { ImageOff } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
+import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
 import { db } from '../lib/firebase'
 import { addProduct, updateProduct } from '../lib/products'
@@ -16,6 +17,7 @@ function InventoryPage() {
   const [stockModalTarget, setStockModalTarget] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
+  const [logTarget, setLogTarget] = useState(null)
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -140,6 +142,13 @@ function InventoryPage() {
                   >
                     แก้ไข
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setLogTarget(product)}
+                    className="min-h-[44px] flex-1 rounded-xl bg-gray-50 border border-gray-200 text-gray-600 font-medium active:scale-95 transition-transform text-sm"
+                  >
+                    📋 ประวัติ
+                  </button>
                 </div>
               </div>
             )
@@ -166,6 +175,10 @@ function InventoryPage() {
           onClose={() => setEditTarget(null)}
           onSubmit={handleEditProduct}
         />
+      )}
+
+      {logTarget && (
+        <StockLogModal product={logTarget} onClose={() => setLogTarget(null)} />
       )}
     </div>
   )

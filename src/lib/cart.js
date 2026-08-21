@@ -11,7 +11,16 @@ export function buildCartKey(productId, modifiers = {}) {
   return [productId, ...parts].join('|')
 }
 
+function totalQtyForProduct(cart, productId) {
+  return cart
+    .filter((item) => item.productId === productId)
+    .reduce((sum, item) => sum + item.quantity, 0)
+}
+
 export function addItemToCart(cart, product, selectedModifiers = {}) {
+  const stockQty = product.stock_qty ?? 0
+  if (totalQtyForProduct(cart, product.id) >= stockQty) return cart
+
   const key = buildCartKey(product.id, selectedModifiers)
   const existing = cart.find((item) => item.key === key)
   if (existing) {
@@ -26,6 +35,8 @@ export function addItemToCart(cart, product, selectedModifiers = {}) {
       productId: product.id,
       name: product.name,
       price: product.price,
+      delivery_prices: product.delivery_prices ?? {},
+      stockQty,
       modifiers: selectedModifiers,
       quantity: 1,
     },
@@ -34,9 +45,14 @@ export function addItemToCart(cart, product, selectedModifiers = {}) {
 
 export function updateItemQuantity(cart, key, delta) {
   return cart
-    .map((item) =>
-      item.key === key ? { ...item, quantity: item.quantity + delta } : item,
-    )
+    .map((item) => {
+      if (item.key !== key) return item
+      if (delta > 0) {
+        const total = totalQtyForProduct(cart, item.productId)
+        if (total >= (item.stockQty ?? Infinity)) return item
+      }
+      return { ...item, quantity: item.quantity + delta }
+    })
     .filter((item) => item.quantity > 0)
 }
 

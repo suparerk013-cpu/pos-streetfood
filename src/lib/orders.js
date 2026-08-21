@@ -1,4 +1,4 @@
-import { collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
+import { addDoc, collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
 
 export const PAYMENT_METHOD_LABELS = {
@@ -44,7 +44,7 @@ function aggregateQtyByProduct(cart) {
   return map
 }
 
-export async function createOrder({ cart, payments, total }) {
+export async function createOrder({ cart, payments, total, discount = 0, subtotal }) {
   const counterRef = doc(db, 'counters', 'queue_counter')
   const orderRef = doc(collection(db, 'orders'))
 
@@ -80,6 +80,8 @@ export async function createOrder({ cart, payments, total }) {
     transaction.set(orderRef, {
       queue_no: next,
       items: buildOrderItems(cart),
+      subtotal: subtotal ?? total,
+      discount: discount > 0 ? discount : null,
       total_amount: total,
       payments,
       status: 'completed',
@@ -107,4 +109,55 @@ export async function createOrder({ cart, payments, total }) {
   })
 
   return { orderId: orderRef.id, queueNo, payments, total }
+}
+
+export async function importDeliveryTotal({ platform, amount }) {
+  const counterRef = doc(db, 'counters', 'queue_counter')
+  const orderRef = doc(collection(db, 'orders'))
+  await runTransaction(db, async (transaction) => {
+    const counterSnap = await transaction.get(counterRef)
+    const next = (counterSnap.exists() ? counterSnap.data().current_value : 0) + 1
+    transaction.set(counterRef, { current_value: next }, { merge: true })
+    transaction.set(orderRef, {
+      queue_no: next,
+      items: [],
+      subtotal: amount,
+      discount: null,
+      total_amount: amount,
+      payments: [{ method: 'delivery', platform, amount }],
+      status: 'completed',
+      source: 'delivery_import',
+      created_at: serverTimestamp(),
+      is_voided: false,
+    })
+  })
+}
+
+export async function voidOrder(orderId, items) {
+  const orderRef = doc(db, 'orders', orderId)
+  const productRefs = items.map((item) => doc(db, 'products', item.product_id))
+
+  await runTransaction(db, async (transaction) => {
+    const orderSnap = await transaction.get(orderRef)
+    if (!orderSnap.exists() || orderSnap.data().is_voided) throw new Error('ไม่พบบิล หรือยกเลิกแล้ว')
+    const productSnaps = await Promise.all(productRefs.map((ref) => transaction.get(ref)))
+
+    transaction.update(orderRef, { is_voided: true, voided_at: serverTimestamp() })
+
+    items.forEach((item, index) => {
+      const snap = productSnaps[index]
+      if (!snap.exists()) return
+      const currentQty = snap.data().stock_qty ?? 0
+      transaction.update(productRefs[index], { stock_qty: currentQty + item.qty })
+      const logRef = doc(collection(db, 'stock_logs'))
+      transaction.set(logRef, {
+        product_id: item.product_id,
+        type: 'void',
+        qty_change: item.qty,
+        note: `ยกเลิกบิล #${orderSnap.data().queue_no}`,
+        order_id: orderId,
+        created_at: serverTimestamp(),
+      })
+    })
+  })
 }

@@ -1,7 +1,8 @@
 import { calcItemTotal, formatModifiers } from '../lib/cart'
 
-function CartItemRow({ item, onIncrement, onDecrement, onRemove }) {
+function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemove }) {
   const modifiersText = formatModifiers(item.modifiers)
+  const atLimit = cartQtyForProduct >= (item.stockQty ?? Infinity)
 
   return (
     <div className="py-3 flex items-center gap-3">
@@ -28,7 +29,8 @@ function CartItemRow({ item, onIncrement, onDecrement, onRemove }) {
         <button
           type="button"
           onClick={() => onIncrement(item.key)}
-          className="w-11 h-11 rounded-full bg-orange-100 text-orange-700 font-bold text-lg flex items-center justify-center active:scale-90"
+          disabled={atLimit}
+          className="w-11 h-11 rounded-full bg-orange-100 text-orange-700 font-bold text-lg flex items-center justify-center active:scale-90 disabled:opacity-30 disabled:cursor-not-allowed"
           aria-label="เพิ่มจำนวน"
         >
           +

@@ -1,17 +1,17 @@
 import { calcCartTotal } from '../lib/cart'
 import CartItemRow from './CartItemRow'
 
-function CartSheet({ cart, onIncrement, onDecrement, onRemove, onCheckout }) {
+function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemove, onCheckout }) {
   const total = calcCartTotal(cart)
 
   return (
-    <div className="flex flex-col shrink-0 border-t border-orange-200 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.06)] max-h-[50vh] sm:max-h-[45vh] min-h-[200px]">
-      <div className="flex items-center justify-between px-4 pt-3 pb-1 shrink-0">
-        <h2 className="font-bold text-gray-700">ตะกร้าสินค้า</h2>
-        <span className="text-sm text-gray-400">{cart.length} รายการ</span>
+    <div className="flex flex-col shrink-0 shadow-[0_-6px_20px_rgba(0,0,0,0.1)] max-h-[50vh] sm:max-h-[45vh] min-h-[200px]">
+      <div className="flex items-center justify-between px-4 pt-2.5 pb-1.5 shrink-0 bg-gradient-to-r from-orange-500 to-red-500">
+        <h2 className="font-bold text-white tracking-wide">ตะกร้าสินค้า</h2>
+        <span className="text-sm text-white/80 bg-white/20 rounded-full px-2.5 py-0.5 font-medium">{cart.length} รายการ</span>
       </div>
 
-      <div className="flex-1 min-h-0 overflow-y-auto px-4 divide-y divide-orange-50">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 divide-y divide-orange-50 bg-white">
         {cart.length === 0 ? (
           <p className="py-6 text-center text-gray-400">ยังไม่มีสินค้าในตะกร้า</p>
         ) : (
@@ -19,6 +19,7 @@ function CartSheet({ cart, onIncrement, onDecrement, onRemove, onCheckout }) {
             <CartItemRow
               key={item.key}
               item={item}
+              cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
               onIncrement={onIncrement}
               onDecrement={onDecrement}
               onRemove={onRemove}
@@ -27,10 +28,11 @@ function CartSheet({ cart, onIncrement, onDecrement, onRemove, onCheckout }) {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-orange-100 px-4 py-3 flex items-center gap-3">
-        <div className="flex-1">
-          <p className="text-sm text-gray-400">ยอดรวม</p>
-          <p className="text-2xl font-bold text-gray-800">
+      {/* Mobile footer: total left, button right (ขยาย touch target) */}
+      <div className="shrink-0 bg-white border-t border-orange-100 sm:hidden px-3 py-2 flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider leading-none">ยอดรวม</p>
+          <p className="text-2xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent leading-tight">
             {total.toLocaleString()} ฿
           </p>
         </div>
@@ -38,10 +40,30 @@ function CartSheet({ cart, onIncrement, onDecrement, onRemove, onCheckout }) {
           type="button"
           onClick={onCheckout}
           disabled={cart.length === 0}
-          className="min-h-[56px] px-4 sm:px-8 rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold whitespace-nowrap text-sm sm:text-base active:scale-95 transition-transform"
+          className="min-h-[64px] min-w-[140px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-xl shadow-lg shadow-orange-300 active:scale-95 transition-all"
         >
-          คิดเงิน / ชำระเงิน
+          คิดเงิน
         </button>
+      </div>
+
+      {/* Desktop/Tablet footer: ยอดบนซ้าย, ปุ่มใหญ่กลาง */}
+      <div className="hidden sm:block shrink-0 bg-white border-t border-orange-100">
+        <div className="px-4 pt-2 pb-1 flex items-baseline justify-between">
+          <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">ยอดรวม</p>
+          <p className="text-2xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+            {total.toLocaleString()} ฿
+          </p>
+        </div>
+        <div className="px-8 pb-4">
+          <button
+            type="button"
+            onClick={onCheckout}
+            disabled={cart.length === 0}
+            className="w-full min-h-[64px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-2xl shadow-xl shadow-orange-200 active:scale-95 transition-all tracking-wide"
+          >
+            คิดเงิน
+          </button>
+        </div>
       </div>
     </div>
   )
