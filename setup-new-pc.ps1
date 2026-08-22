@@ -1,4 +1,4 @@
-# ===== POS Street Food — Setup Script =====
+﻿# ===== POS Street Food — Setup Script =====
 # รันใน PowerShell (คลิกขวา -> Run with PowerShell)
 
 Write-Host "=== POS Street Food Setup ===" -ForegroundColor Cyan
