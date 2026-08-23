@@ -1,12 +1,12 @@
 import { collection, onSnapshot } from 'firebase/firestore'
-import { ImageOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ImageOff, Search, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
 import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
 import { db } from '../lib/firebase'
-import { addProduct, updateProduct } from '../lib/products'
+import { addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { adjustStock, restockProduct } from '../lib/stock'
 
 const LOW_STOCK_THRESHOLD = 10
@@ -18,6 +18,7 @@ function InventoryPage() {
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [logTarget, setLogTarget] = useState(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -30,19 +31,9 @@ function InventoryPage() {
     return unsubscribe
   }, [])
 
-  const handleStockSubmit = async (qty, note, purchasePrice) => {
-    const { product, mode } = stockModalTarget
-    if (mode === 'restock') {
-      await restockProduct({
-        productId: product.id,
-        productName: product.name,
-        qty,
-        note,
-        purchasePrice,
-      })
-    } else {
-      await adjustStock(product.id, qty, note)
-    }
+  const handleStockSubmit = async (qty, note) => {
+    const { product } = stockModalTarget
+    await restockProduct({ productId: product.id, qty, note })
     setStockModalTarget(null)
   }
 
@@ -53,10 +44,22 @@ function InventoryPage() {
     setAddModalOpen(false)
   }
 
-  const handleEditProduct = async (updates) => {
+  const handleEditProduct = async (updates, stockDelta) => {
     await updateProduct(editTarget.id, updates)
+    if (stockDelta) await adjustStock(editTarget.id, stockDelta, 'แก้ไขจากหน้าแก้ไขสินค้า')
     setEditTarget(null)
   }
+
+  const handleDeleteProduct = async () => {
+    await deleteProduct(editTarget.id)
+    setEditTarget(null)
+  }
+
+  const visibleProducts = useMemo(() => {
+    const term = search.trim().toLowerCase()
+    if (!term) return products
+    return products.filter((p) => p.name?.toLowerCase().includes(term))
+  }, [products, search])
 
   return (
     <div className="h-full w-full flex flex-col bg-orange-50 overflow-hidden">
@@ -73,12 +76,33 @@ function InventoryPage() {
           + เพิ่มสินค้าใหม่
         </button>
 
+        <div className="mb-4 flex items-center gap-2 bg-white rounded-2xl border border-gray-200 px-3.5 py-2.5">
+          <Search size={16} className="text-gray-400 shrink-0" />
+          <input
+            type="search"
+            inputMode="search"
+            placeholder="ค้นหาชื่อสินค้า..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="flex-1 bg-transparent text-sm outline-none text-gray-700 placeholder-gray-400"
+          />
+          {search && (
+            <button type="button" onClick={() => setSearch('')} className="text-gray-400 shrink-0">
+              <X size={16} />
+            </button>
+          )}
+        </div>
+
         {!loading && products.length === 0 && (
           <p className="text-center text-gray-400 mt-8">ยังไม่มีสินค้า</p>
         )}
 
+        {!loading && products.length > 0 && visibleProducts.length === 0 && (
+          <p className="text-center text-gray-400 mt-8">ไม่พบสินค้าที่ค้นหา</p>
+        )}
+
         <div className="space-y-3">
-          {products.map((product) => {
+          {visibleProducts.map((product) => {
             const qty = product.stock_qty ?? 0
             const isLow = qty < LOW_STOCK_THRESHOLD
 
@@ -130,13 +154,6 @@ function InventoryPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setStockModalTarget({ product, mode: 'adjustment' })}
-                    className="min-h-[44px] flex-1 rounded-xl bg-gray-100 text-gray-700 font-medium active:scale-95 transition-transform"
-                  >
-                    ปรับสต็อก
-                  </button>
-                  <button
-                    type="button"
                     onClick={() => setEditTarget(product)}
                     className="min-h-[44px] flex-1 rounded-xl bg-gray-100 text-gray-700 font-medium active:scale-95 transition-transform"
                   >
@@ -174,6 +191,7 @@ function InventoryPage() {
           product={editTarget}
           onClose={() => setEditTarget(null)}
           onSubmit={handleEditProduct}
+          onDelete={handleDeleteProduct}
         />
       )}
 

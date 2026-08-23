@@ -5,7 +5,6 @@ function StockModal({ product, mode, onClose, onSubmit }) {
   const isAdjustment = mode === 'adjustment'
   const [qty, setQty] = useState('')
   const [note, setNote] = useState('')
-  const [purchasePrice, setPurchasePrice] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -22,8 +21,7 @@ function StockModal({ product, mode, onClose, onSubmit }) {
     setSaving(true)
     setError(null)
     try {
-      const parsedPrice = Number(purchasePrice)
-      await onSubmit(parsedQty, note.trim(), parsedPrice > 0 ? parsedPrice : null)
+      await onSubmit(parsedQty, note.trim())
     } catch {
       setSaving(false)
       setError('บันทึกไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
@@ -61,25 +59,6 @@ function StockModal({ product, mode, onClose, onSubmit }) {
             className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
           />
         </label>
-
-        {!isAdjustment && (
-          <label className="block mb-3">
-            <span className="text-sm font-medium text-gray-600">
-              ราคาที่ซื้อมา (บาท) — ไม่บังคับ แต่แนะนำให้กรอก
-            </span>
-            <input
-              type="number"
-              inputMode="numeric"
-              value={purchasePrice}
-              onChange={(event) => setPurchasePrice(event.target.value)}
-              placeholder="เช่น 500"
-              className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
-            />
-            <span className="mt-1 block text-xs text-gray-400">
-              กรอกแล้วจะบันทึกเป็นค่าใช้จ่ายวัตถุดิบให้อัตโนมัติ
-            </span>
-          </label>
-        )}
 
         <label className="block mb-4">
           <span className="text-sm font-medium text-gray-600">หมายเหตุ (ถ้ามี)</span>

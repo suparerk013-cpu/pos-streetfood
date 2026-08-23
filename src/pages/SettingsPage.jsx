@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import { db } from '../lib/firebase'
 
+const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
+
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
     <div>
@@ -31,6 +33,7 @@ function SettingsPage() {
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
+  const [deliveryPlatforms, setDeliveryPlatforms] = useState(PLATFORMS)
 
   useEffect(() => {
     getDoc(doc(db, 'settings', 'store')).then((snap) => {
@@ -41,10 +44,17 @@ function SettingsPage() {
         setAddress(d.address ?? '')
         setBillNote(d.bill_note ?? '')
         setLogoBase64(d.logo_base64 ?? null)
+        setDeliveryPlatforms(d.enabled_delivery_platforms ?? PLATFORMS)
       }
       setLoading(false)
     })
   }, [])
+
+  const toggleDeliveryPlatform = (platform) => {
+    setDeliveryPlatforms((prev) =>
+      prev.includes(platform) ? prev.filter((p) => p !== platform) : [...prev, platform],
+    )
+  }
 
   const handleLogoChange = async (e) => {
     const file = e.target.files?.[0]
@@ -73,6 +83,7 @@ function SettingsPage() {
       bill_note: billNote.trim(),
     }
     if (newLogo) payload.logo_base64 = newLogo
+    payload.enabled_delivery_platforms = deliveryPlatforms
     await setDoc(doc(db, 'settings', 'store'), payload, { merge: true })
     setSaving(false)
     setSaved(true)
@@ -136,6 +147,39 @@ function SettingsPage() {
                 onChange={setAddress}
                 placeholder="เช่น ตลาดนัดสุขุมวิท"
               />
+            </div>
+
+            {/* Delivery platforms card */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-3">
+              <div>
+                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider">แพลตฟอร์มเดลิเวอรี่</p>
+                <p className="text-xs text-gray-400 mt-0.5">เปิดเฉพาะแอพที่ร้านขายจริง จะโผล่ให้เลือกตอนคิดเงินและตั้งราคาสินค้า</p>
+              </div>
+              <div className="flex flex-col gap-2">
+                {PLATFORMS.map((p) => {
+                  const enabled = deliveryPlatforms.includes(p)
+                  return (
+                    <div key={p} className="flex items-center gap-3 bg-gray-50 rounded-xl border border-gray-100 px-3 py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => toggleDeliveryPlatform(p)}
+                        aria-pressed={enabled}
+                        aria-label={`เปิด/ปิด ${p}`}
+                        className={`relative shrink-0 w-10 h-6 rounded-full transition-colors ${
+                          enabled ? 'bg-orange-500' : 'bg-gray-300'
+                        }`}
+                      >
+                        <span
+                          className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                            enabled ? 'translate-x-4' : ''
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-sm font-medium ${enabled ? 'text-gray-800' : 'text-gray-400'}`}>{p}</span>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
 
             {/* Bill note card */}

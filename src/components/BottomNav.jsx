@@ -10,7 +10,7 @@ const TABS = [
   { key: 'settings', label: 'ตั้งค่า', icon: Settings },
 ]
 
-function BottomNav({ current, onNavigate }) {
+function BottomNav({ current, onNavigate, lowStockCount = 0 }) {
   return (
     <nav className="sm:hidden shrink-0 bg-gradient-to-r from-orange-600 to-red-600 flex border-t border-orange-700/30">
       {TABS.map(({ key, label, icon: Icon }) => {
@@ -24,8 +24,13 @@ function BottomNav({ current, onNavigate }) {
               isActive ? 'text-orange-600' : 'text-white/75'
             }`}
           >
-            <div className={`rounded-xl px-2 py-1 transition-all ${isActive ? 'bg-white shadow-md' : ''}`}>
+            <div className={`relative rounded-xl px-2 py-1 transition-all ${isActive ? 'bg-white shadow-md' : ''}`}>
               <Icon size={19} />
+              {key === 'inventory' && lowStockCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center">
+                  {lowStockCount > 9 ? '9+' : lowStockCount}
+                </span>
+              )}
             </div>
             <span className={`text-[9px] font-bold leading-none ${isActive ? 'text-white' : 'text-white/75'}`}>
               {label}

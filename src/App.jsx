@@ -22,17 +22,29 @@ const PAGES = {
   settings: SettingsPage,
 }
 
+const LOW_STOCK_THRESHOLD = 10
+
 function App() {
   const [page, setPage] = useState('sales')
   const [shifts, setShifts] = useState([])
   const [shiftLoading, setShiftLoading] = useState(true)
   const [shiftModalDismissed, setShiftModalDismissed] = useState(false)
+  const [lowStockCount, setLowStockCount] = useState(0)
 
   useEffect(() => {
     const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
     return onSnapshot(q, (snap) => {
       setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setShiftLoading(false)
+    })
+  }, [])
+
+  useEffect(() => {
+    return onSnapshot(collection(db, 'products'), (snap) => {
+      const count = snap.docs
+        .map((d) => d.data())
+        .filter((p) => p.is_active && (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD).length
+      setLowStockCount(count)
     })
   }, [])
 
@@ -50,12 +62,12 @@ function App() {
 
   return (
     <div className="h-screen w-full flex overflow-hidden">
-      <Sidebar current={page} onNavigate={handleNavigate} />
+      <Sidebar current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
       <div className="flex-1 min-w-0 h-full flex flex-col">
         <div className="flex-1 min-h-0 overflow-hidden">
           <PageComponent />
         </div>
-        <BottomNav current={page} onNavigate={handleNavigate} />
+        <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
       </div>
 
       {showOpenShiftModal && (

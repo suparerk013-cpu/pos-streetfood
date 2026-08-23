@@ -100,6 +100,13 @@ function ShiftPage() {
   )
   const [importingPlatform, setImportingPlatform] = useState(null)
   const [importedPlatform, setImportedPlatform]   = useState(null)
+  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
+
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
+      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
+    })
+  }, [])
 
   useEffect(() => {
     const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
@@ -401,7 +408,7 @@ function ShiftPage() {
               <p className="text-[10px] text-gray-300">กรอกยอดรวมวันนี้</p>
             </div>
             <div className="px-4 pb-4 mt-2 grid grid-cols-2 gap-2.5">
-              {PLATFORMS.map((p) => (
+              {shopPlatforms.map((p) => (
                 <div key={p} className={`rounded-2xl border-2 p-3 flex flex-col gap-2 transition-all ${PLATFORM_COLORS[p]}`}>
                   <div className="flex items-center gap-1.5">
                     <span className="text-base">{PLATFORM_ICONS[p]}</span>

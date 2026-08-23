@@ -15,6 +15,20 @@ function ProductCard({ product, cartQty = 0, onSelect }) {
           : 'bg-gradient-to-br from-white to-orange-50 border-orange-200 shadow-md active:scale-[0.96] active:shadow-sm'
       }`}
     >
+      {!outOfStock && (
+        <span
+          className={`absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm ${
+            stockQty <= 5
+              ? 'bg-red-500 text-white'
+              : stockQty <= 10
+              ? 'bg-amber-400 text-white'
+              : 'bg-white/95 text-gray-500 border border-gray-200'
+          }`}
+        >
+          เหลือ {stockQty}
+        </span>
+      )}
+
       {product.image_base64 && (
         <img
           src={product.image_base64}
@@ -33,7 +47,7 @@ function ProductCard({ product, cartQty = 0, onSelect }) {
       {outOfStock && (
         <>
           <span className="absolute inset-0 rounded-2xl bg-black/30" />
-          <span className="absolute top-2 right-2 rounded-full bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 shadow-md">
+          <span className="absolute top-2 right-2 rounded-full bg-red-500 text-white text-xs font-bold px-2 py-0.5 shadow-md">
             หมด
           </span>
         </>
@@ -41,7 +55,7 @@ function ProductCard({ product, cartQty = 0, onSelect }) {
       {cartFull && (
         <>
           <span className="absolute inset-0 rounded-2xl bg-orange-900/20" />
-          <span className="absolute top-2 right-2 rounded-full bg-orange-500 text-white text-[10px] font-bold px-2 py-0.5 shadow-md">
+          <span className="absolute top-2 right-2 rounded-full bg-orange-500 text-white text-xs font-bold px-2 py-0.5 shadow-md">
             ครบแล้ว
           </span>
         </>

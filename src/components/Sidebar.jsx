@@ -13,7 +13,7 @@ const NAV_ITEMS = [
   { key: 'settings',  label: 'ตั้งค่า',    icon: Settings },
 ]
 
-function Sidebar({ current, onNavigate }) {
+function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
   const [shopName, setShopName]     = useState('')
   const [logoBase64, setLogoBase64] = useState(null)
 
@@ -56,11 +56,18 @@ function Sidebar({ current, onNavigate }) {
                 type="button"
                 onClick={() => onNavigate(key)}
                 title={label}
-                className={`w-full flex items-center gap-3 rounded-xl px-2 py-3 transition-colors duration-150 ${
+                className={`relative w-full flex items-center gap-3 rounded-xl px-2 py-3 transition-colors duration-150 ${
                   isActive ? 'bg-white text-orange-700 font-bold' : 'text-white/85 hover:bg-white/10'
                 }`}
               >
-                <Icon size={22} className="shrink-0" />
+                <span className="relative shrink-0">
+                  <Icon size={22} />
+                  {key === 'inventory' && lowStockCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {lowStockCount > 9 ? '9+' : lowStockCount}
+                    </span>
+                  )}
+                </span>
                 <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 delay-100 whitespace-nowrap text-sm overflow-hidden">
                   {label}
                 </span>

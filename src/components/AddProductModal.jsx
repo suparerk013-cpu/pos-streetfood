@@ -1,13 +1,22 @@
+import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
+import { db } from '../lib/firebase'
 import ModalBackdrop from './ModalBackdrop'
+
+const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
 
 function AddProductModal({ onClose, onSubmit }) {
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
+  const [stockQty, setStockQty] = useState('')
   const [stockType, setStockType] = useState('batch')
+  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
+  const [deliveryPrices, setDeliveryPrices] = useState(
+    Object.fromEntries(PLATFORMS.map((p) => [p, ''])),
+  )
   const [modifierGroups, setModifierGroups] = useState([])
   const [imagePreview, setImagePreview] = useState(null)
   const [imageBase64, setImageBase64] = useState(null)
@@ -17,6 +26,12 @@ function AddProductModal({ onClose, onSubmit }) {
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving
+
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
+      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
+    })
+  }, [])
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -64,14 +79,21 @@ function AddProductModal({ onClose, onSubmit }) {
       if (key && options.length > 0) modifiers[key] = options
     })
 
+    const dpMap = {}
+    shopPlatforms.forEach((p) => {
+      if (Number(deliveryPrices[p]) > 0) dpMap[p] = Number(deliveryPrices[p])
+    })
+
     try {
       await onSubmit({
         name: name.trim(),
         price: Number(price),
         category: category.trim() || 'other',
+        stockQty: Math.max(0, Number(stockQty) || 0),
         stockType,
         modifiers,
         imageBase64,
+        deliveryPrices: dpMap,
       })
     } catch {
       setSaving(false)
@@ -151,33 +173,75 @@ function AddProductModal({ onClose, onSubmit }) {
           </label>
         </div>
 
-        <div className="mb-4">
-          <span className="text-sm font-medium text-gray-600">ประเภทสต็อก</span>
-          <div className="mt-1 grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => setStockType('batch')}
-              className={`min-h-[48px] rounded-xl border-2 font-medium transition-colors ${
-                stockType === 'batch'
-                  ? 'border-orange-600 bg-orange-50 text-orange-700'
-                  : 'border-gray-200 text-gray-600'
-              }`}
-            >
-              ล็อต (อยู่ได้หลายวัน)
-            </button>
-            <button
-              type="button"
-              onClick={() => setStockType('daily')}
-              className={`min-h-[48px] rounded-xl border-2 font-medium transition-colors ${
-                stockType === 'daily'
-                  ? 'border-orange-600 bg-orange-50 text-orange-700'
-                  : 'border-gray-200 text-gray-600'
-              }`}
-            >
-              รายวัน (เปิดกะใหม่ทุกวัน)
-            </button>
+        <div className="mb-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">จำนวนสต็อกเริ่มต้น</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={stockQty}
+              onChange={(event) => setStockQty(event.target.value)}
+              placeholder="0"
+              className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+            />
+          </label>
+          <div>
+            <span className="text-sm font-medium text-gray-600">ประเภทสต็อก</span>
+            <div className="mt-1 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setStockType('batch')}
+                title="ล็อต (อยู่ได้หลายวัน)"
+                className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
+                  stockType === 'batch'
+                    ? 'border-orange-600 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                ล็อต
+              </button>
+              <button
+                type="button"
+                onClick={() => setStockType('daily')}
+                title="รายวัน (เปิดกะใหม่ทุกวัน)"
+                className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
+                  stockType === 'daily'
+                    ? 'border-orange-600 bg-orange-50 text-orange-700'
+                    : 'border-gray-200 text-gray-600'
+                }`}
+              >
+                รายวัน
+              </button>
+            </div>
+            <p className="mt-1 text-xs text-gray-400">
+              {stockType === 'batch' ? 'สินค้าที่อยู่ได้หลายวัน' : 'สินค้าที่ต้องนับใหม่ทุกวัน'}
+            </p>
           </div>
         </div>
+
+        {shopPlatforms.length > 0 && (
+          <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100">
+            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-3">
+              ราคาเดลิเวอรี่ (ถ้าต่างจากหน้าร้าน) — ไม่ใส่ก็ได้
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {shopPlatforms.map((p) => (
+                <label key={p} className="block">
+                  <span className="text-xs font-medium text-gray-600">{p}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={deliveryPrices[p]}
+                    onChange={(e) => setDeliveryPrices((prev) => ({ ...prev, [p]: e.target.value }))}
+                    placeholder={price || '0'}
+                    className="mt-0.5 w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
+                  />
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">

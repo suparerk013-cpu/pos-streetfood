@@ -1,13 +1,17 @@
+import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
+import { db } from '../lib/firebase'
 import ModalBackdrop from './ModalBackdrop'
 
 const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
 
-function EditProductModal({ product, onClose, onSubmit }) {
+function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
+  const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
+  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, String(product.delivery_prices?.[p] ?? '')]))
   )
@@ -16,9 +20,29 @@ function EditProductModal({ product, onClose, onSubmit }) {
   const [processingImage, setProcessingImage] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState(null)
 
   const isValid = name.trim() !== '' && Number(price) > 0
-  const canClose = !saving
+  const canClose = !saving && !deleting
+
+  const handleDelete = async () => {
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      await onDelete()
+    } catch {
+      setDeleting(false)
+      setDeleteError('ลบไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
+    }
+  }
+
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
+      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
+    })
+  }, [])
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -48,12 +72,20 @@ function EditProductModal({ product, onClose, onSubmit }) {
     setError(null)
 
     const dpMap = {}
-    PLATFORMS.forEach((p) => { if (Number(deliveryPrices[p]) > 0) dpMap[p] = Number(deliveryPrices[p]) })
-    const updates = { name: name.trim(), price: Number(price), delivery_prices: dpMap }
+    shopPlatforms.forEach((p) => {
+      if (Number(deliveryPrices[p]) > 0) dpMap[p] = Number(deliveryPrices[p])
+    })
+    const nextStockQty = Math.max(0, Number(stockQty) || 0)
+    const stockDelta = nextStockQty - (product.stock_qty ?? 0)
+    const updates = {
+      name: name.trim(),
+      price: Number(price),
+      delivery_prices: dpMap,
+    }
     if (newImageBase64) updates.image_base64 = newImageBase64
 
     try {
-      await onSubmit(updates)
+      await onSubmit(updates, stockDelta)
     } catch {
       setSaving(false)
       setError('บันทึกไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
@@ -107,36 +139,51 @@ function EditProductModal({ product, onClose, onSubmit }) {
           />
         </label>
 
-        <label className="block mb-3">
-          <span className="text-sm font-medium text-gray-600">ราคาหน้าร้าน (บาท)</span>
-          <input
-            type="number"
-            inputMode="numeric"
-            value={price}
-            onChange={(event) => setPrice(event.target.value)}
-            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
-          />
-        </label>
+        <div className="mb-3 grid grid-cols-2 gap-3">
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">ราคาหน้าร้าน (บาท)</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+              className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+            />
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">จำนวนสต็อก</span>
+            <input
+              type="number"
+              inputMode="numeric"
+              min="0"
+              value={stockQty}
+              onChange={(event) => setStockQty(event.target.value)}
+              className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+            />
+          </label>
+        </div>
 
         {/* Delivery prices */}
-        <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100">
-          <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-3">ราคาเดลิเวอรี่ (ถ้าต่างจากหน้าร้าน)</p>
-          <div className="grid grid-cols-2 gap-2">
-            {PLATFORMS.map((p) => (
-              <label key={p} className="block">
-                <span className="text-xs font-medium text-gray-600">{p}</span>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  value={deliveryPrices[p]}
-                  onChange={(e) => setDeliveryPrices((prev) => ({ ...prev, [p]: e.target.value }))}
-                  placeholder={price || '0'}
-                  className="mt-0.5 w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
-                />
-              </label>
-            ))}
+        {shopPlatforms.length > 0 && (
+          <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100">
+            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-3">ราคาเดลิเวอรี่ (ถ้าต่างจากหน้าร้าน)</p>
+            <div className="grid grid-cols-2 gap-2">
+              {shopPlatforms.map((p) => (
+                <label key={p} className="block">
+                  <span className="text-xs font-medium text-gray-600">{p}</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    value={deliveryPrices[p]}
+                    onChange={(e) => setDeliveryPrices((prev) => ({ ...prev, [p]: e.target.value }))}
+                    placeholder={price || '0'}
+                    className="mt-0.5 w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
+                  />
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {error && (
           <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>
@@ -145,11 +192,52 @@ function EditProductModal({ product, onClose, onSubmit }) {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!isValid || saving || processingImage}
+          disabled={!isValid || saving || processingImage || deleting}
           className="w-full min-h-[56px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
         >
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
+
+        {/* Danger zone: delete product */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          {deleteError && (
+            <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{deleteError}</p>
+          )}
+          {!confirmDelete ? (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              disabled={saving || deleting}
+              className="w-full py-2.5 rounded-xl border border-red-200 text-red-500 text-sm font-semibold active:bg-red-50 transition-all disabled:opacity-40"
+            >
+              ลบสินค้านี้
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs text-red-600 text-center font-medium">
+                ลบสินค้า "{product.name}" ถาวร กู้คืนไม่ได้
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(false)}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-xl bg-gray-100 text-gray-600 text-sm font-semibold active:scale-95 transition-all disabled:opacity-40"
+                >
+                  ไม่ลบ
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 rounded-xl bg-red-500 disabled:bg-red-300 text-white text-sm font-bold active:scale-95 transition-all"
+                >
+                  {deleting ? 'กำลังลบ...' : 'ยืนยันลบ'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </ModalBackdrop>
   )

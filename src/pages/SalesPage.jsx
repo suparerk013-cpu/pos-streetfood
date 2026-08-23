@@ -17,6 +17,7 @@ function SalesPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [successResult, setSuccessResult] = useState(null)
   const [shopName, setShopName] = useState('')
+  const [activeCategory, setActiveCategory] = useState('all')
 
   useEffect(() => {
     return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
@@ -43,6 +44,16 @@ function SalesPage() {
     })
     return map
   }, [cart])
+
+  const categories = useMemo(
+    () => [...new Set(products.map((p) => p.category).filter(Boolean))],
+    [products],
+  )
+
+  const visibleProducts = useMemo(
+    () => (activeCategory === 'all' ? products : products.filter((p) => p.category === activeCategory)),
+    [products, activeCategory],
+  )
 
   const handleSelectProduct = (product) => {
     if ((product.stock_qty ?? 0) <= 0) return
@@ -87,9 +98,34 @@ function SalesPage() {
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left: product grid */}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+          {categories.length > 1 && (
+            <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto bg-orange-50">
+              <button
+                type="button"
+                onClick={() => setActiveCategory('all')}
+                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                  activeCategory === 'all' ? 'bg-orange-500 text-white shadow' : 'bg-white border border-gray-200 text-gray-600'
+                }`}
+              >
+                ทั้งหมด
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => setActiveCategory(cat)}
+                  className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
+                    activeCategory === cat ? 'bg-orange-500 text-white shadow' : 'bg-white border border-gray-200 text-gray-600'
+                  }`}
+                >
+                  {cat}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {!loading && (
-              <ProductGrid products={products} cartQtyByProductId={cartQtyByProductId} onSelectProduct={handleSelectProduct} />
+              <ProductGrid products={visibleProducts} cartQtyByProductId={cartQtyByProductId} onSelectProduct={handleSelectProduct} />
             )}
           </div>
 

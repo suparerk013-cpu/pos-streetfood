@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { doc, onSnapshot } from 'firebase/firestore'
+import { useEffect, useState } from 'react'
 import { calcCartTotal } from '../lib/cart'
+import { db } from '../lib/firebase'
 import { createOrder, InsufficientStockError } from '../lib/orders'
 import ModalBackdrop from './ModalBackdrop'
 
@@ -27,6 +29,7 @@ function calcDeliveryTotal(cart, platform) {
 
 function CheckoutModal({ cart, onClose, onSuccess }) {
   const subtotal = calcCartTotal(cart)
+  const [shopPlatformKeys, setShopPlatformKeys] = useState(DELIVERY_PLATFORMS.map((p) => p.key))
   const [method, setMethod]           = useState('cash')
   const [numpadValue, setNumpadValue] = useState('0')
   const [payments, setPayments]       = useState([])
@@ -45,11 +48,25 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     ? entered <= subtotal
     : (entered > 0 && remaining > 0 && (method === 'promptpay' ? entered <= remaining : true))
 
-  const finalizeOrder = async (finalPayments) => {
+  useEffect(() => {
+    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
+      if (snap.exists()) {
+        setShopPlatformKeys(snap.data().enabled_delivery_platforms ?? DELIVERY_PLATFORMS.map((p) => p.key))
+      }
+    })
+  }, [])
+
+  const finalizeOrder = async (finalPayments, overrideTotal = total, overrideSubtotal = subtotal) => {
     if (saving) return
     setSaving(true); setSaveError(null)
     try {
-      const result = await createOrder({ cart, payments: finalPayments, total, discount, subtotal })
+      const result = await createOrder({
+        cart,
+        payments: finalPayments,
+        total: overrideTotal,
+        discount,
+        subtotal: overrideSubtotal,
+      })
       setSaving(false); onSuccess(result)
     } catch (err) {
       setSaving(false)
@@ -301,16 +318,29 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               <p className="shrink-0 text-xs font-bold text-gray-400 uppercase tracking-wider text-center pt-1">
                 เลือกแพลตฟอร์ม
               </p>
+              {shopPlatformKeys.length === 0 && (
+                <p className="text-center text-sm text-gray-400 py-6">
+                  ยังไม่ได้เปิดแอพเดลิเวอรี่ — ไปเปิดที่หน้าตั้งค่าก่อน
+                </p>
+              )}
               <div className="flex-1 min-h-0 grid grid-cols-2 gap-2">
-                {DELIVERY_PLATFORMS.map((p) => {
+                {DELIVERY_PLATFORMS.filter((p) => shopPlatformKeys.includes(p.key)).map((p) => {
                   const dTotal = calcDeliveryTotal(cart, p.key)
+                  const dNet   = Math.max(dTotal - discount, 0)
                   return (
                     <button key={p.key} type="button" disabled={saving}
-                      onClick={() => !saving && finalizeOrder([{ method: 'delivery', platform: p.key, amount: dTotal }])}
+                      onClick={() => !saving && finalizeOrder([{ method: 'delivery', platform: p.key, amount: dNet }], dNet, dTotal)}
                       className={`${p.bg} rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-lg active:scale-95 transition-all disabled:opacity-50`}>
                       <span className="text-4xl">{p.emoji}</span>
                       <span className="font-bold text-base">{p.label}</span>
-                      <span className="font-black text-xl tabular-nums">{dTotal.toLocaleString()} ฿</span>
+                      {discount > 0 ? (
+                        <span className="flex items-baseline gap-1.5">
+                          <span className="text-xs line-through opacity-60 tabular-nums">{dTotal.toLocaleString()}</span>
+                          <span className="font-black text-xl tabular-nums">{dNet.toLocaleString()} ฿</span>
+                        </span>
+                      ) : (
+                        <span className="font-black text-xl tabular-nums">{dTotal.toLocaleString()} ฿</span>
+                      )}
                     </button>
                   )
                 })}

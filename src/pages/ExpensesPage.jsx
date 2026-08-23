@@ -8,8 +8,20 @@ const RANGE_PRESETS = [
   { key: 'today', label: 'วันนี้' },
   { key: '7days', label: '7 วัน' },
   { key: '30days', label: '30 วัน' },
+  { key: 'month', label: 'รายเดือน' },
   { key: 'custom', label: 'กำหนดเอง' },
 ]
+
+const THAI_MONTHS = [
+  'มกราคม', 'กุมภาพันธ์', 'มีนาคม', 'เมษายน', 'พฤษภาคม', 'มิถุนายน',
+  'กรกฎาคม', 'สิงหาคม', 'กันยายน', 'ตุลาคม', 'พฤศจิกายน', 'ธันวาคม',
+]
+
+function getMonthRange(cursor) {
+  const from = new Date(cursor.getFullYear(), cursor.getMonth(), 1)
+  const to = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0)
+  return { from: toDateString(from), to: toDateString(to) }
+}
 
 const CATEGORY_ICONS = {
   raw_material: '🥩',
@@ -47,6 +59,18 @@ function ExpensesPage() {
   const [customFrom, setCustomFrom] = useState(toDateString())
   const [customTo, setCustomTo] = useState(toDateString())
   const [categoryFilter, setCategoryFilter] = useState('all')
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+
+  const isCurrentMonth = (() => {
+    const now = new Date()
+    return monthCursor.getFullYear() === now.getFullYear() && monthCursor.getMonth() === now.getMonth()
+  })()
+
+  const goPrevMonth = () => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+  const goNextMonth = () => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
 
   useEffect(() => {
     return onSnapshot(collection(db, 'expenses'), (snapshot) => {
@@ -63,7 +87,9 @@ function ExpensesPage() {
   }, [])
 
   const { from, to } =
-    rangePreset === 'custom' ? { from: customFrom, to: customTo } : getPresetRange(rangePreset)
+    rangePreset === 'custom' ? { from: customFrom, to: customTo }
+    : rangePreset === 'month' ? getMonthRange(monthCursor)
+    : getPresetRange(rangePreset)
 
   const filteredExpenses = useMemo(
     () => expenses.filter((e) => e.date >= from && e.date <= to),
@@ -130,6 +156,22 @@ function ExpensesPage() {
             </button>
           ))}
         </div>
+
+        {rangePreset === 'month' && (
+          <div className="flex items-center justify-between rounded-2xl bg-white border border-gray-200 px-2 py-2">
+            <button type="button" onClick={goPrevMonth} aria-label="เดือนก่อนหน้า"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 active:bg-gray-100">
+              ‹
+            </button>
+            <p className="font-bold text-gray-800">
+              {THAI_MONTHS[monthCursor.getMonth()]} {monthCursor.getFullYear() + 543}
+            </p>
+            <button type="button" onClick={goNextMonth} disabled={isCurrentMonth} aria-label="เดือนถัดไป"
+              className="w-10 h-10 rounded-xl flex items-center justify-center text-gray-500 active:bg-gray-100 disabled:opacity-30 disabled:pointer-events-none">
+              ›
+            </button>
+          </div>
+        )}
 
         {rangePreset === 'custom' && (
           <div className="grid grid-cols-2 gap-2">
