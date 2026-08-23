@@ -12,6 +12,7 @@ function AddProductModal({ onClose, onSubmit }) {
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
   const [stockQty, setStockQty] = useState('')
+  const [unit, setUnit] = useState('')
   const [stockType, setStockType] = useState('batch')
   const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
@@ -90,6 +91,7 @@ function AddProductModal({ onClose, onSubmit }) {
         price: Number(price),
         category: category.trim() || 'other',
         stockQty: Math.max(0, Number(stockQty) || 0),
+        unit: unit.trim() || 'ชิ้น',
         stockType,
         modifiers,
         imageBase64,
@@ -186,38 +188,49 @@ function AddProductModal({ onClose, onSubmit }) {
               className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
             />
           </label>
-          <div>
-            <span className="text-sm font-medium text-gray-600">ประเภทสต็อก</span>
-            <div className="mt-1 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => setStockType('batch')}
-                title="ล็อต (อยู่ได้หลายวัน)"
-                className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
-                  stockType === 'batch'
-                    ? 'border-orange-600 bg-orange-50 text-orange-700'
-                    : 'border-gray-200 text-gray-600'
-                }`}
-              >
-                ล็อต
-              </button>
-              <button
-                type="button"
-                onClick={() => setStockType('daily')}
-                title="รายวัน (เปิดกะใหม่ทุกวัน)"
-                className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
-                  stockType === 'daily'
-                    ? 'border-orange-600 bg-orange-50 text-orange-700'
-                    : 'border-gray-200 text-gray-600'
-                }`}
-              >
-                รายวัน
-              </button>
-            </div>
-            <p className="mt-1 text-xs text-gray-400">
-              {stockType === 'batch' ? 'สินค้าที่อยู่ได้หลายวัน' : 'สินค้าที่ต้องนับใหม่ทุกวัน'}
-            </p>
+          <label className="block">
+            <span className="text-sm font-medium text-gray-600">หน่วยนับ</span>
+            <input
+              type="text"
+              value={unit}
+              onChange={(event) => setUnit(event.target.value)}
+              placeholder="เช่น ไม้, ถุง, แก้ว, ชิ้น"
+              className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+            />
+          </label>
+        </div>
+
+        <div className="mb-3">
+          <span className="text-sm font-medium text-gray-600">ประเภทสต็อก</span>
+          <div className="mt-1 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setStockType('batch')}
+              title="ล็อต (อยู่ได้หลายวัน)"
+              className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
+                stockType === 'batch'
+                  ? 'border-orange-600 bg-orange-50 text-orange-700'
+                  : 'border-gray-200 text-gray-600'
+              }`}
+            >
+              ล็อต
+            </button>
+            <button
+              type="button"
+              onClick={() => setStockType('daily')}
+              title="รายวัน (เปิดกะใหม่ทุกวัน)"
+              className={`min-h-[52px] rounded-xl border-2 font-medium text-sm transition-colors ${
+                stockType === 'daily'
+                  ? 'border-orange-600 bg-orange-50 text-orange-700'
+                  : 'border-gray-200 text-gray-600'
+              }`}
+            >
+              รายวัน
+            </button>
           </div>
+          <p className="mt-1 text-xs text-gray-400">
+            {stockType === 'batch' ? 'สินค้าที่อยู่ได้หลายวัน' : 'สินค้าที่ต้องนับใหม่ทุกวัน'}
+          </p>
         </div>
 
         {shopPlatforms.length > 0 && (

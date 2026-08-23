@@ -11,6 +11,7 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
+  const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
   const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, String(product.delivery_prices?.[p] ?? '')]))
@@ -80,6 +81,7 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
     const updates = {
       name: name.trim(),
       price: Number(price),
+      unit: unit.trim() || 'ชิ้น',
       delivery_prices: dpMap,
     }
     if (newImageBase64) updates.image_base64 = newImageBase64
@@ -162,6 +164,17 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
             />
           </label>
         </div>
+
+        <label className="block mb-3">
+          <span className="text-sm font-medium text-gray-600">หน่วยนับ</span>
+          <input
+            type="text"
+            value={unit}
+            onChange={(event) => setUnit(event.target.value)}
+            placeholder="เช่น ไม้, ถุง, แก้ว, ชิ้น"
+            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+          />
+        </label>
 
         {/* Delivery prices */}
         {shopPlatforms.length > 0 && (

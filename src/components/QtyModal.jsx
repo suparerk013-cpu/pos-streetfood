@@ -29,10 +29,10 @@ function QtyModal({ item, onClose, onConfirm }) {
           </button>
         </div>
 
-        <Numpad value={value} onChangeValue={setValue} unit="ชิ้น" />
+        <Numpad value={value} onChangeValue={setValue} unit={item.unit ?? 'ชิ้น'} />
 
         {Number.isFinite(stockQty) && qty > stockQty && (
-          <p className="mt-2 text-center text-sm text-red-500">มีสต็อกเหลือ {stockQty} ชิ้น</p>
+          <p className="mt-2 text-center text-sm text-red-500">มีสต็อกเหลือ {stockQty} {item.unit ?? 'ชิ้น'}</p>
         )}
 
         <button

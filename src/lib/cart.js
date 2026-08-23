@@ -35,6 +35,7 @@ export function addItemToCart(cart, product, selectedModifiers = {}) {
       productId: product.id,
       name: product.name,
       price: product.price,
+      unit: product.unit ?? 'ชิ้น',
       delivery_prices: product.delivery_prices ?? {},
       stockQty,
       modifiers: selectedModifiers,

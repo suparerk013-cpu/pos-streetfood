@@ -53,7 +53,7 @@ function DamageModal({ products, onClose, onSubmit }) {
           >
             <option value="">เลือกสินค้า...</option>
             {products.map((p) => (
-              <option key={p.id} value={p.id}>{p.name} (เหลือ {p.stock_qty ?? 0})</option>
+              <option key={p.id} value={p.id}>{p.name} (เหลือ {p.stock_qty ?? 0} {p.unit ?? 'ชิ้น'})</option>
             ))}
           </select>
         </label>
