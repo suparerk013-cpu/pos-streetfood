@@ -15,7 +15,7 @@ function QtyModal({ item, onClose, onConfirm }) {
   }
 
   return (
-    <ModalBackdrop onClose={onClose} maxWidthClass="max-w-xs">
+    <ModalBackdrop onClose={onClose} maxWidthClass="max-w-sm">
       <div className="p-5">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-bold text-gray-800 truncate min-w-0 flex-1 pr-2">{item.name}</h2>
@@ -39,7 +39,7 @@ function QtyModal({ item, onClose, onConfirm }) {
           type="button"
           onClick={handleConfirm}
           disabled={!isValid}
-          className="mt-3 w-full min-h-[52px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
+          className="mt-3 w-full min-h-[60px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-xl active:scale-95 transition-transform"
         >
           ยืนยันจำนวน
         </button>
