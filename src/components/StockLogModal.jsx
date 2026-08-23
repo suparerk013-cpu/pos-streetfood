@@ -7,6 +7,7 @@ const TYPE_CONFIG = {
   restock:    { label: 'นำเข้า',    icon: '📦', color: 'text-green-600',  bg: 'bg-green-50'  },
   adjustment: { label: 'ปรับสต็อก', icon: '✏️', color: 'text-blue-500',   bg: 'bg-blue-50'   },
   void:       { label: 'คืนสต็อก',  icon: '↩️', color: 'text-purple-500', bg: 'bg-purple-50' },
+  damage:     { label: 'เสียหาย/เครม', icon: '💥', color: 'text-red-600', bg: 'bg-red-50' },
 }
 
 function formatDateTime(ts) {

@@ -1,13 +1,16 @@
 import { collection, doc, onSnapshot } from 'firebase/firestore'
+import { PackageX } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
 import CheckoutModal from '../components/CheckoutModal'
+import DamageModal from '../components/DamageModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { addItemToCart, calcCartTotal, removeItem, updateItemQuantity } from '../lib/cart'
 import { db } from '../lib/firebase'
 import { seedInitialProducts } from '../lib/seedProducts'
+import { reportDamage } from '../lib/stock'
 
 function SalesPage() {
   const [products, setProducts] = useState([])
@@ -18,6 +21,7 @@ function SalesPage() {
   const [successResult, setSuccessResult] = useState(null)
   const [shopName, setShopName] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
+  const [damageOpen, setDamageOpen] = useState(false)
 
   useEffect(() => {
     return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
@@ -86,12 +90,19 @@ function SalesPage() {
       {/* Full-width header */}
       <header className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-sm shrink-0">
         {shopName && <h1 className="font-bold text-lg truncate">{shopName}</h1>}
-        {import.meta.env.DEV && (
-          <button type="button" onClick={handleSeed} disabled={seeding}
-            className="text-xs bg-white/20 px-3 py-1.5 rounded-lg disabled:opacity-60">
-            {seeding ? 'กำลัง Seed...' : 'Seed (dev)'}
+        <div className="flex items-center gap-2 ml-auto">
+          <button type="button" onClick={() => setDamageOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-bold bg-white/20 px-3 py-1.5 rounded-lg active:bg-white/30 transition-colors">
+            <PackageX size={14} />
+            เสียหาย/เครม
           </button>
-        )}
+          {import.meta.env.DEV && (
+            <button type="button" onClick={handleSeed} disabled={seeding}
+              className="text-xs bg-white/20 px-3 py-1.5 rounded-lg disabled:opacity-60">
+              {seeding ? 'กำลัง Seed...' : 'Seed (dev)'}
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Body: products left + cart right on desktop */}
@@ -202,6 +213,17 @@ function SalesPage() {
 
       {successResult && (
         <SuccessModal result={successResult} onClose={() => setSuccessResult(null)} />
+      )}
+
+      {damageOpen && (
+        <DamageModal
+          products={products}
+          onClose={() => setDamageOpen(false)}
+          onSubmit={async (payload) => {
+            await reportDamage(payload)
+            setDamageOpen(false)
+          }}
+        />
       )}
     </div>
   )

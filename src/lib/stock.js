@@ -48,6 +48,10 @@ export function adjustStock(productId, qtyChange, note) {
   return applyStockChange(productId, qtyChange, 'adjustment', note)
 }
 
+export function reportDamage({ productId, qty, reason }) {
+  return applyStockChange(productId, -Math.abs(qty), 'damage', reason)
+}
+
 export async function resetDailyStock(productId) {
   const productRef = doc(db, 'products', productId)
   const logRef = doc(collection(db, 'stock_logs'))
