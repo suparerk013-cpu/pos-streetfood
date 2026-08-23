@@ -6,7 +6,7 @@ const DIGIT_ROWS = [
 
 const MAX_DIGITS = 7
 
-function Numpad({ value, onChangeValue, quickAmounts = [] }) {
+function Numpad({ value, onChangeValue, quickAmounts = [], unit = '฿' }) {
   const appendDigit = (digit) => {
     if (value.length >= MAX_DIGITS) return
     onChangeValue(value === '0' ? digit : value + digit)
@@ -21,7 +21,7 @@ function Numpad({ value, onChangeValue, quickAmounts = [] }) {
         <span className="text-3xl font-bold text-gray-800 tabular-nums">
           {Number(value).toLocaleString()}
         </span>
-        <span className="ml-1 text-lg font-semibold text-gray-500">฿</span>
+        <span className="ml-1 text-lg font-semibold text-gray-500">{unit}</span>
       </div>
 
       {quickAmounts.length > 0 && (

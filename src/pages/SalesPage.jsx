@@ -7,7 +7,7 @@ import CheckoutModal from '../components/CheckoutModal'
 import DamageModal from '../components/DamageModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
-import { addItemToCart, calcCartTotal, removeItem, updateItemQuantity } from '../lib/cart'
+import { addItemToCart, calcCartTotal, removeItem, setItemQuantity, updateItemQuantity } from '../lib/cart'
 import { db } from '../lib/firebase'
 import { seedInitialProducts } from '../lib/seedProducts'
 import { reportDamage } from '../lib/stock'
@@ -67,6 +67,7 @@ function SalesPage() {
   const handleIncrement = (key) => setCart((prev) => updateItemQuantity(prev, key, 1))
   const handleDecrement = (key) => setCart((prev) => updateItemQuantity(prev, key, -1))
   const handleRemove = (key) => setCart((prev) => removeItem(prev, key))
+  const handleSetQuantity = (key, qty) => setCart((prev) => setItemQuantity(prev, key, qty))
 
   const handleSeed = async () => {
     setSeeding(true)
@@ -148,6 +149,7 @@ function SalesPage() {
               onIncrement={handleIncrement}
               onDecrement={handleDecrement}
               onRemove={handleRemove}
+              onSetQuantity={handleSetQuantity}
               onCheckout={() => setCheckoutOpen(true)}
             />
           </div>
@@ -176,6 +178,7 @@ function SalesPage() {
                   onIncrement={handleIncrement}
                   onDecrement={handleDecrement}
                   onRemove={handleRemove}
+                  onSetQuantity={handleSetQuantity}
                 />
               ))
             )}

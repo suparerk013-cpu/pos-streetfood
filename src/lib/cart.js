@@ -56,6 +56,17 @@ export function updateItemQuantity(cart, key, delta) {
     .filter((item) => item.quantity > 0)
 }
 
+export function setItemQuantity(cart, key, qty) {
+  return cart
+    .map((item) => {
+      if (item.key !== key) return item
+      const stockQty = item.stockQty ?? Infinity
+      const clamped = Math.min(Math.max(qty, 0), stockQty)
+      return { ...item, quantity: clamped }
+    })
+    .filter((item) => item.quantity > 0)
+}
+
 export function removeItem(cart, key) {
   return cart.filter((item) => item.key !== key)
 }

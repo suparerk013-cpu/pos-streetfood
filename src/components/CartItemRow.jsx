@@ -1,8 +1,11 @@
+import { useState } from 'react'
 import { calcItemTotal, formatModifiers } from '../lib/cart'
+import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemove }) {
+function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemove, onSetQuantity }) {
   const modifiersText = formatModifiers(item.modifiers)
   const atLimit = cartQtyForProduct >= (item.stockQty ?? Infinity)
+  const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
   return (
     <div className="py-3 flex items-center gap-3">
@@ -25,7 +28,13 @@ function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemo
         >
           −
         </button>
-        <span className="w-10 text-center font-semibold">{item.quantity}</span>
+        <button
+          type="button"
+          onClick={() => setQtyModalOpen(true)}
+          className="w-10 text-center font-semibold rounded-lg active:bg-orange-50"
+        >
+          {item.quantity}
+        </button>
         <button
           type="button"
           onClick={() => onIncrement(item.key)}
@@ -45,6 +54,14 @@ function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemo
       >
         ×
       </button>
+
+      {qtyModalOpen && (
+        <QtyModal
+          item={item}
+          onClose={() => setQtyModalOpen(false)}
+          onConfirm={(qty) => onSetQuantity(item.key, qty)}
+        />
+      )}
     </div>
   )
 }
