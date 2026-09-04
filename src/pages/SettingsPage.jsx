@@ -3,7 +3,7 @@ import { ImageOff, LogOut, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { auth } from '../lib/firebase'
-import { logout } from '../lib/auth'
+import { displayName, logout } from '../lib/auth'
 import {
   DEFAULT_CONSUMABLE_COST,
   DEFAULT_GP_RATE,
@@ -325,7 +325,7 @@ function SettingsPage() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-xs font-bold text-orange-500 uppercase tracking-wider">บัญชีที่ใช้อยู่</p>
-                <p className="text-sm text-gray-600 truncate mt-0.5">{auth.currentUser?.email ?? '-'}</p>
+                <p className="text-sm text-gray-600 truncate mt-0.5">{displayName(auth.currentUser?.email)}</p>
               </div>
               <button
                 type="button"

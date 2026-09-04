@@ -2,18 +2,18 @@ import { useState } from 'react'
 import { authErrorMessage, login } from '../lib/auth'
 
 function LoginPage() {
-  const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (busy || !email.trim() || !password) return
+    if (busy || !username.trim() || !password) return
     setBusy(true)
     setError(null)
     try {
-      await login(email, password)
+      await login(username, password)
       // onAuthStateChanged ใน App จะพาไปหน้าขายเอง ไม่ต้องทำอะไรต่อ
     } catch (err) {
       setError(authErrorMessage(err))
@@ -37,18 +37,21 @@ function LoginPage() {
 
         <div className="px-6 pb-6 flex flex-col gap-3">
           <div>
-            <label htmlFor="login-email" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
-              อีเมล
+            <label htmlFor="login-username" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+              ชื่อผู้ใช้
             </label>
             <input
-              id="login-email"
-              type="email"
-              inputMode="email"
+              id="login-username"
+              type="text"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck="false"
               autoComplete="username"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              placeholder="เช่น pos"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               disabled={busy}
-              className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 font-medium focus:outline-none focus:border-orange-400 focus:bg-white transition-all"
+              className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 font-medium text-lg focus:outline-none focus:border-orange-400 focus:bg-white transition-all"
             />
           </div>
 
@@ -63,7 +66,7 @@ function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               disabled={busy}
-              className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 font-medium focus:outline-none focus:border-orange-400 focus:bg-white transition-all"
+              className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-4 py-3 text-gray-800 font-medium text-lg focus:outline-none focus:border-orange-400 focus:bg-white transition-all"
             />
           </div>
 
@@ -75,7 +78,7 @@ function LoginPage() {
 
           <button
             type="submit"
-            disabled={busy || !email.trim() || !password}
+            disabled={busy || !username.trim() || !password}
             className="mt-1 w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-lg shadow-lg shadow-orange-200 active:scale-95 transition-all"
           >
             {busy ? 'กำลังเข้าสู่ระบบ...' : 'เข้าสู่ระบบ'}
