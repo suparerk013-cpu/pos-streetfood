@@ -24,6 +24,18 @@ function Fail($text) {
     exit 1
 }
 
+Step 0 "ตรวจเครื่องมือที่ต้องใช้"
+if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
+    Write-Host ""
+    Write-Host "ยังไม่มี Firebase CLI — ติดตั้งด้วยคำสั่งนี้ก่อน:" -ForegroundColor Yellow
+    Write-Host "    npm install -g firebase-tools" -ForegroundColor White
+    Write-Host "    firebase login" -ForegroundColor White
+    Write-Host ""
+    Write-Host "ถ้าติดตั้งแล้วแต่ยังไม่รู้จัก ให้ปิดหน้าต่าง PowerShell แล้วเปิดใหม่" -ForegroundColor Gray
+    Fail "ขาด Firebase CLI"
+}
+Write-Host "OK: มี Firebase CLI แล้ว" -ForegroundColor Green
+
 Step 1 "ดึงโค้ดใหม่"
 git fetch origin
 if ($LASTEXITCODE -ne 0) { Fail "git fetch ไม่สำเร็จ ตรวจอินเทอร์เน็ต" }
