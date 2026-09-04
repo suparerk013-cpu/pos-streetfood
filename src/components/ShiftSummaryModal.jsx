@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
+import { PLATFORM_ICONS } from '../lib/constants'
+import { calcCashExpected } from '../lib/shifts'
 import ModalBackdrop from './ModalBackdrop'
-
-const PLATFORM_ICONS = { GrabFood: '🟢', 'LINE MAN': '🟡', 'Shopee Food': '🟠', Robinhood: '🟣' }
 
 function Row({ label, value, valueColor = 'text-gray-800', bold = false }) {
   return (
@@ -16,7 +16,9 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
   const [copied, setCopied] = useState(false)
   const printRef = useRef(null)
 
-  const diff     = summary.cash_diff ?? 0
+  // คิดใหม่จากตัวเลขดิบเสมอ กะที่ปิดก่อนแก้บั๊กเก็บ cash_expected/cash_diff ที่ผิดไว้
+  const cashExpected = calcCashExpected(summary.opening_float, summary.cash_sales)
+  const diff     = (summary.cash_counted ?? 0) - cashExpected
   const diffColor = diff === 0 ? 'text-green-600' : diff > 0 ? 'text-blue-600' : 'text-red-500'
   const diffLabel = diff === 0 ? '✅ เงินครบ' : diff > 0 ? '💙 เงินเกิน' : '⚠️ เงินขาด'
 
@@ -44,7 +46,7 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
         `${PLATFORM_ICONS[p] ?? '🛵'} ${p.padEnd(12)} ${fmt(v)} ฿`
       ),
       `──────────────────`,
-      `🏦 ควรมีในลิ้นชัก  ${fmt(summary.cash_expected)} ฿`,
+      `🏦 ควรมีในลิ้นชัก  ${fmt(cashExpected)} ฿`,
       `🔢 นับได้จริง       ${fmt(summary.cash_counted)} ฿`,
       `${diffLabel}         ${diff >= 0 ? '+' : ''}${fmt(diff)} ฿`,
       summary.closing_note ? `📝 หมายเหตุ: ${summary.closing_note}` : '',
@@ -92,7 +94,7 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
       ).join('')}
       <hr class="divider"/>
       <div class="row"><span class="label">ทอนตั้งต้น</span><span class="value">${fmt(summary.opening_float)} ฿</span></div>
-      <div class="row"><span class="label">ควรมีในลิ้นชัก</span><span class="value">${fmt(summary.cash_expected)} ฿</span></div>
+      <div class="row"><span class="label">ควรมีในลิ้นชัก</span><span class="value">${fmt(cashExpected)} ฿</span></div>
       <div class="row"><span class="label">นับได้จริง</span><span class="value">${fmt(summary.cash_counted)} ฿</span></div>
       <div class="row">
         <span class="label">${diffLabel}</span>
@@ -137,7 +139,7 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
           <div className="bg-gray-50 rounded-2xl p-3">
             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">ตรวจเงินลิ้นชัก</p>
             <Row label="ทอนตั้งต้น"       value={`${fmt(summary.opening_float)} ฿`} />
-            <Row label="ควรมีในลิ้นชัก"   value={`${fmt(summary.cash_expected)} ฿`} />
+            <Row label="ควรมีในลิ้นชัก"   value={`${fmt(cashExpected)} ฿`} />
             <Row label="นับได้จริง"        value={`${fmt(summary.cash_counted)} ฿`} bold />
             <Row label={diffLabel}         value={`${diff >= 0 ? '+' : ''}${fmt(diff)} ฿`} valueColor={diffColor} bold />
           </div>

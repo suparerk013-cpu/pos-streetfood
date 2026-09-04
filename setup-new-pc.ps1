@@ -31,19 +31,15 @@ Set-Location $dest
 # 4. Create .env
 $envFile = ".env"
 if (-not (Test-Path $envFile)) {
-    Write-Host "🔑 สร้างไฟล์ .env..." -ForegroundColor Cyan
-    @"
-VITE_FIREBASE_API_KEY=AIzaSyCq-P--BznGDUinVUooaQVsfm5ncb563oA
-VITE_FIREBASE_AUTH_DOMAIN=pospos-b87bf.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=pospos-b87bf
-VITE_FIREBASE_STORAGE_BUCKET=pospos-b87bf.firebasestorage.app
-VITE_FIREBASE_MESSAGING_SENDER_ID=511381998077
-VITE_FIREBASE_APP_ID=1:511381998077:web:b6450173b17d5ffc9e7194
-VITE_FIREBASE_MEASUREMENT_ID=G-M72VDVNJPR
-"@ | Out-File -Encoding utf8 $envFile
-    Write-Host "✓ สร้าง .env เรียบร้อย" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "!! ยังไม่มีไฟล์ .env" -ForegroundColor Yellow
+    Write-Host "   1. คัดลอก .env.example เป็น .env" -ForegroundColor Yellow
+    Write-Host "   2. ใส่คีย์จาก Firebase Console (Project settings -> General -> Your apps)" -ForegroundColor Yellow
+    Write-Host ""
+    Copy-Item ".env.example" $envFile
+    Write-Host "สร้าง .env จากเทมเพลตแล้ว - เปิดแก้ไขใส่ค่าจริงก่อนรัน npm run dev" -ForegroundColor Cyan
 } else {
-    Write-Host "✓ มี .env แล้ว" -ForegroundColor Green
+    Write-Host "OK: มี .env แล้ว" -ForegroundColor Green
 }
 
 # 5. npm install

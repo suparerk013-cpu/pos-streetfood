@@ -1,10 +1,12 @@
-import { doc, getDoc, setDoc } from 'firebase/firestore'
-import { ImageOff, Upload } from 'lucide-react'
+import { doc, setDoc } from 'firebase/firestore'
+import { ImageOff, LogOut, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useAppData } from '../lib/appDataContext'
+import { auth } from '../lib/firebase'
+import { logout } from '../lib/auth'
+import { DELIVERY_PLATFORMS as PLATFORMS } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import { db } from '../lib/firebase'
-
-const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
@@ -22,6 +24,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
 }
 
 function SettingsPage() {
+  const { store, storeLoading } = useAppData()
   const [shopName, setShopName]     = useState('')
   const [phone, setPhone]           = useState('')
   const [address, setAddress]       = useState('')
@@ -30,25 +33,24 @@ function SettingsPage() {
   const [newLogo, setNewLogo]       = useState(null)
   const [processingLogo, setProcessingLogo] = useState(false)
   const [logoError, setLogoError]   = useState(null)
-  const [loading, setLoading]       = useState(true)
+  const [hydrated, setHydrated]     = useState(false)
   const [saving, setSaving]         = useState(false)
   const [saved, setSaved]           = useState(false)
+  const [saveError, setSaveError]   = useState(null)
   const [deliveryPlatforms, setDeliveryPlatforms] = useState(PLATFORMS)
 
+  // เติมค่าจาก context ครั้งเดียวตอนโหลดเสร็จ หลังจากนั้นปล่อยให้ฟอร์มเป็นของผู้ใช้
+  // ไม่ใช้ getDoc เพราะถ้าเน็ตหลุดจะค้างที่ "กำลังโหลด..." ตลอดไป
   useEffect(() => {
-    getDoc(doc(db, 'settings', 'store')).then((snap) => {
-      if (snap.exists()) {
-        const d = snap.data()
-        setShopName(d.shop_name ?? '')
-        setPhone(d.phone ?? '')
-        setAddress(d.address ?? '')
-        setBillNote(d.bill_note ?? '')
-        setLogoBase64(d.logo_base64 ?? null)
-        setDeliveryPlatforms(d.enabled_delivery_platforms ?? PLATFORMS)
-      }
-      setLoading(false)
-    })
-  }, [])
+    if (storeLoading || hydrated) return
+    setShopName(store.shop_name ?? '')
+    setPhone(store.phone ?? '')
+    setAddress(store.address ?? '')
+    setBillNote(store.bill_note ?? '')
+    setLogoBase64(store.logo_base64 ?? null)
+    setDeliveryPlatforms(store.enabled_delivery_platforms ?? PLATFORMS)
+    setHydrated(true)
+  }, [store, storeLoading, hydrated])
 
   const toggleDeliveryPlatform = (platform) => {
     setDeliveryPlatforms((prev) =>
@@ -76,6 +78,7 @@ function SettingsPage() {
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveError(null)
     const payload = {
       shop_name: shopName.trim(),
       phone: phone.trim(),
@@ -84,11 +87,16 @@ function SettingsPage() {
     }
     if (newLogo) payload.logo_base64 = newLogo
     payload.enabled_delivery_platforms = deliveryPlatforms
-    await setDoc(doc(db, 'settings', 'store'), payload, { merge: true })
-    setSaving(false)
-    setSaved(true)
-    setNewLogo(null)
-    setTimeout(() => setSaved(false), 2500)
+    try {
+      await setDoc(doc(db, 'settings', 'store'), payload, { merge: true })
+      setSaved(true)
+      setNewLogo(null)
+      setTimeout(() => setSaved(false), 2500)
+    } catch {
+      setSaveError('บันทึกไม่สำเร็จ ตรวจสัญญาณอินเทอร์เน็ตแล้วลองใหม่')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -98,7 +106,7 @@ function SettingsPage() {
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-4">
-        {loading ? (
+        {storeLoading ? (
           <div className="flex-1 flex items-center justify-center">
             <p className="text-gray-400 text-sm">กำลังโหลด...</p>
           </div>
@@ -208,11 +216,33 @@ function SettingsPage() {
               {saving ? 'กำลังบันทึก...' : saved ? '✓ บันทึกแล้ว' : 'บันทึกการตั้งค่า'}
             </button>
 
+            {saveError && (
+              <div className="rounded-2xl bg-red-50 border border-red-200 px-4 py-3 text-center">
+                <p className="text-red-600 font-semibold text-sm">{saveError}</p>
+              </div>
+            )}
+
             {saved && (
               <div className="rounded-2xl bg-green-50 border border-green-200 px-4 py-3 text-center">
                 <p className="text-green-700 font-semibold text-sm">✓ บันทึกการตั้งค่าเรียบร้อยแล้ว</p>
               </div>
             )}
+
+            {/* บัญชีผู้ใช้ */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider">บัญชีที่ใช้อยู่</p>
+                <p className="text-sm text-gray-600 truncate mt-0.5">{auth.currentUser?.email ?? '-'}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => logout()}
+                className="shrink-0 flex items-center gap-1.5 rounded-2xl bg-gray-100 text-gray-600 font-bold text-sm px-4 py-2.5 active:scale-95 transition-all"
+              >
+                <LogOut size={15} />
+                ออกจากระบบ
+              </button>
+            </div>
           </>
         )}
       </div>

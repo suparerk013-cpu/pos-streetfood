@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { addDoc, collection, doc, updateDoc } from 'firebase/firestore'
 import { db } from './firebase'
 
 export async function addProduct({
@@ -32,6 +32,16 @@ export async function updateProduct(productId, updates) {
   await updateDoc(doc(db, 'products', productId), updates)
 }
 
+/**
+ * ซ่อนสินค้าแทนการลบถาวร
+ *
+ * ถ้าลบเอกสารจริง บิลเก่าที่อ้าง product_id นี้จะหาชื่อสินค้าไม่เจอ รายงานย้อนหลัง
+ * จะขึ้นว่า "สินค้าที่ถูกลบแล้ว" และประวัติสต็อกกลายเป็นเอกสารกำพร้า
+ * หน้าขายกรอง is_active อยู่แล้ว สินค้าจึงหายจากหน้าขายทันทีเหมือนเดิม
+ */
 export async function deleteProduct(productId) {
-  await deleteDoc(doc(db, 'products', productId))
+  await updateDoc(doc(db, 'products', productId), {
+    is_active: false,
+    archived_at: new Date(),
+  })
 }

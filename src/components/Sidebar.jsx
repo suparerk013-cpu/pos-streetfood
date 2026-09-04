@@ -1,7 +1,5 @@
-import { doc, onSnapshot } from 'firebase/firestore'
 import { BarChart3, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/appDataContext'
 
 const NAV_ITEMS = [
   { key: 'sales',     label: 'หน้าขาย',    icon: ShoppingCart },
@@ -14,17 +12,8 @@ const NAV_ITEMS = [
 ]
 
 function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
-  const [shopName, setShopName]     = useState('')
-  const [logoBase64, setLogoBase64] = useState(null)
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) {
-        setShopName(snap.data().shop_name ?? '')
-        setLogoBase64(snap.data().logo_base64 ?? null)
-      }
-    })
-  }, [])
+  const { shopName, store } = useAppData()
+  const logoBase64 = store.logo_base64 ?? null
 
   const displayName = shopName || 'ร้านของฉัน'
   const [line1, line2] = displayName.includes(' ')

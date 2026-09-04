@@ -1,35 +1,43 @@
-import { collection, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
 import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/appDataContext'
+import { LOW_STOCK_THRESHOLD } from '../lib/constants'
 import { addProduct, deleteProduct, updateProduct } from '../lib/products'
+import { seedInitialProducts } from '../lib/seedProducts'
 import { adjustStock, restockProduct } from '../lib/stock'
 
-const LOW_STOCK_THRESHOLD = 10
-
 function InventoryPage() {
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { products: allProducts, productsLoading: loading } = useAppData()
   const [stockModalTarget, setStockModalTarget] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [logTarget, setLogTarget] = useState(null)
   const [search, setSearch] = useState('')
+  const [showArchived, setShowArchived] = useState(false)
+  const [seeding, setSeeding] = useState(false)
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const items = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      setProducts(items)
-      setLoading(false)
-    })
-    return unsubscribe
-  }, [])
+  // สินค้าที่ถูกซ่อน (is_active = false) ยังอยู่ในระบบเพื่อให้บิลเก่าอ้างถึงได้
+  const products = useMemo(
+    () => (showArchived ? allProducts : allProducts.filter((p) => p.is_active !== false)),
+    [allProducts, showArchived],
+  )
+  const archivedCount = useMemo(
+    () => allProducts.filter((p) => p.is_active === false).length,
+    [allProducts],
+  )
+
+  const handleSeed = async () => {
+    setSeeding(true)
+    try {
+      await seedInitialProducts()
+    } finally {
+      setSeeding(false)
+    }
+  }
 
   const handleStockSubmit = async (qty, note) => {
     const { product } = stockModalTarget
@@ -93,8 +101,24 @@ function InventoryPage() {
           )}
         </div>
 
-        {!loading && products.length === 0 && (
-          <p className="text-center text-gray-400 mt-8">ยังไม่มีสินค้า</p>
+        {!loading && allProducts.length === 0 && (
+          <div className="flex flex-col items-center gap-3 mt-10">
+            <span className="text-5xl">📦</span>
+            <p className="text-gray-400 text-sm">ยังไม่มีสินค้าในระบบ</p>
+            <button type="button" onClick={handleSeed} disabled={seeding}
+              className="rounded-2xl bg-orange-500 text-white font-bold text-sm px-5 py-2.5 disabled:bg-gray-300 active:scale-95 transition-all">
+              {seeding ? 'กำลังเพิ่ม...' : 'เพิ่มสินค้าตัวอย่าง (หมึกย่าง / หอยแมลงภู่)'}
+            </button>
+          </div>
+        )}
+
+        {!loading && archivedCount > 0 && (
+          <button type="button" onClick={() => setShowArchived((v) => !v)}
+            className={`mb-3 text-xs font-semibold px-3 py-1.5 rounded-full transition-all ${
+              showArchived ? 'bg-gray-700 text-white' : 'bg-gray-100 text-gray-500'
+            }`}>
+            {showArchived ? '✕ ซ่อนสินค้าที่เลิกขาย' : `แสดงสินค้าที่เลิกขาย (${archivedCount})`}
+          </button>
         )}
 
         {!loading && products.length > 0 && visibleProducts.length === 0 && (
@@ -104,12 +128,15 @@ function InventoryPage() {
         <div className="space-y-3">
           {visibleProducts.map((product) => {
             const qty = product.stock_qty ?? 0
-            const isLow = qty < LOW_STOCK_THRESHOLD
+            const isLow = qty <= LOW_STOCK_THRESHOLD
+            const isArchived = product.is_active === false
 
             return (
               <div
                 key={product.id}
-                className="rounded-2xl bg-white border border-orange-100 p-4"
+                className={`rounded-2xl border p-4 ${
+                  isArchived ? 'bg-gray-50 border-gray-200 opacity-70' : 'bg-white border-orange-100'
+                }`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-start gap-3">
@@ -125,7 +152,14 @@ function InventoryPage() {
                       )}
                     </div>
                     <div>
-                      <p className="font-bold text-gray-800">{product.name}</p>
+                      <p className="font-bold text-gray-800">
+                        {product.name}
+                        {isArchived && (
+                          <span className="ml-2 text-[10px] font-bold bg-gray-200 text-gray-500 rounded-full px-2 py-0.5 align-middle">
+                            เลิกขาย
+                          </span>
+                        )}
+                      </p>
                       <p className="text-sm text-gray-400">
                         {product.category} · {product.price} ฿ ·{' '}
                         {product.stock_type === 'daily' ? 'สต็อกรายวัน' : 'สต็อกล็อต'}

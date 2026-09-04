@@ -1,44 +1,26 @@
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import BillModal from '../components/BillModal'
-import { db } from '../lib/firebase'
-import { toDateString } from '../lib/expenses'
+import { paymentLabel } from '../lib/constants'
+import { docDateStr, formatDate, formatTime, getPresetRange } from '../lib/dates'
+import { useOrdersInRange } from '../lib/useOrders'
 
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
+const RANGE_PRESETS = [
+  { key: 'today', label: 'วันนี้' },
+  { key: '7days', label: '7 วัน' },
+  { key: '30days', label: '30 วัน' },
+]
 
-function formatTime(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
-}
-
-function orderDateStr(order) {
-  const ts = order.created_at
-  if (!ts?.toDate) return null
-  return toDateString(ts.toDate())
-}
+const orderDateStr = (order) => docDateStr(order)
 
 function DocumentsPage() {
-  const [orders, setOrders]           = useState([])
-  const [loading, setLoading]         = useState(true)
   const [search, setSearch]           = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showVoided, setShowVoided]   = useState(false)
+  const [preset, setPreset]           = useState('7days')
 
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setLoading(false)
-    })
-  }, [])
+  const { from, to } = getPresetRange(preset)
+  const { orders, loading } = useOrdersInRange(from, to, { includeVoided: true })
 
   const activeOrders  = useMemo(() => orders.filter((o) => !o.is_voided), [orders])
   const voidedOrders  = useMemo(() => orders.filter((o) => o.is_voided), [orders])
@@ -51,9 +33,7 @@ function DocumentsPage() {
       if (String(o.queue_no).includes(term)) return true
       const date = orderDateStr(o) ?? ''
       if (date.includes(term)) return true
-      const payLine = (o.payments ?? [])
-        .map((p) => p.platform ?? METHOD_LABELS[p.method] ?? p.method)
-        .join(' ').toLowerCase()
+      const payLine = (o.payments ?? []).map(paymentLabel).join(' ').toLowerCase()
       if (payLine.includes(term)) return true
       const itemNames = (o.items ?? []).map((i) => i.name).join(' ').toLowerCase()
       if (itemNames.includes(term)) return true
@@ -82,12 +62,22 @@ function DocumentsPage() {
       {/* Header */}
       <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-3">
         <div className="flex items-center justify-between">
-          <h1 className="font-bold text-lg">เอกสาร / บิลทั้งหมด</h1>
+          <h1 className="font-bold text-lg">เอกสาร / บิล</h1>
           {!loading && (
             <span className="text-xs bg-white/20 rounded-full px-2.5 py-0.5 font-medium">
               {activeOrders.length} บิล
             </span>
           )}
+        </div>
+        <div className="flex gap-1.5 mt-2">
+          {RANGE_PRESETS.map((r) => (
+            <button key={r.key} type="button" onClick={() => setPreset(r.key)}
+              className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
+                preset === r.key ? 'bg-white text-orange-600' : 'bg-white/20 text-white/80'
+              }`}>
+              {r.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -139,7 +129,7 @@ function DocumentsPage() {
           <div className="flex flex-col items-center justify-center h-full gap-2 py-16">
             <span className="text-5xl">🗂️</span>
             <p className="text-gray-400 text-sm">
-              {search ? 'ไม่พบบิลที่ค้นหา' : 'ยังไม่มีบิลในระบบ'}
+              {search ? 'ไม่พบบิลที่ค้นหา' : 'ไม่มีบิลในช่วงเวลานี้'}
             </p>
             {search && (
               <button type="button" onClick={() => setSearch('')}
@@ -162,9 +152,7 @@ function DocumentsPage() {
               }
               const o = row.order
               const isVoided = o.is_voided
-              const payLine = (o.payments ?? [])
-                .map((p) => p.platform ?? METHOD_LABELS[p.method] ?? p.method)
-                .join(' · ')
+              const payLine = (o.payments ?? []).map(paymentLabel).join(' · ')
               return (
                 <button
                   key={o.id}

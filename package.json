@@ -7,16 +7,18 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "oxlint",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "preview": "vite preview"
   },
   "dependencies": {
+    "exceljs": "^4.4.0",
     "firebase": "^12.17.1",
     "lucide-react": "^1.32.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@rolldown/binding-win32-x64-msvc": "^1.2.4",
     "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
@@ -24,6 +26,7 @@
     "oxlint": "^1.75.0",
     "tailwindcss": "^4.3.3",
     "vite": "^8.2.0",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "^3.2.4"
   }
 }

@@ -1,201 +1,331 @@
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
-import { Download } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
+import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { BarChart, DeltaBadge, ShareBar, Sparkline } from '../components/Charts'
+import { useAppData } from '../lib/appDataContext'
+import {
+  CRITICAL_STOCK_THRESHOLD,
+  LOW_STOCK_THRESHOLD,
+  paymentLabel,
+} from '../lib/constants'
+import {
+  docDateStr,
+  eachDateInRange,
+  formatThaiDate,
+  formatThaiMonth,
+  getMonthRange,
+  getPresetRange,
+  getPreviousRange,
+  rangeToTimestamps,
+} from '../lib/dates'
 import { db } from '../lib/firebase'
-import { toDateString } from '../lib/expenses'
+import { useExpensesInRange, useDeliveryImportsInRange, usePurchasesInRange } from '../lib/usePurchases'
+import { useOrdersInRange } from '../lib/useOrders'
 
 const RANGE_PRESETS = [
   { key: 'today', label: 'วันนี้' },
   { key: '7days', label: '7 วัน' },
   { key: '30days', label: '30 วัน' },
+  { key: 'month', label: 'เดือน' },
 ]
 
-const LOW_STOCK_THRESHOLD = 5
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
+const PAYMENT_BAR_COLORS = ['bg-emerald-400', 'bg-blue-400', 'bg-orange-400', 'bg-purple-400', 'bg-pink-400', 'bg-gray-300']
 
-function getRange(preset) {
-  const today = new Date()
-  const todayStr = toDateString(today)
-  if (preset === '7days') {
-    const from = new Date(today); from.setDate(from.getDate() - 6)
-    return { from: toDateString(from), to: todayStr }
-  }
-  if (preset === '30days') {
-    const from = new Date(today); from.setDate(from.getDate() - 29)
-    return { from: toDateString(from), to: todayStr }
-  }
-  return { from: todayStr, to: todayStr }
-}
-
-function orderDateStr(order) {
-  const ts = order.created_at
-  if (!ts?.toDate) return null
-  return toDateString(ts.toDate())
-}
-
-function exportCSV(orders, from, to) {
+function exportSalesCSV(orders, deliveryImports, from, to) {
   const headers = ['วันที่', 'เลขบิล', 'รายการ', 'ราคาก่อนลด (฿)', 'ส่วนลด (฿)', 'ยอดรวม (฿)', 'ช่องทางชำระ']
   const rows = orders.map((o) => {
-    const dateStr = (() => { const ts = o.created_at; if (!ts?.toDate) return ''; return toDateString(ts.toDate()) })()
     const items = (o.items ?? []).map((i) => `${i.name} x${i.qty}`).join(' | ')
-    const payStr = (o.payments ?? []).map((p) => `${p.platform ?? METHOD_LABELS[p.method] ?? p.method} ${p.amount}`).join('+')
-    return [dateStr, o.queue_no ?? '', items, o.subtotal ?? o.total_amount ?? 0, o.discount ?? 0, o.total_amount ?? 0, payStr]
+    const payStr = (o.payments ?? []).map((p) => `${paymentLabel(p)} ${p.amount}`).join('+')
+    return [docDateStr(o) ?? '', o.queue_no ?? '', items, o.subtotal ?? o.total_amount ?? 0, o.discount ?? 0, o.total_amount ?? 0, payStr]
   })
-  const csv = [headers, ...rows].map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(',')).join('\n')
+  deliveryImports.forEach((imp) => {
+    rows.push([imp.date ?? '', '-', `ยอดรวมจากแอป ${imp.platform}`, imp.amount ?? 0, 0, imp.amount ?? 0, imp.platform])
+  })
+  const csv = [headers, ...rows]
+    .map((r) => r.map((v) => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
+    .join('\n')
   const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
-  a.href = url; a.download = `ยอดขาย_${from}_ถึง_${to}.csv`; a.click()
+  a.href = url
+  a.download = `ยอดขาย_${from}_ถึง_${to}.csv`
+  a.click()
   URL.revokeObjectURL(url)
 }
 
+/** ของเสียหายในช่วงที่เลือก — กรอง type ที่ฝั่งเซิร์ฟเวอร์ ไม่ดึง stock_logs ทั้ง collection */
+function useDamageLogs(from, to) {
+  const [logs, setLogs] = useState([])
+  useEffect(() => {
+    if (!from || !to) return undefined
+    const { start, end } = rangeToTimestamps(from, to)
+    const q = query(
+      collection(db, 'stock_logs'),
+      where('type', '==', 'damage'),
+      where('created_at', '>=', start),
+      where('created_at', '<=', end),
+      orderBy('created_at', 'desc'),
+      limit(500),
+    )
+    return onSnapshot(q, (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+  }, [from, to])
+  return logs
+}
+
+function StatCell({ label, value, current, previous, invert }) {
+  return (
+    <div className="flex-1 min-w-0 px-3 py-2">
+      <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider truncate">{label}</p>
+      <p className="font-extrabold text-gray-800 tabular-nums text-base leading-tight mt-0.5">{value}</p>
+      <DeltaBadge current={current} previous={previous} invert={invert} suffix="" />
+    </div>
+  )
+}
+
 function ReportsPage() {
-  const [orders, setOrders]         = useState([])
-  const [expenses, setExpenses]     = useState([])
-  const [products, setProducts]     = useState([])
-  const [damageLogs, setDamageLogs] = useState([])
-  const [preset, setPreset]         = useState('today')
+  const { activeProducts, productById } = useAppData()
+  const [preset, setPreset] = useState('today')
+  const [monthCursor, setMonthCursor] = useState(() => {
+    const now = new Date()
+    return new Date(now.getFullYear(), now.getMonth(), 1)
+  })
+  const [selectedBar, setSelectedBar] = useState(null)
+  const [exportOpen, setExportOpen] = useState(false)
 
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
-    })
-  }, [])
+  const { from, to } = preset === 'month' ? getMonthRange(monthCursor) : getPresetRange(preset)
+  const prevRange = getPreviousRange(from, to)
 
-  useEffect(() => {
-    const q = query(collection(db, 'stock_logs'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setDamageLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => l.type === 'damage'))
-    })
-  }, [])
+  const { orders } = useOrdersInRange(from, to)
+  const { orders: prevOrders } = useOrdersInRange(prevRange.from, prevRange.to)
+  const deliveryImports = useDeliveryImportsInRange(from, to)
+  const prevDeliveryImports = useDeliveryImportsInRange(prevRange.from, prevRange.to)
+  const { purchases } = usePurchasesInRange(from, to)
+  const { expenses } = useExpensesInRange(from, to)
+  const damageLogs = useDamageLogs(from, to)
 
-  useEffect(() => {
-    return onSnapshot(collection(db, 'expenses'), (snap) => {
-      setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
-  }, [])
+  const deliveryTotal = useMemo(
+    () => deliveryImports.reduce((s, d) => s + (d.amount ?? 0), 0),
+    [deliveryImports],
+  )
+  const storeSales = useMemo(
+    () => orders.reduce((s, o) => s + (o.total_amount ?? 0), 0),
+    [orders],
+  )
+  const totalSales = storeSales + deliveryTotal
 
-  useEffect(() => {
-    return onSnapshot(collection(db, 'products'), (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.is_active))
-    })
-  }, [])
-
-  const { from, to } = getRange(preset)
-
-  const filtered = useMemo(
-    () => orders.filter((o) => { const d = orderDateStr(o); return d && d >= from && d <= to }),
-    [orders, from, to],
+  const prevTotalSales = useMemo(
+    () =>
+      prevOrders.reduce((s, o) => s + (o.total_amount ?? 0), 0) +
+      prevDeliveryImports.reduce((s, d) => s + (d.amount ?? 0), 0),
+    [prevOrders, prevDeliveryImports],
   )
 
-  const filteredExpenses = useMemo(
-    () => expenses.filter((e) => { const d = e.date ?? null; return d && d >= from && d <= to }),
-    [expenses, from, to],
+  const ingredientCost = useMemo(
+    () => purchases.reduce((s, p) => s + (p.total_amount ?? 0), 0),
+    [purchases],
   )
+  const otherCost = useMemo(() => expenses.reduce((s, e) => s + (e.amount ?? 0), 0), [expenses])
+  const totalCost = ingredientCost + otherCost
+  const netProfit = totalSales - totalCost
+  const profitMargin = totalSales > 0 ? Math.round((netProfit / totalSales) * 100) : 0
 
-  const totalSales    = useMemo(() => filtered.reduce((s, o) => s + (o.total_amount ?? 0), 0), [filtered])
-  const totalExpenses = useMemo(() => filteredExpenses.reduce((s, e) => s + (e.amount ?? 0), 0), [filteredExpenses])
-  const netProfit     = totalSales - totalExpenses
-  const profitMargin  = totalSales > 0 ? Math.round((netProfit / totalSales) * 100) : 0
-  const totalOrders   = filtered.length
-  const avgOrder      = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0
+  // จำนวนบิลนับเฉพาะบิลหน้าร้าน ยอดเดลิเวอรีเป็นยอดรวมทั้งวันไม่ใช่บิลเดียว
+  const orderCount = orders.length
+  const prevOrderCount = prevOrders.length
+  const avgOrder = orderCount > 0 ? Math.round(storeSales / orderCount) : 0
+  const prevAvgOrder = prevOrderCount > 0
+    ? Math.round(prevOrders.reduce((s, o) => s + (o.total_amount ?? 0), 0) / prevOrderCount)
+    : 0
+
+  /** วันนี้ดูเป็นรายชั่วโมง ช่วงยาวกว่านั้นดูเป็นรายวัน */
+  const isSingleDay = from === to
+
+  const chartData = useMemo(() => {
+    if (isSingleDay) {
+      const byHour = new Array(24).fill(0)
+      orders.forEach((o) => {
+        const d = o.created_at?.toDate?.()
+        if (d) byHour[d.getHours()] += o.total_amount ?? 0
+      })
+      // ร้านริมทางไม่ได้ขายตอนตี 3 — ตัดชั่วโมงที่ไม่มียอดหัวท้ายทิ้ง
+      const active = byHour.map((v, h) => ({ v, h })).filter((x) => x.v > 0)
+      const startHour = active.length > 0 ? Math.max(0, Math.min(...active.map((x) => x.h)) - 1) : 8
+      const endHour = active.length > 0 ? Math.min(23, Math.max(...active.map((x) => x.h)) + 1) : 22
+      return byHour.slice(startHour, endHour + 1).map((value, i) => ({
+        key: String(startHour + i),
+        label: `${startHour + i}:00 น.`,
+        shortLabel: `${startHour + i}`,
+        value,
+      }))
+    }
+    const byDate = {}
+    orders.forEach((o) => {
+      const d = docDateStr(o)
+      if (d) byDate[d] = (byDate[d] ?? 0) + (o.total_amount ?? 0)
+    })
+    deliveryImports.forEach((imp) => {
+      if (imp.date) byDate[imp.date] = (byDate[imp.date] ?? 0) + (imp.amount ?? 0)
+    })
+    return eachDateInRange(from, to).map((date) => ({
+      key: date,
+      label: formatThaiDate(date),
+      shortLabel: String(Number(date.slice(8, 10))),
+      value: byDate[date] ?? 0,
+    }))
+  }, [orders, deliveryImports, from, to, isSingleDay])
+
+  const sparklineValues = useMemo(() => chartData.map((d) => d.value), [chartData])
+
+  const selectedDetail = useMemo(() => {
+    if (!selectedBar) return null
+    const point = chartData.find((d) => d.key === selectedBar)
+    if (!point) return null
+    const count = isSingleDay
+      ? orders.filter((o) => String(o.created_at?.toDate?.().getHours()) === selectedBar).length
+      : orders.filter((o) => docDateStr(o) === selectedBar).length
+    return { ...point, count }
+  }, [selectedBar, chartData, orders, isSingleDay])
 
   const paymentBreakdown = useMemo(() => {
     const map = {}
-    filtered.forEach((o) => {
+    orders.forEach((o) => {
       ;(o.payments ?? []).forEach((p) => {
-        const key = p.platform ?? METHOD_LABELS[p.method] ?? p.method
+        const key = paymentLabel(p)
         map[key] = (map[key] ?? 0) + p.amount
       })
     })
+    deliveryImports.forEach((imp) => {
+      const key = imp.platform ?? 'เดลิเวอรี่'
+      map[key] = (map[key] ?? 0) + (imp.amount ?? 0)
+    })
     return Object.entries(map).sort((a, b) => b[1] - a[1])
-  }, [filtered])
+  }, [orders, deliveryImports])
 
   const topItems = useMemo(() => {
     const map = {}
-    filtered.forEach((o) => {
+    orders.forEach((o) => {
       ;(o.items ?? []).forEach((item) => {
         const key = item.product_id ?? item.name
         if (!map[key]) map[key] = { name: item.name, productId: item.product_id, qty: 0, total: 0 }
-        map[key].qty   += item.qty
+        map[key].qty += item.qty
         map[key].total += item.line_total ?? 0
       })
     })
     return Object.values(map)
-      .map((d) => ({ ...d, unit: products.find((p) => p.id === d.productId)?.unit ?? 'ชิ้น' }))
+      .map((d) => ({ ...d, unit: productById.get(d.productId)?.unit ?? 'ชิ้น' }))
       .sort((a, b) => b.qty - a.qty)
       .slice(0, 5)
-  }, [filtered, products])
+  }, [orders, productById])
+
+  const maxItemQty = topItems[0]?.qty ?? 1
 
   const lowStock = useMemo(
-    () => products
+    () => activeProducts
       .filter((p) => (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD)
       .sort((a, b) => (a.stock_qty ?? 0) - (b.stock_qty ?? 0)),
-    [products],
-  )
-
-  const filteredDamage = useMemo(
-    () => damageLogs.filter((l) => { const d = orderDateStr(l); return d && d >= from && d <= to }),
-    [damageLogs, from, to],
+    [activeProducts],
   )
 
   const damageSummary = useMemo(() => {
     const map = {}
-    filteredDamage.forEach((log) => {
-      const product = products.find((p) => p.id === log.product_id)
-      const name  = product?.name ?? 'สินค้าที่ถูกลบแล้ว'
-      const unit  = product?.unit ?? 'ชิ้น'
+    damageLogs.forEach((log) => {
+      const product = productById.get(log.product_id)
+      const name = product?.name ?? 'สินค้าที่ถูกลบแล้ว'
+      const unit = product?.unit ?? 'ชิ้น'
       const price = product?.price ?? 0
-      const qty   = Math.abs(log.qty_change)
+      const qty = Math.abs(log.qty_change)
       if (!map[log.product_id]) map[log.product_id] = { name, unit, qty: 0, value: 0, reasons: new Set() }
-      map[log.product_id].qty   += qty
+      map[log.product_id].qty += qty
       map[log.product_id].value += qty * price
       if (log.note) map[log.product_id].reasons.add(log.note)
     })
     return Object.values(map).sort((a, b) => b.qty - a.qty)
-  }, [filteredDamage, products])
+  }, [damageLogs, productById])
 
-  const totalDamageQty   = useMemo(() => filteredDamage.reduce((s, l) => s + Math.abs(l.qty_change), 0), [filteredDamage])
-  const totalDamageValue = useMemo(() => damageSummary.reduce((s, d) => s + d.value, 0), [damageSummary])
+  const totalDamageValue = damageSummary.reduce((s, d) => s + d.value, 0)
+  const totalDamageQty = damageSummary.reduce((s, d) => s + d.qty, 0)
+
+  const periodLabel = preset === 'month'
+    ? formatThaiMonth(monthCursor)
+    : isSingleDay ? 'วันนี้' : `${formatThaiDate(from)} – ${formatThaiDate(to)}`
+
+  const isCurrentMonth = (() => {
+    const now = new Date()
+    return monthCursor.getFullYear() === now.getFullYear() && monthCursor.getMonth() === now.getMonth()
+  })()
+
+  const hasData = totalSales > 0 || totalCost > 0
 
   return (
-    <div className="h-full w-full flex flex-col bg-slate-50 overflow-hidden">
-
+    <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
       {/* ── Header ── */}
-      <header className="shrink-0 bg-white px-4 py-3 flex items-center justify-between gap-3 border-b border-gray-100">
-        <h1 className="font-bold text-gray-800 text-base tracking-wide">แดชบอร์ด</h1>
-        <div className="flex items-center gap-2">
-          <button type="button" onClick={() => exportCSV(filtered, from, to)}
-            className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:bg-gray-200 transition-all">
-            <Download size={14} />
-          </button>
-          <div className="flex bg-gray-100 rounded-full p-0.5">
-            {RANGE_PRESETS.map((r) => (
-              <button key={r.key} type="button" onClick={() => setPreset(r.key)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                  preset === r.key ? 'bg-pink-500 text-white shadow-sm' : 'text-gray-400'
-                }`}>
-                {r.label}
-              </button>
-            ))}
+      <header className="shrink-0 bg-white px-4 py-2.5 border-b border-gray-100">
+        <div className="flex items-center justify-between gap-3">
+          <h1 className="font-bold text-gray-800 text-base tracking-wide">แดชบอร์ด</h1>
+          <div className="flex items-center gap-2 relative">
+            <button type="button" onClick={() => setExportOpen((v) => !v)}
+              className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:bg-gray-200 transition-all"
+              aria-label="ส่งออกข้อมูล">
+              <Download size={14} />
+            </button>
+            {exportOpen && (
+              <div className="absolute right-0 top-10 z-20 w-52 rounded-2xl bg-white border border-gray-100 shadow-xl overflow-hidden">
+                <button type="button"
+                  onClick={() => { exportSalesCSV(orders, deliveryImports, from, to); setExportOpen(false) }}
+                  className="w-full text-left px-4 py-3 text-sm font-semibold text-gray-700 active:bg-gray-50">
+                  📄 ยอดขาย (CSV)
+                </button>
+                <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100 leading-snug">
+                  รายงานวัตถุดิบแบบ Excel อยู่ที่หน้าค่าใช้จ่าย
+                </p>
+              </div>
+            )}
+            <div className="flex bg-gray-100 rounded-full p-0.5">
+              {RANGE_PRESETS.map((r) => (
+                <button key={r.key} type="button"
+                  onClick={() => { setPreset(r.key); setSelectedBar(null) }}
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
+                    preset === r.key ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-400'
+                  }`}>
+                  {r.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
+
+        {preset === 'month' && (
+          <div className="flex items-center justify-end gap-1 mt-2">
+            <button type="button" onClick={() => setMonthCursor((p) => new Date(p.getFullYear(), p.getMonth() - 1, 1))}
+              className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500" aria-label="เดือนก่อนหน้า">
+              <ChevronLeft size={15} />
+            </button>
+            <span className="text-xs font-bold text-gray-600 min-w-[7.5rem] text-center">
+              {formatThaiMonth(monthCursor)}
+            </span>
+            <button type="button" disabled={isCurrentMonth}
+              onClick={() => setMonthCursor((p) => new Date(p.getFullYear(), p.getMonth() + 1, 1))}
+              className="w-7 h-7 rounded-full bg-gray-100 disabled:opacity-30 flex items-center justify-center text-gray-500" aria-label="เดือนถัดไป">
+              <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        <div className="p-3 flex flex-col gap-2.5">
+        <div className="p-3 max-w-5xl mx-auto w-full grid gap-2.5 lg:grid-cols-2 items-start">
 
-          {/* ── Hero: กำไร + ยอดขาย/ต้นทุน/บิล/เฉลี่ย ── */}
-          <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-            {/* Top bar */}
-            <div className={`h-1.5 w-full ${netProfit > 0 ? 'bg-gradient-to-r from-emerald-400 to-teal-400' : netProfit < 0 ? 'bg-gradient-to-r from-red-400 to-rose-500' : 'bg-gray-200'}`} />
-            <div className="px-5 pt-4 pb-4">
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">กำไรสุทธิ</p>
-              <div className="flex items-baseline gap-2 mb-4">
-                <p className={`font-black tabular-nums leading-none ${netProfit > 0 ? 'text-emerald-500' : netProfit < 0 ? 'text-red-500' : 'text-gray-400'}`}
-                  style={{ fontSize: 'clamp(2.2rem, 8vw, 3rem)' }}>
-                  {netProfit > 0 ? '+' : ''}{netProfit.toLocaleString()}
+          {/* ── กำไรสุทธิ + กราฟ ── */}
+          <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+            <div className="px-5 pt-4 pb-2">
+              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">
+                กำไรสุทธิ · {periodLabel}
+              </p>
+              <div className="flex items-baseline gap-2">
+                <p className={`font-black tabular-nums leading-none ${
+                  netProfit > 0 ? 'text-emerald-600' : netProfit < 0 ? 'text-red-500' : 'text-gray-400'
+                }`} style={{ fontSize: 'clamp(2.1rem, 8vw, 2.9rem)' }}>
+                  {netProfit > 0 ? '+' : ''}{Math.round(netProfit).toLocaleString()}
                 </p>
                 <span className="text-gray-400 font-bold text-lg">฿</span>
                 {totalSales > 0 && (
@@ -206,128 +336,183 @@ function ReportsPage() {
                   </span>
                 )}
               </div>
+              <div className="mt-1 -mx-1">
+                <Sparkline values={sparklineValues} stroke={netProfit >= 0 ? '#10b981' : '#ef4444'} />
+              </div>
+            </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: 'ยอดขาย', value: `${totalSales.toLocaleString()} ฿`, color: 'text-emerald-600', bg: 'bg-emerald-50', labelColor: 'text-emerald-500' },
-                  { label: 'ต้นทุน', value: `${totalExpenses.toLocaleString()} ฿`, color: 'text-gray-600', bg: 'bg-gray-50', labelColor: 'text-gray-400' },
-                  { label: 'บิลทั้งหมด', value: `${totalOrders.toLocaleString()} บิล`, color: 'text-blue-600', bg: 'bg-blue-50', labelColor: 'text-blue-400' },
-                  { label: 'เฉลี่ย/บิล', value: `${avgOrder.toLocaleString()} ฿`, color: 'text-pink-600', bg: 'bg-pink-50', labelColor: 'text-pink-400' },
-                ].map((m) => (
-                  <div key={m.label} className={`${m.bg} rounded-2xl px-3.5 py-2.5`}>
-                    <p className={`${m.labelColor} text-[9px] font-bold uppercase tracking-wider mb-0.5`}>{m.label}</p>
-                    <p className={`${m.color} font-extrabold text-base tabular-nums leading-tight`}>{m.value}</p>
+            {/* แถวตัวเลขรอง — ไม่ทำเป็นการ์ด เพื่อไม่แย่งความสำคัญกับกำไร */}
+            <div className="flex divide-x divide-gray-100 border-t border-gray-100">
+              <StatCell label="ยอดขาย" value={`${Math.round(totalSales).toLocaleString()}`}
+                current={totalSales} previous={prevTotalSales} />
+              <StatCell label="ต้นทุน" value={`${Math.round(totalCost).toLocaleString()}`}
+                current={totalCost} previous={null} invert />
+              <StatCell label="บิล" value={orderCount.toLocaleString()}
+                current={orderCount} previous={prevOrderCount} />
+              <StatCell label="เฉลี่ย/บิล" value={avgOrder.toLocaleString()}
+                current={avgOrder} previous={prevAvgOrder} />
+            </div>
+          </div>
+
+          {/* ── กราฟยอดขาย ── */}
+          {hasData && (
+            <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+                  {isSingleDay ? 'ยอดขายรายชั่วโมง' : 'ยอดขายรายวัน'}
+                </p>
+                {selectedDetail ? (
+                  <p className="text-[11px] font-bold text-orange-600">
+                    {selectedDetail.label} · {Math.round(selectedDetail.value).toLocaleString()} ฿
+                    {selectedDetail.count > 0 ? ` · ${selectedDetail.count} บิล` : ''}
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-gray-300">แตะแท่งเพื่อดูรายละเอียด</p>
+                )}
+              </div>
+              <BarChart
+                data={chartData}
+                selectedKey={selectedBar}
+                onSelect={setSelectedBar}
+                formatValue={(v) => `${Math.round(v).toLocaleString()} ฿`}
+              />
+            </div>
+          )}
+
+          {/* ── ต้นทุนแยกส่วน ── */}
+          {totalCost > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">ต้นทุนแยกส่วน</p>
+              <ShareBar
+                total={totalCost}
+                segments={[
+                  { key: 'ingredient', label: 'วัตถุดิบ', value: ingredientCost, color: 'bg-orange-400' },
+                  { key: 'other', label: 'ค่าใช้จ่ายอื่น', value: otherCost, color: 'bg-slate-400' },
+                ]}
+              />
+              <div className="flex justify-between mt-2 text-[11px]">
+                <span className="text-gray-500">
+                  <span className="inline-block w-2 h-2 rounded-sm bg-orange-400 mr-1 align-middle" />
+                  วัตถุดิบ {Math.round(ingredientCost).toLocaleString()} ฿
+                </span>
+                <span className="text-gray-500">
+                  <span className="inline-block w-2 h-2 rounded-sm bg-slate-400 mr-1 align-middle" />
+                  อื่น ๆ {Math.round(otherCost).toLocaleString()} ฿
+                </span>
+              </div>
+              {ingredientCost === 0 && (
+                <p className="text-[11px] text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mt-2">
+                  ยังไม่ได้บันทึกค่าวัตถุดิบในช่วงนี้ — กำไรที่แสดงจึงสูงกว่าความจริง
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── สินค้าขายดี ── */}
+          {topItems.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2.5">สินค้าขายดี</p>
+              <div className="flex flex-col gap-2">
+                {topItems.map((item, idx) => (
+                  <div key={item.name}>
+                    <div className="flex items-center justify-between mb-1 gap-2">
+                      <span className="text-sm font-semibold text-gray-700 truncate min-w-0">
+                        <span className="mr-1.5">{['🥇', '🥈', '🥉'][idx] ?? `${idx + 1}.`}</span>
+                        {item.name}
+                      </span>
+                      <span className="text-xs shrink-0 tabular-nums">
+                        <span className="font-bold text-gray-800">{item.qty} {item.unit}</span>
+                        <span className="text-gray-400 ml-2">{item.total.toLocaleString()} ฿</span>
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-gradient-to-r from-orange-400 to-red-400 rounded-full"
+                        style={{ width: `${Math.max((item.qty / maxItemQty) * 100, 3)}%` }} />
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
-          </div>
+          )}
 
-          {/* ── สินค้าเสียหาย/เครม ── */}
-          {damageSummary.length > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-red-100 overflow-hidden">
-              <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-                <p className="text-[10px] font-bold text-red-500 uppercase tracking-[0.2em]">สินค้าเสียหาย/เครม</p>
-                <p className="text-xs font-bold text-red-500 tabular-nums">
-                  {totalDamageQty} รายการ{totalDamageValue > 0 ? ` · ~${totalDamageValue.toLocaleString()} ฿` : ''}
-                </p>
+          {/* ── ช่องทางชำระ ── */}
+          {paymentBreakdown.length > 0 && (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">ช่องทางชำระเงิน</p>
+              <ShareBar
+                total={paymentBreakdown.reduce((s, [, v]) => s + v, 0)}
+                segments={paymentBreakdown.map(([label, value], i) => ({
+                  key: label, label, value, color: PAYMENT_BAR_COLORS[i] ?? 'bg-gray-300',
+                }))}
+              />
+              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+                {paymentBreakdown.map(([label, value], i) => (
+                  <span key={label} className="text-[11px] text-gray-500">
+                    <span className={`inline-block w-2 h-2 rounded-sm mr-1 align-middle ${PAYMENT_BAR_COLORS[i] ?? 'bg-gray-300'}`} />
+                    {label} {value.toLocaleString()}
+                  </span>
+                ))}
               </div>
-              <div className="px-4 pb-3 flex flex-col gap-1.5 mt-1">
+            </div>
+          )}
+
+          {/* ── แถบเตือน — บาง ไม่ใช่การ์ดเต็ม ── */}
+          {damageSummary.length > 0 && (
+            <details className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <summary className="px-4 py-2.5 flex items-center gap-2 cursor-pointer list-none">
+                <span className="w-1 h-8 rounded-full bg-red-400 shrink-0" />
+                <span className="text-sm font-semibold text-gray-700">ของเสียหาย/เครม</span>
+                <span className="ml-auto text-xs font-bold text-red-500 tabular-nums">
+                  {totalDamageQty} รายการ{totalDamageValue > 0 ? ` · ~${Math.round(totalDamageValue).toLocaleString()} ฿` : ''}
+                </span>
+              </summary>
+              <div className="px-4 pb-3 pt-1 flex flex-col gap-1.5 border-t border-gray-50">
                 {damageSummary.map((d) => (
                   <div key={d.name} className="flex items-center justify-between gap-2">
-                    <div className="min-w-0 flex items-baseline gap-1.5">
-                      <span className="text-sm font-semibold text-gray-700 truncate">{d.name}</span>
+                    <span className="text-sm text-gray-600 truncate min-w-0">
+                      {d.name}
                       {d.reasons.size > 0 && (
-                        <span className="text-[11px] text-gray-400 truncate">{[...d.reasons].join(', ')}</span>
+                        <span className="text-[11px] text-gray-400 ml-1.5">{[...d.reasons].join(', ')}</span>
                       )}
-                    </div>
+                    </span>
                     <span className="text-sm font-bold text-red-500 shrink-0 tabular-nums">{d.qty} {d.unit}</span>
                   </div>
                 ))}
               </div>
-            </div>
+            </details>
           )}
 
-          {filtered.length > 0 && (
-            <>
-              {/* ── สินค้าขายดี ── */}
-              {topItems.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-4 pt-3 pb-1 flex items-center justify-between">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">สินค้าขายดี</p>
-                    <p className="text-[10px] text-gray-300">จำนวน / ยอดขาย</p>
-                  </div>
-                  <div className="px-4 pb-3 flex flex-col gap-1.5 mt-1">
-                    {topItems.map((item, idx) => {
-                      const medals = ['🥇', '🥈', '🥉']
-                      return (
-                        <div key={item.name} className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className="text-sm shrink-0">{medals[idx] ?? `${idx + 1}.`}</span>
-                            <span className="text-sm font-semibold text-gray-700 truncate">{item.name}</span>
-                          </div>
-                          <div className="flex items-center gap-2.5 shrink-0 ml-2">
-                            <span className="text-xs font-bold text-pink-500 tabular-nums">{item.qty} {item.unit}</span>
-                            <span className="text-xs text-gray-400 tabular-nums">{item.total.toLocaleString()} ฿</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* ── ช่องทางชำระ ── */}
-              {paymentBreakdown.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-                  <div className="px-4 pt-3 pb-1">
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">ช่องทางชำระเงิน</p>
-                  </div>
-                  <div className="px-4 pb-3 flex flex-col gap-1.5 mt-1">
-                    {paymentBreakdown.map(([label, amount]) => {
-                      const pct = totalSales > 0 ? Math.round((amount / totalSales) * 100) : 0
-                      return (
-                        <div key={label} className="flex items-center justify-between">
-                          <span className="text-sm font-semibold text-gray-700 truncate max-w-[10rem]">{label}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-bold text-gray-800 tabular-nums">{amount.toLocaleString()} ฿</span>
-                            <span className="text-[10px] text-gray-400 w-8 text-right">{pct}%</span>
-                          </div>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* ── สินค้าใกล้หมด ── */}
-              {lowStock.length > 0 && (
-                <div className="bg-white rounded-2xl shadow-sm border border-amber-100 overflow-hidden">
-                  <div className="px-4 pt-3 pb-3">
-                    <p className="text-[10px] font-bold text-amber-600 uppercase tracking-[0.2em] mb-2">⚠ สินค้าใกล้หมด</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {lowStock.map((p) => (
-                        <span key={p.id}
-                          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-                            (p.stock_qty ?? 0) === 0
-                              ? 'bg-red-500 text-white'
-                              : 'bg-amber-50 text-amber-700 border border-amber-200'
-                          }`}>
-                          {p.name} {(p.stock_qty ?? 0) === 0 ? '(หมด)' : `${p.stock_qty}`}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
+          {lowStock.length > 0 && (
+            <details className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              <summary className="px-4 py-2.5 flex items-center gap-2 cursor-pointer list-none">
+                <span className="w-1 h-8 rounded-full bg-amber-400 shrink-0" />
+                <span className="text-sm font-semibold text-gray-700">สินค้าใกล้หมด</span>
+                <span className="ml-auto text-xs font-bold text-amber-600 tabular-nums">
+                  {lowStock.length} รายการ
+                </span>
+              </summary>
+              <div className="px-4 pb-3 pt-2 flex flex-wrap gap-1.5 border-t border-gray-50">
+                {lowStock.map((p) => (
+                  <span key={p.id}
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
+                      (p.stock_qty ?? 0) === 0
+                        ? 'bg-red-500 text-white'
+                        : (p.stock_qty ?? 0) <= CRITICAL_STOCK_THRESHOLD
+                        ? 'bg-amber-100 text-amber-700 border border-amber-300'
+                        : 'bg-gray-100 text-gray-600'
+                    }`}>
+                    {p.name} {(p.stock_qty ?? 0) === 0 ? '(หมด)' : p.stock_qty}
+                  </span>
+                ))}
+              </div>
+            </details>
           )}
 
-          {/* ── Empty ── */}
-          {filtered.length === 0 && (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="w-16 h-16 rounded-2xl bg-slate-100 border border-slate-200 flex items-center justify-center text-3xl">📊</div>
-              <p className="text-gray-400 text-sm font-medium">ไม่มีข้อมูลยอดขายในช่วงนี้</p>
+          {/* ── ว่าง ── */}
+          {!hasData && (
+            <div className="lg:col-span-2 flex flex-col items-center justify-center py-20 gap-3">
+              <div className="w-16 h-16 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center text-3xl">📊</div>
+              <p className="text-gray-400 text-sm font-medium">ไม่มีข้อมูลในช่วงนี้</p>
             </div>
           )}
 

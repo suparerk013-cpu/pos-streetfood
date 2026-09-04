@@ -1,5 +1,10 @@
 import { initializeApp } from 'firebase/app'
-import { enableIndexedDbPersistence, getFirestore } from 'firebase/firestore'
+import { browserLocalPersistence, getAuth, setPersistence } from 'firebase/auth'
+import {
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from 'firebase/firestore'
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -12,12 +17,16 @@ const firebaseConfig = {
 }
 
 export const app = initializeApp(firebaseConfig)
-export const db = getFirestore(app)
 
-enableIndexedDbPersistence(db).catch((err) => {
-  if (err.code === 'failed-precondition') {
-    console.warn('Firestore offline persistence: เปิดหลายแท็บพร้อมกัน ใช้ persistence ได้แค่แท็บเดียว')
-  } else if (err.code === 'unimplemented') {
-    console.warn('Firestore offline persistence: เบราว์เซอร์นี้ไม่รองรับ')
-  }
+// persistentLocalCache แทน enableIndexedDbPersistence ที่ถูก deprecate แล้ว
+// multipleTabManager ทำให้เปิดหลายแท็บพร้อมกันได้ ไม่เหมือนของเดิมที่ได้แค่แท็บเดียว
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+})
+
+export const auth = getAuth(app)
+
+// ให้ล็อกอินค้างไว้แม้ปิดแอป — คนหน้าร้านไม่ควรต้องล็อกอินใหม่ทุกเช้า
+setPersistence(auth, browserLocalPersistence).catch(() => {
+  // เบราว์เซอร์ที่ปิด storage จะใช้ session persistence แทนโดยอัตโนมัติ
 })

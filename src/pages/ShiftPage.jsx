@@ -1,22 +1,24 @@
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
+import {
+  addDoc,
+  collection,
+  doc,
+  limit,
+  onSnapshot,
+  query,
+  serverTimestamp,
+  updateDoc,
+  where,
+} from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import ShiftSummaryModal from '../components/ShiftSummaryModal'
+import { useAppData } from '../lib/appDataContext'
+import { PLATFORM_CARD_COLORS, PLATFORM_ICONS } from '../lib/constants'
+import { formatTime, toDateString } from '../lib/dates'
+import { importDeliveryTotal } from '../lib/delivery'
 import { db } from '../lib/firebase'
-import { importDeliveryTotal } from '../lib/orders'
-
-const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
-const PLATFORM_ICONS = { GrabFood: '🟢', 'LINE MAN': '🟡', 'Shopee Food': '🟠', Robinhood: '🟣' }
-const PLATFORM_COLORS = {
-  GrabFood:     'border-green-200 bg-green-50 focus:border-green-400 focus:ring-green-100',
-  'LINE MAN':   'border-yellow-200 bg-yellow-50 focus:border-yellow-400 focus:ring-yellow-100',
-  'Shopee Food':'border-orange-200 bg-orange-50 focus:border-orange-400 focus:ring-orange-100',
-  Robinhood:    'border-purple-200 bg-purple-50 focus:border-purple-400 focus:ring-purple-100',
-}
-
-function formatTime(ts) {
-  if (!ts?.toDate) return '--:--'
-  return ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-}
+import { calcCashExpected, shiftCashDiff } from '../lib/shifts'
+import { resetDailyStock } from '../lib/stock'
+import { useOrdersForShift } from '../lib/useOrders'
 
 function formatDate(ts) {
   if (!ts?.toDate) return ''
@@ -41,9 +43,11 @@ function ShiftHistorySection({ shifts, onSelect }) {
       </div>
       <div className="divide-y divide-gray-50">
         {shifts.map((shift) => {
-          const diff  = shift.summary?.cash_diff ?? 0
-          const total = shift.summary?.total ?? 0
-          const bills = shift.summary?.order_count ?? 0
+          const summary = shift.summary ?? {}
+          // กะที่ปิดก่อนแก้บั๊กเก็บ cash_diff ที่คำนวณผิดไว้ — คิดใหม่จากตัวเลขดิบที่เก็บไว้ครบ
+          const { diff } = shiftCashDiff(shift)
+          const total = summary.total ?? 0
+          const bills = summary.order_count ?? 0
           const diffColor = diff === 0 ? 'bg-green-100 text-green-700'
                           : diff > 0  ? 'bg-blue-100 text-blue-700'
                                       : 'bg-red-100 text-red-600'
@@ -82,12 +86,18 @@ function ShiftHistorySection({ shifts, onSelect }) {
 }
 
 function ShiftPage() {
-  const [shifts, setShifts]   = useState([])
-  const [orders, setOrders]   = useState([])
-  const [loading, setLoading] = useState(true)
+  const {
+    currentShift,
+    closedShifts,
+    shiftsLoading,
+    enabledPlatforms,
+    activeProducts,
+    online,
+  } = useAppData()
 
   const [openingFloat, setOpeningFloat] = useState('500')
   const [opening, setOpening]           = useState(false)
+  const [resetStock, setResetStock]     = useState(true)
 
   const [cashCounted, setCashCounted]       = useState('')
   const [closingNote, setClosingNote]       = useState('')
@@ -95,82 +105,88 @@ function ShiftPage() {
   const [shiftSummary, setShiftSummary]     = useState(null)
   const [selectedHistory, setSelectedHistory] = useState(null)
 
-  const [deliveryAmounts, setDeliveryAmounts] = useState(
-    Object.fromEntries(PLATFORMS.map((p) => [p, '']))
-  )
+  const [deliveryAmounts, setDeliveryAmounts] = useState({})
   const [importingPlatform, setImportingPlatform] = useState(null)
   const [importedPlatform, setImportedPlatform]   = useState(null)
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
+  const [deliveryImports, setDeliveryImports] = useState([])
 
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
+  const { orders: shiftOrders } = useOrdersForShift(currentShift?.id)
 
+  // ยอดเดลิเวอรีของกะนี้ เก็บแยกจาก orders จึงต้องดึงมาบวกเอง
   useEffect(() => {
-    const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
+    if (!currentShift?.id) {
+      setDeliveryImports([])
+      return undefined
+    }
+    const q = query(
+      collection(db, 'delivery_imports'),
+      where('shift_id', '==', currentShift.id),
+      limit(100),
+    )
     return onSnapshot(q, (snap) => {
-      setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setLoading(false)
+      setDeliveryImports(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
     })
-  }, [])
-
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
-    })
-  }, [])
-
-  const currentShift  = useMemo(() => shifts.find((s) => s.status === 'open') ?? null, [shifts])
-  const closedShifts  = useMemo(() => shifts.filter((s) => s.status === 'closed'), [shifts])
-
-  const shiftOrders = useMemo(() => {
-    if (!currentShift?.opened_at?.toDate) return []
-    const openedMs = currentShift.opened_at.toDate().getTime()
-    return orders.filter((o) => o.created_at?.toDate && o.created_at.toDate().getTime() >= openedMs)
-  }, [orders, currentShift])
+  }, [currentShift?.id])
 
   const summary = useMemo(() => {
     let total = 0, cashSales = 0, promptpaySales = 0, changeTotal = 0
-    const deliverySales = {}
     shiftOrders.forEach((o) => {
       total += o.total_amount ?? 0
       ;(o.payments ?? []).forEach((p) => {
         if (p.method === 'cash') { cashSales += p.amount; changeTotal += p.change ?? 0 }
         else if (p.method === 'promptpay') promptpaySales += p.amount
-        else if (p.method === 'delivery') {
-          const key = p.platform ?? 'เดลิเวอรี่'
-          deliverySales[key] = (deliverySales[key] ?? 0) + p.amount
-        }
       })
     })
+
+    const deliverySales = {}
+    deliveryImports.forEach((imp) => {
+      const key = imp.platform ?? 'เดลิเวอรี่'
+      deliverySales[key] = (deliverySales[key] ?? 0) + (imp.amount ?? 0)
+    })
     const deliveryTotal = Object.values(deliverySales).reduce((s, v) => s + v, 0)
-    const cashExpected  = (currentShift?.opening_float ?? 0) + cashSales - changeTotal
-    return { total, cashSales, promptpaySales, deliverySales, deliveryTotal, changeTotal, cashExpected, orderCount: shiftOrders.length }
-  }, [shiftOrders, currentShift])
+
+    return {
+      total: total + deliveryTotal,
+      storeTotal: total,
+      cashSales,
+      promptpaySales,
+      deliverySales,
+      deliveryTotal,
+      changeTotal,
+      cashExpected: calcCashExpected(currentShift?.opening_float, cashSales),
+      orderCount: shiftOrders.length,
+    }
+  }, [shiftOrders, deliveryImports, currentShift])
 
   const cashDiff = cashCounted !== '' ? Number(cashCounted) - summary.cashExpected : null
 
   const handleOpenShift = async () => {
+    if (currentShift || !online) return
     setOpening(true)
     try {
       await addDoc(collection(db, 'shifts'), {
         status: 'open', opened_at: serverTimestamp(), closed_at: null,
         opening_float: Number(openingFloat) || 0, cash_counted: null, summary: null,
       })
+      // สินค้าที่ตั้งเป็นสต็อกรายวันต้องเริ่มนับใหม่ทุกกะ ไม่งั้นยอดค้างจากเมื่อวาน
+      if (resetStock) {
+        const dailyProducts = activeProducts.filter(
+          (p) => p.stock_type === 'daily' && (p.stock_qty ?? 0) !== 0,
+        )
+        await Promise.all(dailyProducts.map((p) => resetDailyStock(p.id)))
+      }
     } finally { setOpening(false) }
   }
 
   const handleCloseShift = async () => {
-    if (!currentShift || cashCounted === '') return
+    if (!currentShift || cashCounted === '' || !online) return
     setClosing(true)
     try {
       const counted = Number(cashCounted)
       const diff    = counted - summary.cashExpected
       const closedSummary = {
         order_count: summary.orderCount, total: summary.total,
+        store_total: summary.storeTotal,
         cash_sales: summary.cashSales, promptpay_sales: summary.promptpaySales,
         delivery_sales: summary.deliverySales, delivery_total: summary.deliveryTotal,
         change_total: summary.changeTotal, cash_expected: summary.cashExpected,
@@ -194,16 +210,24 @@ function ShiftPage() {
 
   const handleImportDelivery = async (platform) => {
     const amount = Number(deliveryAmounts[platform])
-    if (!amount || amount <= 0) return
+    if (!amount || amount <= 0 || !online) return
     setImportingPlatform(platform)
-    await importDeliveryTotal({ platform, amount })
-    setDeliveryAmounts((prev) => ({ ...prev, [platform]: '' }))
-    setImportingPlatform(null)
-    setImportedPlatform(platform)
-    setTimeout(() => setImportedPlatform(null), 2000)
+    try {
+      await importDeliveryTotal({
+        platform,
+        amount,
+        date: toDateString(),
+        shiftId: currentShift?.id ?? null,
+      })
+      setDeliveryAmounts((prev) => ({ ...prev, [platform]: '' }))
+      setImportedPlatform(platform)
+      setTimeout(() => setImportedPlatform(null), 2000)
+    } finally {
+      setImportingPlatform(null)
+    }
   }
 
-  if (loading) return (
+  if (shiftsLoading) return (
     <div className="h-full flex items-center justify-center bg-gray-50">
       <p className="text-gray-400 text-sm">กำลังโหลด...</p>
     </div>
@@ -248,9 +272,22 @@ function ShiftPage() {
                 ))}
               </div>
             </div>
-            <button type="button" onClick={handleOpenShift} disabled={opening}
+
+            <label className="flex items-center gap-3 bg-gray-50 rounded-2xl border border-gray-100 px-3 py-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={resetStock}
+                onChange={(e) => setResetStock(e.target.checked)}
+                className="w-5 h-5 accent-orange-500 shrink-0"
+              />
+              <span className="text-sm text-gray-600 leading-snug">
+                ล้างสต็อกสินค้าที่ตั้งเป็น <span className="font-semibold">สต็อกรายวัน</span> ให้เริ่มนับใหม่
+              </span>
+            </label>
+
+            <button type="button" onClick={handleOpenShift} disabled={opening || !online}
               className="w-full min-h-[60px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-xl shadow-xl shadow-orange-200 active:scale-95 transition-all">
-              {opening ? 'กำลังเปิดกะ...' : '🔓 เปิดกะ'}
+              {opening ? 'กำลังเปิดกะ...' : online ? '🔓 เปิดกะ' : 'ออฟไลน์ — เปิดกะไม่ได้'}
             </button>
           </div>
         </div>
@@ -325,8 +362,8 @@ function ShiftPage() {
               ))}
               {summary.changeTotal > 0 && (
                 <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-1">
-                  <span className="text-xs text-gray-400">เงินทอนให้ลูกค้า</span>
-                  <span className="text-xs font-bold text-red-400 tabular-nums">−{summary.changeTotal.toLocaleString()} ฿</span>
+                  <span className="text-xs text-gray-400">เงินทอนที่จ่ายไป</span>
+                  <span className="text-xs font-bold text-gray-500 tabular-nums">{summary.changeTotal.toLocaleString()} ฿</span>
                 </div>
               )}
             </div>
@@ -345,7 +382,9 @@ function ShiftPage() {
                   <p className="text-orange-500 font-extrabold text-2xl tabular-nums leading-tight">
                     {summary.cashExpected.toLocaleString()}
                   </p>
-                  <p className="text-gray-400 text-[10px] mt-0.5">฿</p>
+                  <p className="text-gray-400 text-[10px] mt-0.5">
+                    ทอนตั้งต้น {(currentShift.opening_float ?? 0).toLocaleString()} + เงินสด {summary.cashSales.toLocaleString()}
+                  </p>
                 </div>
                 <div className="rounded-2xl border-2 border-dashed border-gray-200 px-3 py-3 text-center relative">
                   <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-1">นับได้จริง</p>
@@ -394,9 +433,12 @@ function ShiftPage() {
               )}
 
               <button type="button" onClick={handleCloseShift}
-                disabled={closing || cashCounted === ''}
+                disabled={closing || cashCounted === '' || !online}
                 className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-red-500 to-rose-600 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 text-white font-extrabold text-lg shadow-lg shadow-red-200 active:scale-95 transition-all">
-                {closing ? 'กำลังปิดกะ...' : cashCounted === '' ? 'กรอกยอดเงินก่อนปิดกะ' : '🔒 ยืนยันปิดกะ'}
+                {closing ? 'กำลังปิดกะ...'
+                  : !online ? 'ออฟไลน์ — ปิดกะไม่ได้'
+                  : cashCounted === '' ? 'กรอกยอดเงินก่อนปิดกะ'
+                  : '🔒 ยืนยันปิดกะ'}
               </button>
             </div>
           </div>
@@ -408,16 +450,16 @@ function ShiftPage() {
               <p className="text-[10px] text-gray-300">กรอกยอดรวมวันนี้</p>
             </div>
             <div className="px-4 pb-4 mt-2 grid grid-cols-2 gap-2.5">
-              {shopPlatforms.map((p) => (
-                <div key={p} className={`rounded-2xl border-2 p-3 flex flex-col gap-2 transition-all ${PLATFORM_COLORS[p]}`}>
+              {enabledPlatforms.map((p) => (
+                <div key={p} className={`rounded-2xl border-2 p-3 flex flex-col gap-2 transition-all ${PLATFORM_CARD_COLORS[p] ?? 'border-gray-200 bg-gray-50'}`}>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-base">{PLATFORM_ICONS[p]}</span>
+                    <span className="text-base">{PLATFORM_ICONS[p] ?? '🛵'}</span>
                     <span className="text-xs font-bold text-gray-700 truncate">{p}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <input
                       type="number" inputMode="numeric"
-                      value={deliveryAmounts[p]}
+                      value={deliveryAmounts[p] ?? ''}
                       onChange={(e) => setDeliveryAmounts((prev) => ({ ...prev, [p]: e.target.value }))}
                       placeholder="0"
                       className="flex-1 min-w-0 bg-white rounded-xl border border-white/60 px-2 py-1.5 text-sm font-extrabold text-right focus:outline-none w-full"
@@ -426,7 +468,7 @@ function ShiftPage() {
                   </div>
                   <button type="button"
                     onClick={() => handleImportDelivery(p)}
-                    disabled={!deliveryAmounts[p] || importingPlatform === p}
+                    disabled={!deliveryAmounts[p] || importingPlatform === p || !online}
                     className={`w-full py-1.5 rounded-xl text-xs font-bold transition-all active:scale-95 ${
                       importedPlatform === p
                         ? 'bg-green-500 text-white'

@@ -1,15 +1,11 @@
-import { addDoc, collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
+import { collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
+import { METHOD_LABELS, paymentLabel } from './constants'
 import { db } from './firebase'
 
-export const PAYMENT_METHOD_LABELS = {
-  cash: 'เงินสด',
-  promptpay: 'โอน (PromptPay)',
-}
+export { METHOD_LABELS, paymentLabel }
 
 export function summarizePayments(payments) {
-  const line = payments
-    .map((p) => `${PAYMENT_METHOD_LABELS[p.method] ?? p.method} ${p.amount.toLocaleString()}`)
-    .join(' + ')
+  const line = payments.map((p) => `${paymentLabel(p)} ${p.amount.toLocaleString()}`).join(' + ')
   const changeTotal = payments.reduce((sum, p) => sum + (p.change || 0), 0)
   return { line, changeTotal }
 }
@@ -44,7 +40,7 @@ function aggregateQtyByProduct(cart) {
   return map
 }
 
-export async function createOrder({ cart, payments, total, discount = 0, subtotal }) {
+export async function createOrder({ cart, payments, total, discount = 0, subtotal, shiftId = null }) {
   const counterRef = doc(db, 'counters', 'queue_counter')
   const orderRef = doc(collection(db, 'orders'))
 
@@ -73,12 +69,12 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
       throw new InsufficientStockError(shortages)
     }
 
-    const current = counterSnap.exists() ? counterSnap.data().current_value : 0
-    const next = current + 1
+    const next = nextQueueNo(counterSnap)
 
-    transaction.set(counterRef, { current_value: next }, { merge: true })
+    transaction.set(counterRef, { current_value: next.value, day: next.day }, { merge: true })
     transaction.set(orderRef, {
-      queue_no: next,
+      queue_no: next.value,
+      shift_id: shiftId,
       items: buildOrderItems(cart),
       subtotal: subtotal ?? total,
       discount: discount > 0 ? discount : null,
@@ -105,32 +101,26 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
       })
     })
 
-    return next
+    return next.value
   })
 
   return { orderId: orderRef.id, queueNo, payments, total }
 }
 
-export async function importDeliveryTotal({ platform, amount }) {
-  const counterRef = doc(db, 'counters', 'queue_counter')
-  const orderRef = doc(collection(db, 'orders'))
-  await runTransaction(db, async (transaction) => {
-    const counterSnap = await transaction.get(counterRef)
-    const next = (counterSnap.exists() ? counterSnap.data().current_value : 0) + 1
-    transaction.set(counterRef, { current_value: next }, { merge: true })
-    transaction.set(orderRef, {
-      queue_no: next,
-      items: [],
-      subtotal: amount,
-      discount: null,
-      total_amount: amount,
-      payments: [{ method: 'delivery', platform, amount }],
-      status: 'completed',
-      source: 'delivery_import',
-      created_at: serverTimestamp(),
-      is_voided: false,
-    })
-  })
+/**
+ * เลขคิวเริ่มนับ 1 ใหม่ทุกวัน — เดิมนับสะสมไปเรื่อย ๆ จนกลายเป็น "คิว 8,432"
+ * เก็บวันที่ไว้ในตัวนับเพื่อรู้ว่าต้องรีเซ็ตเมื่อไร
+ */
+function nextQueueNo(counterSnap) {
+  const today = todayKey()
+  const data = counterSnap.exists() ? counterSnap.data() : null
+  if (!data || data.day !== today) return { value: 1, day: today }
+  return { value: (data.current_value ?? 0) + 1, day: today }
+}
+
+function todayKey() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export async function voidOrder(orderId, items) {

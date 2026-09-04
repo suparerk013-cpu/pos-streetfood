@@ -1,20 +1,12 @@
 import { useState } from 'react'
-import { EXPENSE_CATEGORY_LABELS, toDateString } from '../lib/expenses'
+import { toDateString } from '../lib/dates'
+import { EXPENSE_CATEGORY_ICONS as CATEGORY_ICONS, EXPENSE_CATEGORY_LABELS } from '../lib/expenses'
 import ModalBackdrop from './ModalBackdrop'
 
 const CATEGORY_KEYS = Object.keys(EXPENSE_CATEGORY_LABELS)
 
-const CATEGORY_ICONS = {
-  raw_material: '🥩',
-  utility_water: '💧',
-  utility_electric: '⚡',
-  rent: '🏠',
-  labor: '👷',
-  other: '📝',
-}
-
 function ExpenseModal({ onClose, onSubmit }) {
-  const [category, setCategory] = useState('raw_material')
+  const [category, setCategory] = useState('utility_water')
   const [customLabel, setCustomLabel] = useState('')
   const [amount, setAmount] = useState('')
   const [date, setDate] = useState(toDateString())
@@ -22,9 +14,9 @@ function ExpenseModal({ onClose, onSubmit }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
-  const needsLabel = category === 'raw_material' || category === 'other'
-  const labelPlaceholder = category === 'raw_material' ? 'เช่น หมึกสด, หอยสด, มะนาว' : 'เช่น ค่าซ่อมอุปกรณ์'
-  const labelTitle = category === 'raw_material' ? 'ชื่อวัตถุดิบ' : 'ชื่อค่าใช้จ่าย'
+  const needsLabel = category === 'other'
+  const labelPlaceholder = 'เช่น ค่าซ่อมอุปกรณ์'
+  const labelTitle = 'ชื่อค่าใช้จ่าย'
 
   const isValid = Number(amount) > 0 && date.trim() !== '' && (!needsLabel || customLabel.trim() !== '')
   const canClose = !saving

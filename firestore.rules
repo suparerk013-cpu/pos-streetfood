@@ -1,0 +1,29 @@
+rules_version = '2';
+
+// ทุก collection ในแอปนี้เป็นข้อมูลหลังร้าน ไม่มีส่วนที่ลูกค้าเข้าถึง
+// จึงใช้กติกาเดียวกันหมด: ต้องล็อกอินก่อนถึงจะอ่านหรือเขียนได้
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // สินค้า / บิล / ประวัติสต็อก / กะ / ค่าใช้จ่าย / วัตถุดิบ / การซื้อวัตถุดิบ
+    match /products/{doc}          { allow read, write: if signedIn(); }
+    match /orders/{doc}            { allow read, write: if signedIn(); }
+    match /stock_logs/{doc}        { allow read, write: if signedIn(); }
+    match /shifts/{doc}            { allow read, write: if signedIn(); }
+    match /expenses/{doc}          { allow read, write: if signedIn(); }
+    match /ingredients/{doc}       { allow read, write: if signedIn(); }
+    match /purchases/{doc}         { allow read, write: if signedIn(); }
+    match /delivery_imports/{doc}  { allow read, write: if signedIn(); }
+    match /settings/{doc}          { allow read, write: if signedIn(); }
+    match /counters/{doc}          { allow read, write: if signedIn(); }
+
+    // ปิดทุกอย่างที่ไม่ได้ระบุไว้ข้างบน
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

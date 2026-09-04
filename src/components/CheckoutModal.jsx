@@ -1,20 +1,22 @@
-import { doc, onSnapshot } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useAppData } from '../lib/appDataContext'
 import { calcCartTotal } from '../lib/cart'
-import { db } from '../lib/firebase'
+import {
+  DELIVERY_PLATFORMS as PLATFORM_KEYS,
+  METHOD_ICONS,
+  METHOD_SHORT,
+  PLATFORM_BUTTON_BG,
+  PLATFORM_ICONS,
+} from '../lib/constants'
 import { createOrder, InsufficientStockError } from '../lib/orders'
 import ModalBackdrop from './ModalBackdrop'
 
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
-const METHOD_SHORT  = { cash: 'เงินสด', promptpay: 'โมบาย', delivery: 'เดลิ' }
-const METHOD_ICONS  = { cash: '💵', promptpay: '📱', delivery: '🛵' }
-
-const DELIVERY_PLATFORMS = [
-  { key: 'GrabFood',    label: 'GrabFood',    bg: 'bg-green-500',  emoji: '🟢' },
-  { key: 'LINE MAN',   label: 'LINE MAN',    bg: 'bg-lime-500',   emoji: '🟡' },
-  { key: 'Shopee Food', label: 'Shopee Food', bg: 'bg-orange-500', emoji: '🟠' },
-  { key: 'Robinhood',  label: 'Robinhood',   bg: 'bg-purple-500', emoji: '🟣' },
-]
+const DELIVERY_PLATFORMS = PLATFORM_KEYS.map((key) => ({
+  key,
+  label: key,
+  bg: PLATFORM_BUTTON_BG[key],
+  emoji: PLATFORM_ICONS[key],
+}))
 
 const DIGIT_ROWS = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['ล้าง','0','⌫']]
 const QUICK_AMOUNTS  = [20, 50, 100]
@@ -28,8 +30,8 @@ function calcDeliveryTotal(cart, platform) {
 }
 
 function CheckoutModal({ cart, onClose, onSuccess }) {
+  const { enabledPlatforms: shopPlatformKeys, currentShift } = useAppData()
   const subtotal = calcCartTotal(cart)
-  const [shopPlatformKeys, setShopPlatformKeys] = useState(DELIVERY_PLATFORMS.map((p) => p.key))
   const [method, setMethod]           = useState('cash')
   const [numpadValue, setNumpadValue] = useState('0')
   const [payments, setPayments]       = useState([])
@@ -48,14 +50,6 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     ? entered <= subtotal
     : (entered > 0 && remaining > 0 && (method === 'promptpay' ? entered <= remaining : true))
 
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) {
-        setShopPlatformKeys(snap.data().enabled_delivery_platforms ?? DELIVERY_PLATFORMS.map((p) => p.key))
-      }
-    })
-  }, [])
-
   const finalizeOrder = async (finalPayments, overrideTotal = total, overrideSubtotal = subtotal) => {
     if (saving) return
     setSaving(true); setSaveError(null)
@@ -66,6 +60,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
         total: overrideTotal,
         discount,
         subtotal: overrideSubtotal,
+        shiftId: currentShift?.id ?? null,
       })
       setSaving(false); onSuccess(result)
     } catch (err) {
@@ -326,14 +321,17 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               <div className="flex-1 min-h-0 grid grid-cols-2 gap-2">
                 {DELIVERY_PLATFORMS.filter((p) => shopPlatformKeys.includes(p.key)).map((p) => {
                   const dTotal = calcDeliveryTotal(cart, p.key)
-                  const dNet   = Math.max(dTotal - discount, 0)
+                  // ส่วนลดกรอกไว้กับราคาหน้าร้าน แต่ราคาเดลิเวอรีเป็นคนละฐาน
+                  // จึงจำกัดไม่ให้ลดเกินยอดของแพลตฟอร์มนั้นเอง
+                  const dDiscount = Math.min(discount, dTotal)
+                  const dNet   = dTotal - dDiscount
                   return (
                     <button key={p.key} type="button" disabled={saving}
                       onClick={() => !saving && finalizeOrder([{ method: 'delivery', platform: p.key, amount: dNet }], dNet, dTotal)}
                       className={`${p.bg} rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-lg active:scale-95 transition-all disabled:opacity-50`}>
                       <span className="text-4xl">{p.emoji}</span>
                       <span className="font-bold text-base">{p.label}</span>
-                      {discount > 0 ? (
+                      {dDiscount > 0 ? (
                         <span className="flex items-baseline gap-1.5">
                           <span className="text-xs line-through opacity-60 tabular-nums">{dTotal.toLocaleString()}</span>
                           <span className="font-black text-xl tabular-nums">{dNet.toLocaleString()} ฿</span>

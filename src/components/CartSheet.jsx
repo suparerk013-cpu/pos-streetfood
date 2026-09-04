@@ -1,7 +1,7 @@
 import { calcCartTotal } from '../lib/cart'
 import CartItemRow from './CartItemRow'
 
-function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout }) {
+function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, checkoutDisabled = false }) {
   const total = calcCartTotal(cart)
 
   return (
@@ -40,10 +40,10 @@ function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemov
         <button
           type="button"
           onClick={onCheckout}
-          disabled={cart.length === 0}
+          disabled={cart.length === 0 || checkoutDisabled}
           className="min-h-[64px] min-w-[140px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-xl shadow-lg shadow-orange-300 active:scale-95 transition-all"
         >
-          คิดเงิน
+          {checkoutDisabled ? 'ออฟไลน์' : 'คิดเงิน'}
         </button>
       </div>
 
@@ -59,10 +59,10 @@ function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemov
           <button
             type="button"
             onClick={onCheckout}
-            disabled={cart.length === 0}
+            disabled={cart.length === 0 || checkoutDisabled}
             className="w-full min-h-[64px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-2xl shadow-xl shadow-orange-200 active:scale-95 transition-all tracking-wide"
           >
-            คิดเงิน
+            {checkoutDisabled ? 'ออฟไลน์' : 'คิดเงิน'}
           </button>
         </div>
       </div>

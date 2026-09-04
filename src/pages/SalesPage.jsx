@@ -1,45 +1,31 @@
-import { collection, doc, onSnapshot } from 'firebase/firestore'
 import { PackageX } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
 import CheckoutModal from '../components/CheckoutModal'
 import DamageModal from '../components/DamageModal'
+import ModifierModal from '../components/ModifierModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
-import { addItemToCart, calcCartTotal, removeItem, setItemQuantity, updateItemQuantity } from '../lib/cart'
-import { db } from '../lib/firebase'
-import { seedInitialProducts } from '../lib/seedProducts'
+import { useAppData } from '../lib/appDataContext'
+import {
+  addItemToCart,
+  calcCartTotal,
+  getModifierCategories,
+  removeItem,
+  setItemQuantity,
+  updateItemQuantity,
+} from '../lib/cart'
 import { reportDamage } from '../lib/stock'
 
 function SalesPage() {
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { activeProducts, productsLoading, shopName, online } = useAppData()
   const [cart, setCart] = useState([])
-  const [seeding, setSeeding] = useState(false)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [successResult, setSuccessResult] = useState(null)
-  const [shopName, setShopName] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
   const [damageOpen, setDamageOpen] = useState(false)
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopName(snap.data().shop_name ?? '')
-    })
-  }, [])
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const items = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-        .filter((product) => product.is_active)
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      setProducts(items)
-      setLoading(false)
-    })
-    return unsubscribe
-  }, [])
+  const [modifierTarget, setModifierTarget] = useState(null)
 
   const cartQtyByProductId = useMemo(() => {
     const map = new Map()
@@ -50,18 +36,34 @@ function SalesPage() {
   }, [cart])
 
   const categories = useMemo(
-    () => [...new Set(products.map((p) => p.category).filter(Boolean))],
-    [products],
+    () => [...new Set(activeProducts.map((p) => p.category).filter(Boolean))],
+    [activeProducts],
   )
 
   const visibleProducts = useMemo(
-    () => (activeCategory === 'all' ? products : products.filter((p) => p.category === activeCategory)),
-    [products, activeCategory],
+    () =>
+      activeCategory === 'all'
+        ? activeProducts
+        : activeProducts.filter((p) => p.category === activeCategory),
+    [activeProducts, activeCategory],
   )
 
+  /**
+   * สินค้าที่มีตัวเลือก (ความเผ็ด / น้ำจิ้ม) จะเปิดหน้าต่างให้เลือกก่อนลงตะกร้า
+   * เดิมส่ง {} ตายตัว ทำให้ตัวเลือกที่ตั้งไว้ในคลังสินค้าใช้งานไม่ได้เลย
+   */
   const handleSelectProduct = (product) => {
     if ((product.stock_qty ?? 0) <= 0) return
+    if (getModifierCategories(product).length > 0) {
+      setModifierTarget(product)
+      return
+    }
     setCart((prev) => addItemToCart(prev, product, {}))
+  }
+
+  const handleConfirmModifiers = (selected) => {
+    setCart((prev) => addItemToCart(prev, modifierTarget, selected))
+    setModifierTarget(null)
   }
 
   const handleIncrement = (key) => setCart((prev) => updateItemQuantity(prev, key, 1))
@@ -69,19 +71,15 @@ function SalesPage() {
   const handleRemove = (key) => setCart((prev) => removeItem(prev, key))
   const handleSetQuantity = (key, qty) => setCart((prev) => setItemQuantity(prev, key, qty))
 
-  const handleSeed = async () => {
-    setSeeding(true)
-    try {
-      await seedInitialProducts()
-    } finally {
-      setSeeding(false)
-    }
-  }
-
   const handleCheckoutSuccess = (result) => {
     setCheckoutOpen(false)
     setCart([])
     setSuccessResult(result)
+  }
+
+  const openCheckout = () => {
+    if (!online) return
+    setCheckoutOpen(true)
   }
 
   const total = calcCartTotal(cart)
@@ -97,12 +95,6 @@ function SalesPage() {
             <PackageX size={14} />
             เสียหาย/เครม
           </button>
-          {import.meta.env.DEV && (
-            <button type="button" onClick={handleSeed} disabled={seeding}
-              className="text-xs bg-white/20 px-3 py-1.5 rounded-lg disabled:opacity-60">
-              {seeding ? 'กำลัง Seed...' : 'Seed (dev)'}
-            </button>
-          )}
         </div>
       </header>
 
@@ -136,7 +128,7 @@ function SalesPage() {
             </div>
           )}
           <div className="flex-1 min-h-0 overflow-y-auto">
-            {!loading && (
+            {!productsLoading && (
               <ProductGrid products={visibleProducts} cartQtyByProductId={cartQtyByProductId} onSelectProduct={handleSelectProduct} />
             )}
           </div>
@@ -150,7 +142,8 @@ function SalesPage() {
               onDecrement={handleDecrement}
               onRemove={handleRemove}
               onSetQuantity={handleSetQuantity}
-              onCheckout={() => setCheckoutOpen(true)}
+              onCheckout={openCheckout}
+              checkoutDisabled={!online}
             />
           </div>
         </div>
@@ -195,16 +188,24 @@ function SalesPage() {
             <div className="px-4 pb-5">
               <button
                 type="button"
-                onClick={() => setCheckoutOpen(true)}
-                disabled={cart.length === 0}
+                onClick={openCheckout}
+                disabled={cart.length === 0 || !online}
                 className="w-full min-h-[64px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-2xl shadow-xl shadow-orange-200 active:scale-95 transition-all tracking-wide"
               >
-                คิดเงิน
+                {online ? 'คิดเงิน' : 'ออฟไลน์'}
               </button>
             </div>
           </div>
         </div>
       </div>
+
+      {modifierTarget && (
+        <ModifierModal
+          product={modifierTarget}
+          onClose={() => setModifierTarget(null)}
+          onConfirm={handleConfirmModifiers}
+        />
+      )}
 
       {checkoutOpen && (
         <CheckoutModal
@@ -220,7 +221,7 @@ function SalesPage() {
 
       {damageOpen && (
         <DamageModal
-          products={products}
+          products={activeProducts}
           onClose={() => setDamageOpen(false)}
           onSubmit={async (payload) => {
             await reportDamage(payload)
