@@ -1,107 +1,137 @@
-﻿# ===== POS Street Food — Deploy Script =====
-# รันใน PowerShell ที่โฟลเดอร์โปรเจกต์:  .\deploy.ps1
+﻿# ===== POS Street Food - Deploy อัตโนมัติ =====
+# วิธีใช้ที่ง่ายที่สุด: ดับเบิลคลิกไฟล์ deploy.cmd (ไม่ต้องเปิด PowerShell เอง)
+# หรือรันในเทอร์มินัลก็ได้:  .\deploy.ps1
 #
-# ทำตามลำดับที่ปลอดภัย: ดึงโค้ด -> ทดสอบ -> build -> deploy เว็บ
-# -> ให้คุณยืนยันว่าล็อกอินได้ -> ค่อย deploy security rules
+# สคริปต์นี้ทำให้ครบทุกอย่างเอง: ดึงโค้ด -> ติดตั้ง -> เทสต์ -> build
+# -> deploy เว็บ -> deploy security rules
 #
-# ลำดับนี้สำคัญมาก ถ้า deploy rules ก่อนที่เว็บจะเป็นโค้ดใหม่
-# ร้านจะใช้งานไม่ได้ทันที เพราะโค้ดเก่าไม่มีระบบล็อกอิน
+# ใช้ npm.cmd / firebase.cmd แทน npm / firebase เพราะบน Windows
+# คำสั่งเปล่า ๆ จะไปเจอไฟล์ .ps1 ซึ่งโดน execution policy บล็อก
 
 $ErrorActionPreference = "Stop"
 $BRANCH = "claude/pos-streetfood-analysis-lcawl7"
+$SITE = "https://pospos-b87bf.web.app"
 
 # ให้คอนโซลแสดงภาษาไทยได้ถูกต้อง
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
+# ทำงานที่โฟลเดอร์ของสคริปต์เสมอ ไม่ว่าจะถูกเรียกจากที่ไหน
+Set-Location -LiteralPath $PSScriptRoot
 
 function Step($n, $text) {
     Write-Host ""
     Write-Host "=== ขั้นที่ $n : $text ===" -ForegroundColor Cyan
 }
+function Ok($text) { Write-Host "OK: $text" -ForegroundColor Green }
 function Fail($text) {
     Write-Host ""
     Write-Host "หยุด: $text" -ForegroundColor Red
-    Write-Host "ส่งข้อความนี้ให้ Claude ดูได้เลย" -ForegroundColor Yellow
+    Write-Host "ถ่ายรูปหน้าจอนี้ส่งให้ Claude ได้เลย" -ForegroundColor Yellow
+    Write-Host ""
+    pause
     exit 1
 }
 
-Step 0 "ตรวจเครื่องมือที่ต้องใช้"
-if (-not (Get-Command firebase -ErrorAction SilentlyContinue)) {
-    Write-Host ""
-    Write-Host "ยังไม่มี Firebase CLI — ติดตั้งด้วยคำสั่งนี้ก่อน:" -ForegroundColor Yellow
-    Write-Host "    npm install -g firebase-tools" -ForegroundColor White
-    Write-Host "    firebase login" -ForegroundColor White
-    Write-Host ""
-    Write-Host "ถ้าติดตั้งแล้วแต่ยังไม่รู้จัก ให้ปิดหน้าต่าง PowerShell แล้วเปิดใหม่" -ForegroundColor Gray
-    Fail "ขาด Firebase CLI"
+# หา .cmd ก่อนเสมอ ถ้าไม่มีค่อยใช้ชื่อเปล่า
+function Exe($name) {
+    $cmd = Get-Command "$name.cmd" -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
+    $plain = Get-Command $name -ErrorAction SilentlyContinue
+    if ($plain) { return $plain.Source }
+    return $null
 }
-Write-Host "OK: มี Firebase CLI แล้ว" -ForegroundColor Green
+
+Step 0 "ตรวจเครื่องมือที่ต้องใช้"
+
+$NPM = Exe "npm"
+if (-not $NPM) { Fail "ยังไม่ได้ติดตั้ง Node.js - โหลดจาก https://nodejs.org แล้วเปิดหน้าต่างนี้ใหม่" }
+Ok "Node.js พร้อม"
+
+$FIREBASE = Exe "firebase"
+if (-not $FIREBASE) {
+    Write-Host "ยังไม่มี Firebase CLI - กำลังติดตั้งให้ (ใช้เวลาสัก 1-2 นาที)" -ForegroundColor Yellow
+    & $NPM install -g firebase-tools
+    if ($LASTEXITCODE -ne 0) { Fail "ติดตั้ง firebase-tools ไม่สำเร็จ" }
+    $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                [System.Environment]::GetEnvironmentVariable("Path","User")
+    $FIREBASE = Exe "firebase"
+    if (-not $FIREBASE) { Fail "ติดตั้งแล้วแต่ยังเรียก firebase ไม่ได้ - ปิดหน้าต่างนี้แล้วดับเบิลคลิก deploy.cmd ใหม่" }
+}
+Ok "Firebase CLI พร้อม"
+
+# เช็คว่าล็อกอิน Google ไว้หรือยัง ถ้ายังก็เปิดเบราว์เซอร์ให้ล็อกอินเลย
+# ปิด ErrorActionPreference ชั่วคราว เพราะ 2>&1 ทำให้ข้อความ stderr ของโปรแกรมนอก
+# กลายเป็น error record แล้วสคริปต์จะหยุดทั้งที่ยังไม่มีอะไรพัง
+$prevEap = $ErrorActionPreference
+$ErrorActionPreference = "Continue"
+$loginInfo = (& $FIREBASE "login:list" 2>&1 | Out-String)
+$loginExit = $LASTEXITCODE
+$ErrorActionPreference = $prevEap
+
+if ($loginExit -ne 0 -or $loginInfo -match "No authorized accounts") {
+    Write-Host ""
+    Write-Host "ยังไม่ได้ล็อกอิน Firebase - เดี๋ยวเบราว์เซอร์จะเปิดขึ้นมา" -ForegroundColor Yellow
+    Write-Host "ให้เลือกบัญชี Google ที่เป็นเจ้าของโปรเจกต์ pospos-b87bf" -ForegroundColor Yellow
+    Write-Host ""
+    & $FIREBASE login
+    if ($LASTEXITCODE -ne 0) { Fail "ล็อกอิน Firebase ไม่สำเร็จ" }
+}
+Ok "ล็อกอิน Firebase แล้ว"
 
 Step 1 "ดึงโค้ดใหม่"
-git fetch origin
+git fetch origin $BRANCH
 if ($LASTEXITCODE -ne 0) { Fail "git fetch ไม่สำเร็จ ตรวจอินเทอร์เน็ต" }
 git checkout $BRANCH
 git pull origin $BRANCH
-if ($LASTEXITCODE -ne 0) { Fail "git pull ไม่สำเร็จ" }
-Write-Host ("OK: อยู่ที่ " + (git log --oneline -1)) -ForegroundColor Green
+if ($LASTEXITCODE -ne 0) { Fail "git pull ไม่สำเร็จ - ถ้าเคยแก้ไฟล์เองให้บอก Claude" }
+Ok ("อยู่ที่ " + (git log --oneline -1))
 
 Step 2 "ติดตั้ง dependencies"
-npm install
+& $NPM install
 if ($LASTEXITCODE -ne 0) { Fail "npm install ไม่สำเร็จ" }
 
 Step 3 "ตรวจไฟล์ .env"
 if (-not (Test-Path ".env")) {
     Copy-Item ".env.example" ".env"
-    Fail "ยังไม่มี .env — สร้างจากเทมเพลตให้แล้ว เปิดใส่ค่าจริงจาก Firebase Console ก่อน แล้วรันสคริปต์นี้ใหม่"
+    Fail "ยังไม่มี .env - สร้างจากเทมเพลตให้แล้ว เปิดใส่ค่าจริงจาก Firebase Console ก่อน แล้วรันใหม่"
 }
-$envText = Get-Content ".env" -Raw
-if ($envText -notmatch "VITE_FIREBASE_API_KEY=\S") {
-    Fail ".env มีอยู่แต่ยังไม่ได้ใส่ค่า — เปิดแก้แล้วรันใหม่"
+if ((Get-Content ".env" -Raw) -notmatch "VITE_FIREBASE_API_KEY=\S") {
+    Fail ".env มีอยู่แต่ยังไม่ได้ใส่ค่า - เปิดแก้แล้วรันใหม่"
 }
-Write-Host "OK: .env พร้อมแล้ว" -ForegroundColor Green
+Ok ".env พร้อมแล้ว"
 
 Step 4 "รันเทสต์"
-npm test
-if ($LASTEXITCODE -ne 0) { Fail "เทสต์ไม่ผ่าน อย่า deploy" }
+& $NPM test
+if ($LASTEXITCODE -ne 0) { Fail "เทสต์ไม่ผ่าน ไม่ deploy ของที่พัง" }
 
 Step 5 "build"
-npm run build
+& $NPM run build
 if ($LASTEXITCODE -ne 0) { Fail "build ไม่สำเร็จ" }
 
-Step 6 "deploy เว็บ (ยังไม่แตะ security rules)"
-firebase deploy --only hosting
-if ($LASTEXITCODE -ne 0) { Fail "deploy hosting ไม่สำเร็จ — ถ้าขึ้นว่ายังไม่ได้ login ให้รัน firebase login ก่อน" }
-
-Write-Host ""
-Write-Host "----------------------------------------------------" -ForegroundColor Yellow
-Write-Host " เปิดเว็บแล้วทดสอบก่อนไปต่อ" -ForegroundColor Yellow
-Write-Host "   https://pospos-b87bf.web.app" -ForegroundColor White
-Write-Host ""
-Write-Host " ต้องเจอ 2 อย่างนี้:" -ForegroundColor Yellow
-Write-Host "   1. หน้าล็อกอินสีส้ม (ไม่ใช่เข้าหน้าขายเลย)"
-Write-Host "   2. ล็อกอินด้วยอีเมล/รหัสที่ตั้งใน Firebase แล้วเข้าได้"
-Write-Host "----------------------------------------------------" -ForegroundColor Yellow
-Write-Host ""
-$answer = Read-Host "ล็อกอินเข้าได้แล้วใช่ไหม? พิมพ์ y แล้ว Enter (พิมพ์อย่างอื่นเพื่อหยุด)"
-if ($answer -ne "y") {
-    Write-Host ""
-    Write-Host "หยุดไว้ก่อน ยังไม่ได้ deploy rules — ฐานข้อมูลยังเปิดอยู่เหมือนเดิม" -ForegroundColor Yellow
-    Write-Host "แก้ปัญหาล็อกอินให้ได้ก่อนแล้วรันสคริปต์นี้ใหม่" -ForegroundColor Yellow
-    exit 0
-}
+Step 6 "deploy เว็บ"
+& $FIREBASE deploy --only hosting
+if ($LASTEXITCODE -ne 0) { Fail "deploy hosting ไม่สำเร็จ" }
+Ok "เว็บอัปเดตแล้ว"
 
 Step 7 "deploy security rules (ปิดช่องโหว่ฐานข้อมูล)"
-firebase deploy --only firestore:rules,firestore:indexes
-if ($LASTEXITCODE -ne 0) { Fail "deploy rules ไม่สำเร็จ — เว็บยังใช้ได้ปกติ แต่ฐานข้อมูลยังไม่ถูกปิด" }
+& $FIREBASE deploy --only firestore:rules,firestore:indexes
+if ($LASTEXITCODE -ne 0) { Fail "deploy rules ไม่สำเร็จ - เว็บใช้ได้ปกติ แต่ฐานข้อมูลยังไม่ถูกปิด" }
+Ok "ฐานข้อมูลถูกปิดแล้ว เฉพาะคนที่ล็อกอินเท่านั้นที่เข้าถึงได้"
 
 Write-Host ""
-Write-Host "เสร็จเรียบร้อย" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
+Write-Host " เสร็จเรียบร้อย" -ForegroundColor Green
+Write-Host "=====================================================" -ForegroundColor Green
 Write-Host ""
-Write-Host "เหลืออีก 3 อย่างที่ต้องทำในแอป (ไม่รีบ ทำเมื่อไหร่ก็ได้):" -ForegroundColor Cyan
-Write-Host "  1. ค่าใช้จ่าย > วัตถุดิบ > บันทึกซื้อปลาหมึกสด 1 ครั้ง (ให้ระบบรู้ราคา)"
-Write-Host "  2. คลังสินค้า > แก้ไขปลาหมึกย่าง > ผูกวัตถุดิบ + ตั้งราคาเดลิเวอรี + โปร 10 แถม 1"
-Write-Host "  3. คลังสินค้า > แท็บเซ็ต > สร้าง 'ปลาหมึก 8 ไม้' แล้วกดใช้ราคาแนะนำ"
+Write-Host " เปิดเว็บ: $SITE" -ForegroundColor White
+Write-Host " กด Ctrl + Shift + R หนึ่งครั้ง เพื่อล้างแคชเวอร์ชันเก่า" -ForegroundColor Yellow
 Write-Host ""
-Write-Host "ส่วนค่า GP / ค่าแพ็ค / ของประกอบ ระบบใช้ค่าเริ่มต้นให้แล้ว (30% / 5 / 1.5)" -ForegroundColor Gray
-Write-Host "ไปแก้ทีหลังได้ที่หน้าตั้งค่า" -ForegroundColor Gray
+Write-Host " หน้าเดลิเวอรีจะว่างจนกว่าจะสร้างเซ็ต:" -ForegroundColor Cyan
+Write-Host "   คลังสินค้า > แท็บเซ็ต > + สร้างเซ็ต"
+Write-Host "   เช่น 'ปลาหมึก 8 ไม้' = ปลาหมึกย่าง x 8 ราคา 120 บาท"
+Write-Host ""
+Write-Host " ถ้าอยากให้ระบบคิดต้นทุนเองแม่น ๆ:" -ForegroundColor Cyan
+Write-Host "   1. ค่าใช้จ่าย > วัตถุดิบ > บันทึกซื้อปลาหมึกสด 1 ครั้ง"
+Write-Host "   2. คลังสินค้า > แก้ไขปลาหมึกย่าง > ผูกวัตถุดิบ (60 บาท ได้ 20 ไม้)"
 Write-Host ""
 pause

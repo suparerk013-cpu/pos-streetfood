@@ -9,18 +9,21 @@
 
 ## Deploy ขึ้นเว็บจริง
 
-```powershell
-.\deploy.ps1      # Windows
-```
+**Windows — ดับเบิลคลิกไฟล์ `deploy.cmd`** ไม่ต้องเปิด PowerShell เอง
+(ไฟล์นี้เรียก `deploy.ps1` แบบข้าม execution policy ให้แล้ว)
+
 ```bash
 bash deploy.sh    # macOS / Linux
 ```
 
-สคริปต์จะดึงโค้ด ติดตั้ง รันเทสต์ build แล้ว deploy เว็บ
-**หยุดให้คุณทดสอบล็อกอินก่อน** แล้วค่อย deploy security rules
+สคริปต์ทำให้ครบทุกอย่างเอง: ติดตั้ง Firebase CLI ถ้ายังไม่มี → ล็อกอิน Firebase ถ้ายังไม่ได้ล็อกอิน
+→ ดึงโค้ด → ติดตั้ง dependencies → รันเทสต์ → build → deploy เว็บ → deploy security rules
 
-ลำดับนี้สำคัญ — ถ้า deploy rules ก่อนที่เว็บจะเป็นโค้ดใหม่ ร้านจะใช้งานไม่ได้ทันที
-เพราะโค้ดเก่าไม่มีระบบล็อกอินจึงอ่านข้อมูลไม่ได้
+เรียก `npm.cmd` / `firebase.cmd` แทนชื่อเปล่า เพราะบน Windows ชื่อเปล่าจะไปเจอไฟล์ `.ps1`
+ซึ่งโดน execution policy บล็อก
+
+deploy เว็บก่อน rules เสมอ — ถ้าปิดฐานข้อมูลตอนที่เว็บยังเป็นโค้ดเก่าที่ไม่มีระบบล็อกอิน
+ร้านจะอ่านข้อมูลไม่ได้ทันที
 
 ---
 
