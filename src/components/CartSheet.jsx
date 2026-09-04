@@ -1,7 +1,7 @@
 import { calcCartTotal } from '../lib/cart'
 import CartItemRow from './CartItemRow'
 
-function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, checkoutDisabled = false }) {
+function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, maxPaidByProduct, checkoutDisabled = false }) {
   const total = calcCartTotal(cart)
 
   return (
@@ -21,6 +21,7 @@ function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDe
                 key={item.key}
                 item={item}
                 cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
+                maxQty={maxPaidByProduct?.get(item.productId)}
                 onIncrement={onIncrement}
                 onDecrement={onDecrement}
                 onRemove={onRemove}

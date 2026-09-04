@@ -8,7 +8,8 @@ export function isBundle(product) {
 export function sellableIn(products, channel) {
   return products.filter((p) => {
     if (p.is_active === false) return false
-    const c = p.channel ?? 'store'
+    // สินค้าที่ยังไม่เคยตั้งช่องทาง ถือว่าขายได้ทั้งคู่ ตรงกับพฤติกรรมเดิมก่อนมีฟีเจอร์นี้
+    const c = p.channel ?? 'both'
     return c === 'both' || c === channel
   })
 }

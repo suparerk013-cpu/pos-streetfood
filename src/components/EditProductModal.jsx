@@ -22,7 +22,7 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
   const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
-  const [channel, setChannel] = useState(product.channel ?? 'store')
+  const [channel, setChannel] = useState(product.channel ?? 'both')
   const [deliveryPrice, setDeliveryPrice] = useState(
     String(product.delivery_price ?? product.delivery_prices?.[PLATFORMS[0]] ?? ''),
   )

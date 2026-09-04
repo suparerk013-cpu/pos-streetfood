@@ -49,26 +49,6 @@ export function useExpensesInRange(from, to) {
   return { expenses, loading }
 }
 
-export function useDeliveryImportsInRange(from, to) {
-  const [imports, setImports] = useState([])
-
-  useEffect(() => {
-    if (!from || !to) return undefined
-    const q = query(
-      collection(db, 'delivery_imports'),
-      where('date', '>=', from),
-      where('date', '<=', to),
-      orderBy('date', 'desc'),
-      limit(PAGE_SIZE),
-    )
-    return onSnapshot(q, (snap) => {
-      setImports(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
-  }, [from, to])
-
-  return imports
-}
-
 /** รอบจ่ายเงินทั้งหมด — ไม่กี่รายการต่อเดือน ดึงมาทั้งหมดได้ */
 export function usePayouts() {
   const [payouts, setPayouts] = useState([])

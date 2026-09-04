@@ -63,3 +63,17 @@ export function effectiveQtyByProduct(cart, productById, { channel = 'store' } =
   buildFreeLines(cart, productById, { channel }).forEach((line) => add(line.productId, line.quantity))
   return map
 }
+
+/**
+ * ซื้อได้สูงสุดกี่ชิ้นจากสต็อกที่มี เมื่อคิดของแถมเข้าไปด้วย
+ * สต็อก 11 กับโปร 10 แถม 1 → ซื้อได้ 10 เพราะชิ้นที่ 11 ต้องกันไว้แถม
+ */
+export function maxPaidQty(product, stockQty, { channel = 'store' } = {}) {
+  if (!Number.isFinite(stockQty)) return Infinity
+  if (channel !== 'store' || !hasPromo(product)) return stockQty
+  const { promo_buy_qty: buy, promo_free_qty: free } = product
+  const perGroup = buy + free
+  const groups = Math.floor(stockQty / perGroup)
+  const leftover = stockQty - groups * perGroup
+  return groups * buy + Math.min(leftover, buy)
+}

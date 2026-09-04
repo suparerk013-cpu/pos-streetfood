@@ -1,21 +1,20 @@
 import { ImageOff, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
-import { DELIVERY_PLATFORMS as PLATFORMS, productCategoryLabel } from '../lib/constants'
+import { CHANNELS, productCategoryLabel } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
 function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
   const { enabledPlatforms: shopPlatforms } = useAppData()
   const [name, setName] = useState('')
+  const [channel, setChannel] = useState('both')
+  const [deliveryPrice, setDeliveryPrice] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
   const [stockQty, setStockQty] = useState('')
   const [unit, setUnit] = useState('')
   const [stockType, setStockType] = useState('batch')
-  const [deliveryPrices, setDeliveryPrices] = useState(
-    Object.fromEntries(PLATFORMS.map((p) => [p, ''])),
-  )
   const [modifierGroups, setModifierGroups] = useState([])
   const [imagePreview, setImagePreview] = useState(null)
   const [imageBase64, setImageBase64] = useState(null)
@@ -72,11 +71,6 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
       if (key && options.length > 0) modifiers[key] = options
     })
 
-    const dpMap = {}
-    shopPlatforms.forEach((p) => {
-      if (Number(deliveryPrices[p]) > 0) dpMap[p] = Number(deliveryPrices[p])
-    })
-
     try {
       await onSubmit({
         name: name.trim(),
@@ -87,7 +81,8 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
         stockType,
         modifiers,
         imageBase64,
-        deliveryPrices: dpMap,
+        channel,
+        deliveryPrice: channel === 'store' ? null : (Number(deliveryPrice) || null),
       })
     } catch {
       setSaving(false)
@@ -244,28 +239,42 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
           </p>
         </div>
 
-        {shopPlatforms.length > 0 && (
-          <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100">
-            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-3">
-              ราคาเดลิเวอรี่ (ถ้าต่างจากหน้าร้าน) — ไม่ใส่ก็ได้
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {shopPlatforms.map((p) => (
-                <label key={p} className="block">
-                  <span className="text-xs font-medium text-gray-600">{p}</span>
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    value={deliveryPrices[p]}
-                    onChange={(e) => setDeliveryPrices((prev) => ({ ...prev, [p]: e.target.value }))}
-                    placeholder={price || '0'}
-                    className="mt-0.5 w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold"
-                  />
-                </label>
+        <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100 flex flex-col gap-3">
+          <div>
+            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">ช่องทางขาย</p>
+            <div className="flex gap-2">
+              {Object.entries(CHANNELS).map(([key, label]) => (
+                <button key={key} type="button" onClick={() => setChannel(key)}
+                  className={`flex-1 min-h-[42px] rounded-xl border-2 font-bold text-sm transition-colors ${
+                    channel === key
+                      ? 'border-orange-500 bg-white text-orange-600'
+                      : 'border-transparent bg-white/60 text-gray-500'
+                  }`}>
+                  {label}
+                </button>
               ))}
             </div>
           </div>
-        )}
+
+          {channel !== 'store' && shopPlatforms.length > 0 && (
+            <div>
+              <label htmlFor="add-delivery-price" className="block text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">
+                ราคาเดลิเวอรี (ใช้ราคาเดียวทุกแอป) — ไม่ใส่ก็ได้
+              </label>
+              <input
+                id="add-delivery-price"
+                type="number" inputMode="decimal" step="any"
+                value={deliveryPrice}
+                onChange={(e) => setDeliveryPrice(e.target.value)}
+                placeholder={price || '0'}
+                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-lg font-bold focus:outline-none focus:border-orange-400"
+              />
+              <p className="mt-1.5 text-[11px] text-gray-500">
+                ไม่ใส่จะขายที่ราคาหน้าร้าน ซึ่งหักค่า GP แล้วอาจขาดทุน — ตั้งราคาแนะนำได้ทีหลังในหน้าแก้ไขสินค้า
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">

@@ -99,3 +99,35 @@ describe('effectiveQtyByProduct', () => {
     expect(map.get('p1')).toBe(10)
   })
 })
+
+describe('maxPaidQty', () => {
+  it('สต็อก 11 โปร 10 แถม 1 → ซื้อได้ 10 เพราะชิ้นที่ 11 กันไว้แถม', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(squid, 11)).toBe(10)
+  })
+
+  it('สต็อก 22 ซื้อได้ 20 แถม 2', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(squid, 22)).toBe(20)
+  })
+
+  it('สต็อกไม่ถึงเกณฑ์แถม ซื้อได้เท่าสต็อก', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(squid, 7)).toBe(7)
+  })
+
+  it('สต็อก 15 → ซื้อ 10 แถม 1 แล้วเหลือ 4 ซื้อต่อได้ รวม 14', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(squid, 15)).toBe(14)
+  })
+
+  it('สินค้าที่ไม่มีโปรซื้อได้เท่าสต็อก', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(mussel, 30)).toBe(30)
+  })
+
+  it('บนเดลิเวอรีไม่มีของแถม ซื้อได้เต็มสต็อก', async () => {
+    const { maxPaidQty } = await import('../promo')
+    expect(maxPaidQty(squid, 11, { channel: 'delivery' })).toBe(11)
+  })
+})

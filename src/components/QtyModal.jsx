@@ -2,9 +2,10 @@ import { useState } from 'react'
 import ModalBackdrop from './ModalBackdrop'
 import Numpad from './Numpad'
 
-function QtyModal({ item, onClose, onConfirm }) {
+function QtyModal({ item, onClose, onConfirm, maxQty }) {
   const [value, setValue] = useState('0')
-  const stockQty = item.stockQty ?? Infinity
+  // maxQty เผื่อของแถมไว้แล้ว (สต็อก 11 + โปร 10 แถม 1 → ซื้อได้ 10)
+  const stockQty = maxQty ?? item.stockQty ?? Infinity
   const qty = Number(value)
   const isValid = qty > 0 && qty <= stockQty
 
@@ -32,7 +33,7 @@ function QtyModal({ item, onClose, onConfirm }) {
         <Numpad value={value} onChangeValue={setValue} unit={item.unit ?? 'ชิ้น'} />
 
         {Number.isFinite(stockQty) && qty > stockQty && (
-          <p className="mt-2 text-center text-sm text-red-500">มีสต็อกเหลือ {stockQty} {item.unit ?? 'ชิ้น'}</p>
+          <p className="mt-2 text-center text-sm text-red-500">ใส่ได้สูงสุด {stockQty} {item.unit ?? 'ชิ้น'}</p>
         )}
 
         <button

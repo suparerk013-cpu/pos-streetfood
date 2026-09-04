@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { calcItemTotal, formatModifiers } from '../lib/cart'
 import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemove, onSetQuantity }) {
+function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity }) {
   const modifiersText = formatModifiers(item.modifiers)
-  const atLimit = cartQtyForProduct >= (item.stockQty ?? Infinity)
+  const atLimit = cartQtyForProduct >= (maxQty ?? item.stockQty ?? Infinity)
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
   return (
@@ -58,6 +58,7 @@ function CartItemRow({ item, cartQtyForProduct, onIncrement, onDecrement, onRemo
       {qtyModalOpen && (
         <QtyModal
           item={item}
+          maxQty={maxQty}
           onClose={() => setQtyModalOpen(false)}
           onConfirm={(qty) => onSetQuantity(item.key, qty)}
         />

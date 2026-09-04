@@ -11,7 +11,7 @@ import { useAppData } from '../lib/appDataContext'
 import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
 import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
 import { bundleStock } from '../lib/pricing'
-import { buildFreeLines } from '../lib/promo'
+import { buildFreeLines, maxPaidQty } from '../lib/promo'
 import {
   addItemToCart,
   calcCartTotal,
@@ -68,6 +68,17 @@ function SalesPage() {
   )
   const cartWithFree = useMemo(() => [...cart, ...freeLines], [cart, freeLines])
 
+  /** เพดานจำนวนที่ซื้อได้ต่อสินค้า เผื่อของแถมไว้แล้ว */
+  const maxPaidByProduct = useMemo(() => {
+    const map = new Map()
+    cart.forEach((item) => {
+      if (map.has(item.productId)) return
+      const product = productById.get(item.productId)
+      map.set(item.productId, maxPaidQty(product, item.stockQty ?? Infinity, { channel }))
+    })
+    return map
+  }, [cart, productById, channel])
+
   const unpricedDelivery = useMemo(
     () => (channel === 'delivery' ? channelProducts.filter(missingDeliveryPrice) : []),
     [channel, channelProducts],
@@ -115,7 +126,17 @@ function SalesPage() {
   const handleIncrement = (key) => setCart((prev) => updateItemQuantity(prev, key, 1))
   const handleDecrement = (key) => setCart((prev) => updateItemQuantity(prev, key, -1))
   const handleRemove = (key) => setCart((prev) => removeItem(prev, key))
-  const handleSetQuantity = (key, qty) => setCart((prev) => setItemQuantity(prev, key, qty))
+  /**
+   * ตั้งจำนวนตรง ๆ จากแป้นตัวเลข — เพดานต้องเผื่อของแถมด้วย
+   * สต็อกเหลือ 11 กับโปร 10 แถม 1 ซื้อได้แค่ 10 เพราะไม้ที่ 11 ต้องกันไว้แถม
+   */
+  const handleSetQuantity = (key, qty) =>
+    setCart((prev) => {
+      const item = prev.find((i) => i.key === key)
+      const product = item ? productById.get(item.productId) : null
+      const ceiling = maxPaidQty(product, item?.stockQty ?? Infinity, { channel })
+      return setItemQuantity(prev, key, qty, ceiling)
+    })
 
   const handleCheckoutSuccess = (result) => {
     setCheckoutOpen(false)
@@ -259,6 +280,7 @@ function SalesPage() {
                     key={item.key}
                     item={item}
                     cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
+                    maxQty={maxPaidByProduct.get(item.productId)}
                     onIncrement={handleIncrement}
                     onDecrement={handleDecrement}
                     onRemove={handleRemove}

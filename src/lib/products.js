@@ -11,7 +11,8 @@ export async function addProduct({
   modifiers,
   sortOrder,
   imageBase64,
-  deliveryPrices,
+  channel,
+  deliveryPrice,
 }) {
   await addDoc(collection(db, 'products'), {
     name,
@@ -24,7 +25,8 @@ export async function addProduct({
     modifiers,
     sort_order: sortOrder,
     image_base64: imageBase64 ?? null,
-    delivery_prices: deliveryPrices ?? {},
+    channel: channel ?? 'both',
+    delivery_price: deliveryPrice ?? null,
   })
 }
 

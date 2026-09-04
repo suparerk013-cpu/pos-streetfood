@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { expandToStockUnits, isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../bundles'
 
 const squid = { id: 'p1', name: 'ปลาหมึกย่าง', price: 10, channel: 'store', is_active: true }
+// หมายเหตุ: squid ตั้ง channel เป็น 'store' ชัดเจน จึงไม่โผล่ในโหมดเดลิเวอรี
 const mussel = { id: 'p2', name: 'หอยแมลงภู่', price: 50, channel: 'both', is_active: true, delivery_price: 75 }
 const set8 = {
   id: 's1', name: 'ปลาหมึก 8 ไม้', price: 80, delivery_price: 120,
@@ -40,9 +41,9 @@ describe('sellableIn', () => {
     expect(sellableIn(all, 'delivery').some((p) => p.id === 'p9')).toBe(false)
   })
 
-  it('สินค้าที่ไม่ได้ตั้ง channel ถือเป็นหน้าร้าน', () => {
+  it('สินค้าเดิมที่ยังไม่เคยตั้ง channel ขายได้ทั้งสองช่องทาง — ตรงกับพฤติกรรมก่อนมีฟีเจอร์นี้', () => {
     expect(sellableIn([{ id: 'x', is_active: true }], 'store')).toHaveLength(1)
-    expect(sellableIn([{ id: 'x', is_active: true }], 'delivery')).toHaveLength(0)
+    expect(sellableIn([{ id: 'x', is_active: true }], 'delivery')).toHaveLength(1)
   })
 })
 

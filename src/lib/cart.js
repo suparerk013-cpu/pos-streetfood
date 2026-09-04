@@ -57,12 +57,21 @@ export function updateItemQuantity(cart, key, delta) {
     .filter((item) => item.quantity > 0)
 }
 
-export function setItemQuantity(cart, key, qty) {
+/**
+ * ตั้งจำนวนตรง ๆ จากแป้นตัวเลข
+ *
+ * maxPaidQty คือเพดานที่เผื่อของแถมแล้ว เช่นสต็อกเหลือ 11 กับโปร 10 แถม 1
+ * ซื้อได้สูงสุด 10 ไม่ใช่ 11 เพราะไม้ที่ 11 ต้องกันไว้แถม
+ */
+export function setItemQuantity(cart, key, qty, maxPaidQty) {
   return cart
     .map((item) => {
       if (item.key !== key) return item
-      const stockQty = item.stockQty ?? Infinity
-      const clamped = Math.min(Math.max(qty, 0), stockQty)
+      const ceiling = maxPaidQty ?? item.stockQty ?? Infinity
+      const otherQty = cart
+        .filter((other) => other.productId === item.productId && other.key !== key)
+        .reduce((sum, other) => sum + other.quantity, 0)
+      const clamped = Math.min(Math.max(qty, 0), Math.max(ceiling - otherQty, 0))
       return { ...item, quantity: clamped }
     })
     .filter((item) => item.quantity > 0)
