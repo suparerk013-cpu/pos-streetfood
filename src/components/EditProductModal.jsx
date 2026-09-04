@@ -13,11 +13,6 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
     consumableCost,
     gpRateFor,
   } = useAppData()
-  const cost = unitCost(product, { ingredientById, consumableCost })
-  const gpRate = gpRateFor(shopPlatforms[0])
-  const suggestedDelivery = suggestDeliveryPrice(cost, gpRate)
-  const deliveryResult =
-    Number(deliveryPrice) > 0 ? profitOf({ price: Number(deliveryPrice), cost, gpRate }) : null
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
@@ -37,6 +32,12 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+
+  const cost = unitCost(product, { ingredientById, consumableCost })
+  const gpRate = gpRateFor(shopPlatforms[0])
+  const suggestedDelivery = suggestDeliveryPrice(cost, gpRate)
+  const deliveryResult =
+    Number(deliveryPrice) > 0 ? profitOf({ price: Number(deliveryPrice), cost, gpRate }) : null
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving && !deleting
