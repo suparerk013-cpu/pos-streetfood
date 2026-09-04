@@ -8,6 +8,7 @@ import ModifierModal from '../components/ModifierModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { useAppData } from '../lib/appDataContext'
+import { productCategoryLabel } from '../lib/constants'
 import {
   addItemToCart,
   calcCartTotal,
@@ -122,7 +123,7 @@ function SalesPage() {
                     activeCategory === cat ? 'bg-orange-500 text-white shadow' : 'bg-white border border-gray-200 text-gray-600'
                   }`}
                 >
-                  {cat}
+                  {productCategoryLabel(cat)}
                 </button>
               ))}
             </div>

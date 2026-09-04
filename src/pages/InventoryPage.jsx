@@ -5,7 +5,7 @@ import EditProductModal from '../components/EditProductModal'
 import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
 import { useAppData } from '../lib/appDataContext'
-import { LOW_STOCK_THRESHOLD } from '../lib/constants'
+import { LOW_STOCK_THRESHOLD, productCategoryLabel } from '../lib/constants'
 import { addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { seedInitialProducts } from '../lib/seedProducts'
 import { adjustStock, restockProduct } from '../lib/stock'
@@ -24,6 +24,10 @@ function InventoryPage() {
   const products = useMemo(
     () => (showArchived ? allProducts : allProducts.filter((p) => p.is_active !== false)),
     [allProducts, showArchived],
+  )
+  const existingCategories = useMemo(
+    () => [...new Set(allProducts.map((p) => p.category).filter(Boolean))],
+    [allProducts],
   )
   const archivedCount = useMemo(
     () => allProducts.filter((p) => p.is_active === false).length,
@@ -161,7 +165,7 @@ function InventoryPage() {
                         )}
                       </p>
                       <p className="text-sm text-gray-400">
-                        {product.category} · {product.price} ฿ ·{' '}
+                        {productCategoryLabel(product.category)} · {product.price} ฿ ·{' '}
                         {product.stock_type === 'daily' ? 'สต็อกรายวัน' : 'สต็อกล็อต'}
                       </p>
                     </div>
@@ -217,7 +221,11 @@ function InventoryPage() {
       )}
 
       {addModalOpen && (
-        <AddProductModal onClose={() => setAddModalOpen(false)} onSubmit={handleAddProduct} />
+        <AddProductModal
+          onClose={() => setAddModalOpen(false)}
+          onSubmit={handleAddProduct}
+          existingCategories={existingCategories}
+        />
       )}
 
       {editTarget && (

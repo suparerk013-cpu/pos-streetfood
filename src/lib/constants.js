@@ -45,3 +45,24 @@ export function paymentLabel(payment) {
 
 /** จำนวนบิลสูงสุดที่ดึงมาแสดงต่อครั้ง — กันค่า Firestore reads บานปลาย */
 export const ORDER_PAGE_SIZE = 500
+
+/**
+ * หมวดสินค้าเก็บเป็นข้อความอิสระที่ผู้ใช้พิมพ์เอง แต่ข้อมูลชุดแรกถูก seed มาเป็น
+ * สแลงอังกฤษ (squid / mussel) แล้วโผล่บนหน้าขายตรง ๆ — แปลงให้เป็นไทยตอนแสดงผล
+ * โดยไม่ต้องแก้ข้อมูลเดิม ส่วนหมวดที่พิมพ์เป็นไทยอยู่แล้วจะผ่านไปตามเดิม
+ */
+const LEGACY_CATEGORY_LABELS = {
+  squid: 'ปลาหมึก',
+  mussel: 'หอยแมลงภู่',
+  shrimp: 'กุ้ง',
+  fish: 'ปลา',
+  drink: 'เครื่องดื่ม',
+  food: 'อาหาร',
+  snack: 'ของทานเล่น',
+  other: 'อื่นๆ',
+}
+
+export function productCategoryLabel(category) {
+  if (!category) return 'อื่นๆ'
+  return LEGACY_CATEGORY_LABELS[String(category).toLowerCase()] ?? category
+}

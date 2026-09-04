@@ -5,7 +5,7 @@ const INITIAL_PRODUCTS = [
   {
     id: 'prod_squid_01',
     name: 'ปลาหมึกย่าง (เนื้อล้วน)',
-    category: 'squid',
+    category: 'ปลาหมึก',
     price: 40,
     is_active: true,
     stock_type: 'batch',
@@ -19,7 +19,7 @@ const INITIAL_PRODUCTS = [
   {
     id: 'prod_mussel_01',
     name: 'หอยแมลงภู่นึ่ง',
-    category: 'mussel',
+    category: 'หอยแมลงภู่',
     price: 60,
     is_active: true,
     stock_type: 'daily',

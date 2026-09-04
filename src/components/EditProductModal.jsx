@@ -1,18 +1,16 @@
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useAppData } from '../lib/appDataContext'
+import { DELIVERY_PLATFORMS as PLATFORMS } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
-import { db } from '../lib/firebase'
 import ModalBackdrop from './ModalBackdrop'
 
-const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
-
 function EditProductModal({ product, onClose, onSubmit, onDelete }) {
+  const { enabledPlatforms: shopPlatforms } = useAppData()
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
   const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, String(product.delivery_prices?.[p] ?? '')]))
   )
@@ -38,12 +36,6 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
       setDeleteError('ลบไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
     }
   }
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]

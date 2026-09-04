@@ -1,20 +1,18 @@
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useAppData } from '../lib/appDataContext'
+import { DELIVERY_PLATFORMS as PLATFORMS, productCategoryLabel } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
-import { db } from '../lib/firebase'
 import ModalBackdrop from './ModalBackdrop'
 
-const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
-
-function AddProductModal({ onClose, onSubmit }) {
+function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
+  const { enabledPlatforms: shopPlatforms } = useAppData()
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
   const [stockQty, setStockQty] = useState('')
   const [unit, setUnit] = useState('')
   const [stockType, setStockType] = useState('batch')
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, ''])),
   )
@@ -27,12 +25,6 @@ function AddProductModal({ onClose, onSubmit }) {
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -164,14 +156,33 @@ function AddProductModal({ onClose, onSubmit }) {
             />
           </label>
           <label className="block">
-            <span className="text-sm font-medium text-gray-600">Category</span>
+            <span className="text-sm font-medium text-gray-600">หมวดหมู่</span>
             <input
               type="text"
               value={category}
               onChange={(event) => setCategory(event.target.value)}
-              placeholder="drink"
+              placeholder="เช่น ปลาหมึก, เครื่องดื่ม"
               className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4"
             />
+            {/* กดเลือกจากหมวดที่มีอยู่ กันพิมพ์ไม่ตรงกันจนกลายเป็นคนละหมวด */}
+            {existingCategories.length > 0 && (
+              <span className="mt-2 flex flex-wrap gap-1.5">
+                {existingCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setCategory(cat)}
+                    className={`px-3 py-1.5 rounded-xl text-sm font-semibold transition-colors ${
+                      category === cat
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-gray-100 text-gray-600 border border-gray-200'
+                    }`}
+                  >
+                    {productCategoryLabel(cat)}
+                  </button>
+                ))}
+              </span>
+            )}
           </label>
         </div>
 
