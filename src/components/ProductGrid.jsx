@@ -1,11 +1,11 @@
 import ProductCard from './ProductCard'
 
-function ProductGrid({ products, cartQtyByProductId, onSelectProduct }) {
+function ProductGrid({ products, cartQtyByProductId, onSelectProduct, emptyMessage }) {
   if (products.length === 0) {
     return (
       <div className="h-full flex items-center justify-center px-6 text-center">
-        <p className="text-gray-400 text-lg">
-          ยังไม่มีสินค้า กรุณาเพิ่มจากหน้าคลังสินค้า
+        <p className="text-gray-400 text-lg whitespace-pre-line">
+          {emptyMessage ?? 'ยังไม่มีสินค้า กรุณาเพิ่มจากหน้าคลังสินค้า'}
         </p>
       </div>
     )

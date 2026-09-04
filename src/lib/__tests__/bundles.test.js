@@ -32,18 +32,31 @@ describe('sellableIn', () => {
     expect(sellableIn(all, 'store').map((p) => p.id)).toEqual(['p1', 'p2'])
   })
 
-  it('เดลิเวอรีเห็นเซ็ตและสินค้าที่ตั้งเป็นทั้งคู่', () => {
-    expect(sellableIn(all, 'delivery').map((p) => p.id)).toEqual(['p2', 's1', 's2'])
+  it('เดลิเวอรีเห็นเฉพาะเซ็ต ไม่เห็นสินค้าไม้เดี่ยวแม้ตั้ง channel เป็นทั้งคู่', () => {
+    expect(sellableIn(all, 'delivery').map((p) => p.id)).toEqual(['s1', 's2'])
+  })
+
+  it('เซ็ตที่ตั้งช่องทางเป็นหน้าร้านไม่โผล่ในเดลิเวอรี', () => {
+    const storeSet = { ...set8, id: 's3', channel: 'store' }
+    expect(sellableIn([storeSet], 'delivery')).toHaveLength(0)
+    expect(sellableIn([storeSet], 'store')).toHaveLength(1)
   })
 
   it('สินค้าที่เลิกขายไม่โผล่ในช่องทางไหนเลย', () => {
     expect(sellableIn(all, 'store').some((p) => p.id === 'p9')).toBe(false)
     expect(sellableIn(all, 'delivery').some((p) => p.id === 'p9')).toBe(false)
+    expect(sellableIn([{ ...set8, is_active: false }], 'delivery')).toHaveLength(0)
   })
 
-  it('สินค้าเดิมที่ยังไม่เคยตั้ง channel ขายได้ทั้งสองช่องทาง — ตรงกับพฤติกรรมก่อนมีฟีเจอร์นี้', () => {
+  it('สินค้าเดิมที่ยังไม่เคยตั้ง channel ยังขายหน้าร้านได้ แต่ไม่ขึ้นในเดลิเวอรีเพราะไม่ใช่เซ็ต', () => {
     expect(sellableIn([{ id: 'x', is_active: true }], 'store')).toHaveLength(1)
-    expect(sellableIn([{ id: 'x', is_active: true }], 'delivery')).toHaveLength(1)
+    expect(sellableIn([{ id: 'x', is_active: true }], 'delivery')).toHaveLength(0)
+  })
+
+  it('สินค้าเดี่ยวที่เคยตั้ง channel เป็นเดลิเวอรี ยังโผล่หน้าร้าน ไม่หายไปทั้งสองหน้า', () => {
+    const oldDeliveryOnly = { id: 'p8', name: 'ของเก่า', is_active: true, channel: 'delivery' }
+    expect(sellableIn([oldDeliveryOnly], 'store')).toHaveLength(1)
+    expect(sellableIn([oldDeliveryOnly], 'delivery')).toHaveLength(0)
   })
 })
 

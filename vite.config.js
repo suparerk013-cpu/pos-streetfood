@@ -5,6 +5,9 @@ import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
 export default defineConfig({
+  // เทสต์ที่เรนเดอร์คอมโพเนนต์ไม่ได้ผ่าน transform ของ plugin-react
+  // ต้องบอก esbuild เองว่าใช้ JSX runtime อัตโนมัติ ไม่งั้นพังที่ "React is not defined"
+  esbuild: { jsx: 'automatic' },
   build: {
     rolldownOptions: {
       output: {

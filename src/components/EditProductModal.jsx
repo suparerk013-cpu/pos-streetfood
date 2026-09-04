@@ -1,26 +1,16 @@
 import { ImageOff, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
-import { CHANNELS, DELIVERY_PLATFORMS as PLATFORMS } from '../lib/constants'
-import { profitOf, suggestDeliveryPrice, unitCost } from '../lib/pricing'
+import { unitCost } from '../lib/pricing'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
 function EditProductModal({ product, onClose, onSubmit, onDelete }) {
-  const {
-    enabledPlatforms: shopPlatforms,
-    ingredientById,
-    consumableCost,
-    gpRateFor,
-  } = useAppData()
+  const { ingredientById, consumableCost } = useAppData()
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
   const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
-  const [channel, setChannel] = useState(product.channel ?? 'both')
-  const [deliveryPrice, setDeliveryPrice] = useState(
-    String(product.delivery_price ?? product.delivery_prices?.[PLATFORMS[0]] ?? ''),
-  )
   const [promoOn, setPromoOn] = useState(Boolean(product.promo_buy_qty > 0))
   const [promoBuy, setPromoBuy] = useState(String(product.promo_buy_qty ?? 10))
   const [promoFree, setPromoFree] = useState(String(product.promo_free_qty ?? 1))
@@ -34,10 +24,6 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [deleteError, setDeleteError] = useState(null)
 
   const cost = unitCost(product, { ingredientById, consumableCost })
-  const gpRate = gpRateFor(shopPlatforms[0])
-  const suggestedDelivery = suggestDeliveryPrice(cost, gpRate)
-  const deliveryResult =
-    Number(deliveryPrice) > 0 ? profitOf({ price: Number(deliveryPrice), cost, gpRate }) : null
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving && !deleting
@@ -86,8 +72,6 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
       name: name.trim(),
       price: Number(price),
       unit: unit.trim() || 'ชิ้น',
-      channel,
-      delivery_price: channel === 'store' ? null : (Number(deliveryPrice) || null),
       promo_buy_qty: promoOn ? Math.max(1, Number(promoBuy) || 0) : null,
       promo_free_qty: promoOn ? Math.max(1, Number(promoFree) || 0) : null,
     }
@@ -183,59 +167,10 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
           />
         </label>
 
-        {/* ราคาเดลิเวอรี + ช่องทางขาย */}
-        <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100 flex flex-col gap-3">
-          <div>
-            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">ช่องทางขาย</p>
-            <div className="flex gap-2">
-              {Object.entries(CHANNELS).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setChannel(key)}
-                  className={`flex-1 min-h-[42px] rounded-xl border-2 font-bold text-sm transition-colors ${
-                    channel === key
-                      ? 'border-orange-500 bg-white text-orange-600'
-                      : 'border-transparent bg-white/60 text-gray-500'
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {channel !== 'store' && (
-            <div>
-              <label htmlFor="edit-delivery-price" className="block text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">
-                ราคาเดลิเวอรี (ใช้ราคาเดียวทุกแอป)
-              </label>
-              <div className="flex items-center gap-2">
-                <input
-                  id="edit-delivery-price"
-                  type="number" inputMode="decimal" step="any"
-                  value={deliveryPrice}
-                  onChange={(e) => setDeliveryPrice(e.target.value)}
-                  placeholder={String(suggestedDelivery || '')}
-                  className="flex-1 min-w-0 h-11 rounded-xl border border-gray-200 bg-white px-3 text-lg font-bold focus:outline-none focus:border-orange-400"
-                />
-                {suggestedDelivery > 0 && (
-                  <button type="button" onClick={() => setDeliveryPrice(String(suggestedDelivery))}
-                    className="shrink-0 h-11 px-3 rounded-xl bg-white border border-orange-200 text-orange-600 text-xs font-bold">
-                    ใช้ {suggestedDelivery} ฿
-                  </button>
-                )}
-              </div>
-              {deliveryResult && (
-                <p className={`mt-1.5 text-xs font-semibold ${deliveryResult.profit < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                  {deliveryResult.profit < 0 ? '⚠️ ขาดทุน ' : '✓ กำไร '}
-                  {deliveryResult.profit.toFixed(2)} ฿/ชิ้น · หัก GP {Math.round(gpRate * 100)}% เหลือ {deliveryResult.net.toFixed(2)} ฿ · ทุน {cost.toFixed(2)} ฿
-                </p>
-              )}
-              {!(Number(deliveryPrice) > 0) && (
-                <p className="mt-1.5 text-xs text-amber-600">
-                  ยังไม่ตั้งราคาเดลิเวอรี — จะขายที่ราคาหน้าร้าน {price || 0} ฿ ซึ่งหัก GP แล้วอาจขาดทุน
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+        <p className="mb-4 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-2xl px-3.5 py-2.5 leading-relaxed">
+          🏠 สินค้าชิ้นนี้ขายหน้าร้าน — หน้าเดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต
+          ถ้าอยากขายตัวนี้ทางแอป ให้สร้างเซ็ตที่แท็บ &ldquo;เซ็ต&rdquo; แล้วตั้งราคาเผื่อ GP
+        </p>
 
         {/* โปรโมชั่นหน้าร้าน */}
         <div className="mb-4 rounded-2xl border border-gray-200 p-3.5 flex flex-col gap-3">

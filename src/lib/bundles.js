@@ -4,11 +4,18 @@ export function isBundle(product) {
   return Boolean(product?.is_bundle && (product?.components?.length ?? 0) > 0)
 }
 
-/** สินค้าที่ขายได้ในช่องทางที่ระบุ */
+/**
+ * สินค้าที่ขายได้ในช่องทางที่ระบุ
+ *
+ * เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ตเท่านั้น — ขายไม้เดี่ยวที่ราคาหน้าร้านแล้วโดนหัก GP
+ * กับภาษีจะเหลือกำไรไม่พอ เซ็ตถูกตั้งราคาเผื่อ GP ไว้แล้วตั้งแต่ตอนสร้าง
+ */
 export function sellableIn(products, channel) {
   return products.filter((p) => {
     if (p.is_active === false) return false
-    // สินค้าที่ยังไม่เคยตั้งช่องทาง ถือว่าขายได้ทั้งคู่ ตรงกับพฤติกรรมเดิมก่อนมีฟีเจอร์นี้
+    // สินค้าเดี่ยวเป็นของหน้าร้านเสมอ ไม่ว่าจะเคยตั้ง channel ไว้อย่างไร
+    // ถ้าอ่าน channel ของสินค้าเดี่ยวต่อไป ตัวที่เคยตั้งเป็น 'delivery' จะหายจากทั้งสองหน้า
+    if (!isBundle(p)) return channel === 'store'
     const c = p.channel ?? 'both'
     return c === 'both' || c === channel
   })

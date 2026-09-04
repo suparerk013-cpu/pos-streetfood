@@ -239,7 +239,16 @@ function SalesPage() {
           )}
           <div className="flex-1 min-h-0 overflow-y-auto">
             {!productsLoading && (
-              <ProductGrid products={visibleProducts} cartQtyByProductId={cartQtyByProductId} onSelectProduct={handleSelectProduct} />
+              <ProductGrid
+                products={visibleProducts}
+                cartQtyByProductId={cartQtyByProductId}
+                onSelectProduct={handleSelectProduct}
+                emptyMessage={
+                  channel === 'delivery'
+                    ? 'เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต\nไปสร้างเซ็ตที่ คลังสินค้า › แท็บเซ็ต'
+                    : undefined
+                }
+              />
             )}
           </div>
 

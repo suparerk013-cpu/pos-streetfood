@@ -1,15 +1,11 @@
 import { ImageOff, Upload } from 'lucide-react'
 import { useState } from 'react'
-import { useAppData } from '../lib/appDataContext'
-import { CHANNELS, productCategoryLabel } from '../lib/constants'
+import { productCategoryLabel } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
 function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
-  const { enabledPlatforms: shopPlatforms } = useAppData()
   const [name, setName] = useState('')
-  const [channel, setChannel] = useState('both')
-  const [deliveryPrice, setDeliveryPrice] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
   const [stockQty, setStockQty] = useState('')
@@ -81,8 +77,9 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
         stockType,
         modifiers,
         imageBase64,
-        channel,
-        deliveryPrice: channel === 'store' ? null : (Number(deliveryPrice) || null),
+        // สินค้าเดี่ยวขายหน้าร้านเสมอ — เดลิเวอรีขายเป็นเซ็ตที่ตั้งราคาเผื่อ GP ไว้แล้ว
+        channel: 'store',
+        deliveryPrice: null,
       })
     } catch {
       setSaving(false)
@@ -239,42 +236,10 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
           </p>
         </div>
 
-        <div className="mb-4 bg-orange-50 rounded-2xl p-3.5 border border-orange-100 flex flex-col gap-3">
-          <div>
-            <p className="text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">ช่องทางขาย</p>
-            <div className="flex gap-2">
-              {Object.entries(CHANNELS).map(([key, label]) => (
-                <button key={key} type="button" onClick={() => setChannel(key)}
-                  className={`flex-1 min-h-[42px] rounded-xl border-2 font-bold text-sm transition-colors ${
-                    channel === key
-                      ? 'border-orange-500 bg-white text-orange-600'
-                      : 'border-transparent bg-white/60 text-gray-500'
-                  }`}>
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {channel !== 'store' && shopPlatforms.length > 0 && (
-            <div>
-              <label htmlFor="add-delivery-price" className="block text-xs font-bold text-orange-600 uppercase tracking-wider mb-1.5">
-                ราคาเดลิเวอรี (ใช้ราคาเดียวทุกแอป) — ไม่ใส่ก็ได้
-              </label>
-              <input
-                id="add-delivery-price"
-                type="number" inputMode="decimal" step="any"
-                value={deliveryPrice}
-                onChange={(e) => setDeliveryPrice(e.target.value)}
-                placeholder={price || '0'}
-                className="w-full h-11 rounded-xl border border-gray-200 bg-white px-3 text-lg font-bold focus:outline-none focus:border-orange-400"
-              />
-              <p className="mt-1.5 text-[11px] text-gray-500">
-                ไม่ใส่จะขายที่ราคาหน้าร้าน ซึ่งหักค่า GP แล้วอาจขาดทุน — ตั้งราคาแนะนำได้ทีหลังในหน้าแก้ไขสินค้า
-              </p>
-            </div>
-          )}
-        </div>
+        <p className="mb-4 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-2xl px-3.5 py-2.5 leading-relaxed">
+          🏠 สินค้าที่เพิ่มตรงนี้ขายหน้าร้าน — หน้าเดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต
+          สร้างเซ็ตได้ที่แท็บ &ldquo;เซ็ต&rdquo; แล้วเลือกสินค้าตัวนี้เป็นส่วนประกอบ
+        </p>
 
         <div className="mb-4">
           <div className="flex items-center justify-between mb-2">
