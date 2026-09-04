@@ -1,7 +1,7 @@
 import { calcCartTotal } from '../lib/cart'
 import CartItemRow from './CartItemRow'
 
-function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, checkoutDisabled = false }) {
+function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, checkoutDisabled = false }) {
   const total = calcCartTotal(cart)
 
   return (
@@ -15,17 +15,25 @@ function CartSheet({ cart, cartQtyByProductId, onIncrement, onDecrement, onRemov
         {cart.length === 0 ? (
           <p className="py-6 text-center text-gray-400">ยังไม่มีสินค้าในตะกร้า</p>
         ) : (
-          cart.map((item) => (
-            <CartItemRow
-              key={item.key}
-              item={item}
-              cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
-              onIncrement={onIncrement}
-              onDecrement={onDecrement}
-              onRemove={onRemove}
-              onSetQuantity={onSetQuantity}
-            />
-          ))
+          <>
+            {cart.map((item) => (
+              <CartItemRow
+                key={item.key}
+                item={item}
+                cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
+                onIncrement={onIncrement}
+                onDecrement={onDecrement}
+                onRemove={onRemove}
+                onSetQuantity={onSetQuantity}
+              />
+            ))}
+            {freeLines.map((line) => (
+              <div key={line.key} className="flex items-center justify-between py-2.5">
+                <span className="text-sm font-semibold text-green-700">🎁 แถมฟรี · {line.name}</span>
+                <span className="text-sm font-bold text-green-600">{line.quantity} {line.unit}</span>
+              </div>
+            ))}
+          </>
         )}
       </div>
 

@@ -1,39 +1,25 @@
 import { useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { calcCartTotal } from '../lib/cart'
-import {
-  DELIVERY_PLATFORMS as PLATFORM_KEYS,
-  METHOD_ICONS,
-  METHOD_SHORT,
-  PLATFORM_BUTTON_BG,
-  PLATFORM_ICONS,
-} from '../lib/constants'
+import { METHOD_ICONS, METHOD_SHORT, PLATFORM_ICONS } from '../lib/constants'
 import { createOrder, InsufficientStockError } from '../lib/orders'
+import { netAfterGp } from '../lib/pricing'
 import ModalBackdrop from './ModalBackdrop'
-
-const DELIVERY_PLATFORMS = PLATFORM_KEYS.map((key) => ({
-  key,
-  label: key,
-  bg: PLATFORM_BUTTON_BG[key],
-  emoji: PLATFORM_ICONS[key],
-}))
 
 const DIGIT_ROWS = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['ล้าง','0','⌫']]
 const QUICK_AMOUNTS  = [20, 50, 100]
 const QUICK_DISCOUNTS = [5, 10, 20]
 
-function calcDeliveryTotal(cart, platform) {
-  return cart.reduce((sum, item) => {
-    const price = item.delivery_prices?.[platform] ?? item.price
-    return sum + price * item.quantity
-  }, 0)
-}
-
-function CheckoutModal({ cart, onClose, onSuccess }) {
-  const { enabledPlatforms: shopPlatformKeys, currentShift } = useAppData()
+function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = null, onClose, onSuccess }) {
+  const { currentShift, productById, gpRateFor } = useAppData()
   const subtotal = calcCartTotal(cart)
-  const [method, setMethod]           = useState('cash')
-  const [numpadValue, setNumpadValue] = useState('0')
+  const isDelivery = channel === 'delivery'
+  const gpRate = isDelivery ? gpRateFor(platform) : 0
+  const [platformOrderNo, setPlatformOrderNo] = useState('')
+  const [method, setMethod]           = useState(channel === 'delivery' ? 'delivery' : 'cash')
+  const [numpadValue, setNumpadValue] = useState(
+    channel === 'delivery' ? String(calcCartTotal(cart)) : '0',
+  )
   const [payments, setPayments]       = useState([])
   const [changePopup, setChangePopup] = useState(null)
   const [saving, setSaving]           = useState(false)
@@ -48,19 +34,24 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
 
   const canAdd = discountMode
     ? entered <= subtotal
-    : (entered > 0 && remaining > 0 && (method === 'promptpay' ? entered <= remaining : true))
+    : (entered > 0 && remaining > 0 && (method === 'cash' ? true : entered <= remaining))
 
   const finalizeOrder = async (finalPayments, overrideTotal = total, overrideSubtotal = subtotal) => {
     if (saving) return
     setSaving(true); setSaveError(null)
     try {
       const result = await createOrder({
-        cart,
+        cart: [...cart, ...freeLines],
         payments: finalPayments,
         total: overrideTotal,
         discount,
         subtotal: overrideSubtotal,
         shiftId: currentShift?.id ?? null,
+        productById,
+        channel,
+        platform,
+        gpRate,
+        platformOrderNo,
       })
       setSaving(false); onSuccess(result)
     } catch (err) {
@@ -82,9 +73,12 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     if (!canAdd) return
     const applied = Math.min(entered, remaining)
     const change  = method === 'cash' ? Math.max(entered - applied, 0) : 0
-    const pay = method === 'cash'
-      ? { method: 'cash', amount: applied, cash_received: entered, change }
-      : { method: 'promptpay', amount: applied }
+    const pay =
+      method === 'cash'
+        ? { method: 'cash', amount: applied, cash_received: entered, change }
+        : method === 'delivery'
+          ? { method: 'delivery', platform, amount: applied }
+          : { method: 'promptpay', amount: applied }
     const updated      = [...payments, pay]
     const newRemaining = Math.max(total - updated.reduce((s,p) => s + p.amount, 0), 0)
     setPayments(updated); setNumpadValue('0')
@@ -125,7 +119,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
     setNumpadValue('0')
   }
 
-  const showNumpad = discountMode || method !== 'delivery'
+  const showNumpad = true
 
   return (
     <>
@@ -205,7 +199,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
             </div>
           ) : (
             <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1">
-              {['cash','promptpay','delivery'].map((m) => (
+              {(isDelivery ? ['delivery'] : ['cash','promptpay']).map((m) => (
                 <button key={m} type="button"
                   onClick={() => { setMethod(m); setNumpadValue('0') }}
                   className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 font-bold text-xs transition-all ${
@@ -217,6 +211,27 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
                   {METHOD_SHORT[m]}
                 </button>
               ))}
+            </div>
+          )}
+
+          {isDelivery && !discountMode && (
+            <div className="shrink-0 mx-3 mb-1 rounded-xl bg-orange-50 border border-orange-100 px-3 py-2 flex items-center gap-2">
+              <span className="text-base shrink-0">{PLATFORM_ICONS[platform] ?? '🛵'}</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-bold text-gray-700 leading-tight truncate">{platform ?? 'เดลิเวอรี'}</p>
+                <p className="text-[10px] text-gray-400 leading-tight">
+                  หัก GP {Math.round(gpRate * 100)}% · เงินเข้าประมาณ {netAfterGp(total, gpRate).toFixed(0)} ฿
+                </p>
+              </div>
+              <input
+                type="text"
+                inputMode="text"
+                value={platformOrderNo}
+                onChange={(e) => setPlatformOrderNo(e.target.value)}
+                placeholder="เลขออเดอร์"
+                aria-label="เลขออเดอร์จากแอป (ไม่บังคับ)"
+                className="w-24 shrink-0 h-8 rounded-lg border border-orange-200 bg-white px-2 text-xs text-right focus:outline-none focus:border-orange-400"
+              />
             </div>
           )}
 
@@ -246,9 +261,9 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               {saveError && (
                 <p className="shrink-0 rounded-lg bg-red-50 px-3 py-1 text-xs text-red-600">{saveError}</p>
               )}
-              {!discountMode && method === 'promptpay' && entered > remaining && (
+              {!discountMode && method !== 'cash' && entered > remaining && (
                 <p className="shrink-0 text-center text-xs font-semibold text-red-500">
-                  ยอดโอนต้องไม่เกิน {remaining.toLocaleString()} ฿
+                  ยอดต้องไม่เกิน {remaining.toLocaleString()} ฿
                 </p>
               )}
               {discountMode && entered > subtotal && (
@@ -304,47 +319,7 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
               </button>
             </div>
 
-          ) : (
-            /* ══ DELIVERY PLATFORMS ══ */
-            <div className="flex-1 min-h-0 flex flex-col px-3 pb-3 gap-2">
-              {saveError && (
-                <p className="shrink-0 rounded-lg bg-red-50 px-3 py-1.5 text-xs text-red-600 text-center">{saveError}</p>
-              )}
-              <p className="shrink-0 text-xs font-bold text-gray-400 uppercase tracking-wider text-center pt-1">
-                เลือกแพลตฟอร์ม
-              </p>
-              {shopPlatformKeys.length === 0 && (
-                <p className="text-center text-sm text-gray-400 py-6">
-                  ยังไม่ได้เปิดแอพเดลิเวอรี่ — ไปเปิดที่หน้าตั้งค่าก่อน
-                </p>
-              )}
-              <div className="flex-1 min-h-0 grid grid-cols-2 gap-2">
-                {DELIVERY_PLATFORMS.filter((p) => shopPlatformKeys.includes(p.key)).map((p) => {
-                  const dTotal = calcDeliveryTotal(cart, p.key)
-                  // ส่วนลดกรอกไว้กับราคาหน้าร้าน แต่ราคาเดลิเวอรีเป็นคนละฐาน
-                  // จึงจำกัดไม่ให้ลดเกินยอดของแพลตฟอร์มนั้นเอง
-                  const dDiscount = Math.min(discount, dTotal)
-                  const dNet   = dTotal - dDiscount
-                  return (
-                    <button key={p.key} type="button" disabled={saving}
-                      onClick={() => !saving && finalizeOrder([{ method: 'delivery', platform: p.key, amount: dNet }], dNet, dTotal)}
-                      className={`${p.bg} rounded-2xl flex flex-col items-center justify-center gap-1.5 text-white shadow-lg active:scale-95 transition-all disabled:opacity-50`}>
-                      <span className="text-4xl">{p.emoji}</span>
-                      <span className="font-bold text-base">{p.label}</span>
-                      {dDiscount > 0 ? (
-                        <span className="flex items-baseline gap-1.5">
-                          <span className="text-xs line-through opacity-60 tabular-nums">{dTotal.toLocaleString()}</span>
-                          <span className="font-black text-xl tabular-nums">{dNet.toLocaleString()} ฿</span>
-                        </span>
-                      ) : (
-                        <span className="font-black text-xl tabular-nums">{dTotal.toLocaleString()} ฿</span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
+          ) : null}
 
         </div>
       </div>

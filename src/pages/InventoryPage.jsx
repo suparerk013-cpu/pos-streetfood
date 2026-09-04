@@ -1,17 +1,31 @@
 import { ImageOff, Search, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import AddProductModal from '../components/AddProductModal'
+import BundleModal from '../components/BundleModal'
 import EditProductModal from '../components/EditProductModal'
 import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
 import { useAppData } from '../lib/appDataContext'
 import { LOW_STOCK_THRESHOLD, productCategoryLabel } from '../lib/constants'
-import { addProduct, deleteProduct, updateProduct } from '../lib/products'
+import { bundleCost, bundleStock, profitOf } from '../lib/pricing'
+import { addBundle, addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { seedInitialProducts } from '../lib/seedProducts'
 import { adjustStock, restockProduct } from '../lib/stock'
 
 function InventoryPage() {
-  const { products: allProducts, productsLoading: loading } = useAppData()
+  const {
+    products: allProducts,
+    productsLoading: loading,
+    productById,
+    ingredientById,
+    consumableCost,
+    packagingCost,
+    gpRateFor,
+    enabledPlatforms,
+  } = useAppData()
+  const [tab, setTab] = useState('products')
+  const [bundleTarget, setBundleTarget] = useState(null)
+  const [bundleModalOpen, setBundleModalOpen] = useState(false)
   const [stockModalTarget, setStockModalTarget] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -21,10 +35,12 @@ function InventoryPage() {
   const [seeding, setSeeding] = useState(false)
 
   // สินค้าที่ถูกซ่อน (is_active = false) ยังอยู่ในระบบเพื่อให้บิลเก่าอ้างถึงได้
-  const products = useMemo(
+  const visible = useMemo(
     () => (showArchived ? allProducts : allProducts.filter((p) => p.is_active !== false)),
     [allProducts, showArchived],
   )
+  const products = useMemo(() => visible.filter((p) => !p.is_bundle), [visible])
+  const bundles = useMemo(() => visible.filter((p) => p.is_bundle), [visible])
   const existingCategories = useMemo(
     () => [...new Set(allProducts.map((p) => p.category).filter(Boolean))],
     [allProducts],
@@ -33,6 +49,23 @@ function InventoryPage() {
     () => allProducts.filter((p) => p.is_active === false).length,
     [allProducts],
   )
+
+  const handleSaveBundle = async (data) => {
+    if (bundleTarget) {
+      await updateProduct(bundleTarget.id, data)
+    } else {
+      const nextSortOrder = allProducts.reduce((max, p) => Math.max(max, p.sort_order ?? 0), 0) + 1
+      await addBundle({ ...data, sortOrder: nextSortOrder })
+    }
+    setBundleModalOpen(false)
+    setBundleTarget(null)
+  }
+
+  const handleDeleteBundle = async () => {
+    await deleteProduct(bundleTarget.id)
+    setBundleModalOpen(false)
+    setBundleTarget(null)
+  }
 
   const handleSeed = async () => {
     setSeeding(true)
@@ -51,7 +84,7 @@ function InventoryPage() {
 
   const handleAddProduct = async (data) => {
     const nextSortOrder =
-      products.reduce((max, p) => Math.max(max, p.sort_order ?? 0), 0) + 1
+      allProducts.reduce((max, p) => Math.max(max, p.sort_order ?? 0), 0) + 1
     await addProduct({ ...data, sortOrder: nextSortOrder })
     setAddModalOpen(false)
   }
@@ -75,11 +108,27 @@ function InventoryPage() {
 
   return (
     <div className="h-full w-full flex flex-col bg-orange-50 overflow-hidden">
-      <header className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-sm shrink-0">
-        <h1 className="font-bold text-lg">คลังสินค้า</h1>
+      <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-3">
+          <h1 className="font-bold text-lg">คลังสินค้า</h1>
+        </div>
+        <div className="flex gap-1 px-4 mt-2">
+          {[
+            { key: 'products', label: `สินค้า ${products.length}` },
+            { key: 'bundles', label: `เซ็ต ${bundles.length}` },
+          ].map((t) => (
+            <button key={t.key} type="button" onClick={() => setTab(t.key)}
+              className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${
+                tab === t.key ? 'border-white text-white' : 'border-transparent text-white/60'
+              }`}>
+              {t.label}
+            </button>
+          ))}
+        </div>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
+      {tab === 'products' && (<>
         <button
           type="button"
           onClick={() => setAddModalOpen(true)}
@@ -209,7 +258,98 @@ function InventoryPage() {
             )
           })}
         </div>
+      </>)}
+
+      {tab === 'bundles' && (
+        <>
+          <button
+            type="button"
+            onClick={() => { setBundleTarget(null); setBundleModalOpen(true) }}
+            className="mb-4 w-full min-h-[56px] rounded-2xl border-2 border-dashed border-orange-300 text-orange-600 font-bold active:scale-95 transition-transform"
+          >
+            + สร้างเซ็ตใหม่
+          </button>
+
+          {bundles.length === 0 && (
+            <div className="flex flex-col items-center gap-3 mt-10 text-center px-4">
+              <span className="text-5xl">🎁</span>
+              <p className="text-gray-500 text-sm leading-relaxed">
+                ยังไม่มีเซ็ต<br />
+                เซ็ตคือสินค้าที่ประกอบจากของที่ขายอยู่แล้ว เช่น “ปลาหมึกย่าง 8 ไม้ 120 ฿”<br />
+                ขายแล้วระบบตัดสต็อกส่วนประกอบให้เอง
+              </p>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            {bundles.map((bundle) => {
+              const cost = bundleCost(bundle, { productById, ingredientById, consumableCost, packagingCost })
+              const stock = bundleStock(bundle, productById)
+              const isDelivery = (bundle.channel ?? 'delivery') !== 'store'
+              const gpRate = isDelivery ? gpRateFor(enabledPlatforms[0]) : 0
+              const shownPrice = (isDelivery ? bundle.delivery_price : null) ?? bundle.price ?? 0
+              const result = profitOf({ price: shownPrice, cost, gpRate })
+              const isArchived = bundle.is_active === false
+
+              return (
+                <button
+                  key={bundle.id}
+                  type="button"
+                  onClick={() => { setBundleTarget(bundle); setBundleModalOpen(true) }}
+                  className={`w-full text-left rounded-2xl border p-4 active:scale-[0.99] transition-transform ${
+                    isArchived ? 'bg-gray-50 border-gray-200 opacity-70' : 'bg-white border-orange-100'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-bold text-gray-800">
+                        {isDelivery ? '🛵 ' : '🏠 '}{bundle.name}
+                        {isArchived && (
+                          <span className="ml-2 text-[10px] font-bold bg-gray-200 text-gray-500 rounded-full px-2 py-0.5 align-middle">
+                            เลิกขาย
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5 truncate">
+                        {(bundle.components ?? [])
+                          .map((c) => `${productById.get(c.product_id)?.name ?? '?'} × ${c.qty}`)
+                          .join(' · ')}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-xl font-extrabold text-gray-800 tabular-nums">
+                        {shownPrice.toLocaleString()} ฿
+                      </p>
+                      <p className="text-[11px] text-gray-400">ทำได้ {stock} ชุด</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between text-xs">
+                    <span className="text-gray-400 tabular-nums">
+                      ทุน {cost.toFixed(2)} ฿
+                      {gpRate > 0 ? ` · หัก GP ${Math.round(gpRate * 100)}%` : ''}
+                    </span>
+                    <span className={`font-bold tabular-nums ${result.profit < 0 ? 'text-red-500' : 'text-green-600'}`}>
+                      {result.profit < 0 ? '⚠️ ขาดทุน ' : 'กำไร '}
+                      {result.profit.toFixed(2)} ฿ ({Math.round(result.margin * 100)}%)
+                    </span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </>
+      )}
       </div>
+
+      {bundleModalOpen && (
+        <BundleModal
+          bundle={bundleTarget}
+          onClose={() => { setBundleModalOpen(false); setBundleTarget(null) }}
+          onSubmit={handleSaveBundle}
+          onDelete={bundleTarget ? handleDeleteBundle : undefined}
+        />
+      )}
 
       {stockModalTarget && (
         <StockModal

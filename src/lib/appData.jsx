@@ -1,7 +1,12 @@
 import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { AppDataContext } from './appDataContext'
-import { DELIVERY_PLATFORMS } from './constants'
+import {
+  DEFAULT_CONSUMABLE_COST,
+  DEFAULT_GP_RATE,
+  DEFAULT_PACKAGING_COST,
+  DELIVERY_PLATFORMS,
+} from './constants'
 import { db } from './firebase'
 
 /**
@@ -83,6 +88,12 @@ export function AppDataProvider({ children }) {
     storeLoading: store === null,
     shopName: store?.shop_name ?? '',
     enabledPlatforms: store?.enabled_delivery_platforms ?? DELIVERY_PLATFORMS,
+    // ตัวเลขต้นทุน/GP ที่ใช้คำนวณกำไรทั้งระบบ ตั้งได้ในหน้าตั้งค่า
+    gpRates: store?.platform_gp ?? {},
+    gpRateFor: (platform) => store?.platform_gp?.[platform] ?? DEFAULT_GP_RATE,
+    packagingCost: store?.packaging_cost ?? DEFAULT_PACKAGING_COST,
+    consumableCost: store?.consumable_cost ?? DEFAULT_CONSUMABLE_COST,
+    ingredientById: new Map(ingredients.map((i) => [i.id, i])),
     online,
   }), [products, productsLoading, ingredients, ingredientsLoading, shifts, shiftsLoading, store, online])
 

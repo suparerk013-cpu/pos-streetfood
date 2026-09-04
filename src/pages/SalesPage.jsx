@@ -1,5 +1,5 @@
 import { PackageX } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
 import CheckoutModal from '../components/CheckoutModal'
@@ -8,7 +8,10 @@ import ModifierModal from '../components/ModifierModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { useAppData } from '../lib/appDataContext'
-import { productCategoryLabel } from '../lib/constants'
+import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
+import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
+import { bundleStock } from '../lib/pricing'
+import { buildFreeLines } from '../lib/promo'
 import {
   addItemToCart,
   calcCartTotal,
@@ -20,7 +23,16 @@ import {
 import { reportDamage } from '../lib/stock'
 
 function SalesPage() {
-  const { activeProducts, productsLoading, shopName, online } = useAppData()
+  const {
+    activeProducts,
+    productsLoading,
+    productById,
+    shopName,
+    online,
+    enabledPlatforms,
+  } = useAppData()
+  const [channel, setChannel] = useState('store')
+  const [platform, setPlatform] = useState(enabledPlatforms[0] ?? null)
   const [cart, setCart] = useState([])
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [successResult, setSuccessResult] = useState(null)
@@ -28,25 +40,58 @@ function SalesPage() {
   const [damageOpen, setDamageOpen] = useState(false)
   const [modifierTarget, setModifierTarget] = useState(null)
 
+  // สลับช่องทางแล้วราคาเปลี่ยนทั้งกระดาน ตะกร้าเดิมจึงใช้ต่อไม่ได้
+  useEffect(() => {
+    setCart([])
+    setActiveCategory('all')
+  }, [channel])
+
+  useEffect(() => {
+    if (!platform || !enabledPlatforms.includes(platform)) setPlatform(enabledPlatforms[0] ?? null)
+  }, [enabledPlatforms, platform])
+
+  /** สินค้าที่ขายได้ในช่องทางนี้ พร้อมราคาและสต็อกของช่องทางนั้น */
+  const channelProducts = useMemo(
+    () =>
+      sellableIn(activeProducts, channel).map((p) => ({
+        ...p,
+        price: priceFor(p, channel),
+        stock_qty: isBundle(p) ? bundleStock(p, productById) : (p.stock_qty ?? 0),
+      })),
+    [activeProducts, channel, productById],
+  )
+
+  /** ของแถมคิดจากตะกร้า ไม่ได้เก็บในตะกร้า จะได้ไม่ทบซ้อนกันเอง */
+  const freeLines = useMemo(
+    () => buildFreeLines(cart, productById, { channel }),
+    [cart, productById, channel],
+  )
+  const cartWithFree = useMemo(() => [...cart, ...freeLines], [cart, freeLines])
+
+  const unpricedDelivery = useMemo(
+    () => (channel === 'delivery' ? channelProducts.filter(missingDeliveryPrice) : []),
+    [channel, channelProducts],
+  )
+
   const cartQtyByProductId = useMemo(() => {
     const map = new Map()
-    cart.forEach((item) => {
+    cartWithFree.forEach((item) => {
       map.set(item.productId, (map.get(item.productId) ?? 0) + item.quantity)
     })
     return map
-  }, [cart])
+  }, [cartWithFree])
 
   const categories = useMemo(
-    () => [...new Set(activeProducts.map((p) => p.category).filter(Boolean))],
-    [activeProducts],
+    () => [...new Set(channelProducts.map((p) => p.category).filter(Boolean))],
+    [channelProducts],
   )
 
   const visibleProducts = useMemo(
     () =>
       activeCategory === 'all'
-        ? activeProducts
-        : activeProducts.filter((p) => p.category === activeCategory),
-    [activeProducts, activeCategory],
+        ? channelProducts
+        : channelProducts.filter((p) => p.category === activeCategory),
+    [channelProducts, activeCategory],
   )
 
   /**
@@ -99,6 +144,49 @@ function SalesPage() {
         </div>
       </header>
 
+      {/* สลับช่องทางขาย — ราคาและรายการสินค้าเปลี่ยนตามช่องทาง */}
+      <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1 bg-orange-50">
+        {[
+          { key: 'store', label: '🏠 หน้าร้าน' },
+          { key: 'delivery', label: '🛵 เดลิเวอรี' },
+        ].map((c) => (
+          <button key={c.key} type="button" onClick={() => setChannel(c.key)}
+            className={`flex-1 min-h-[44px] rounded-2xl border-2 font-bold text-sm transition-all ${
+              channel === c.key
+                ? 'border-orange-500 bg-white text-orange-600 shadow-sm'
+                : 'border-transparent bg-white/60 text-gray-500'
+            }`}>
+            {c.label}
+          </button>
+        ))}
+      </div>
+
+      {channel === 'delivery' && (
+        <div className="shrink-0 px-3 pb-2 bg-orange-50">
+          <div className="flex gap-1.5 overflow-x-auto">
+            {enabledPlatforms.map((p) => (
+              <button key={p} type="button" onClick={() => setPlatform(p)}
+                className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                  platform === p
+                    ? `${PLATFORM_BUTTON_BG[p] ?? 'bg-gray-500'} text-white shadow`
+                    : 'bg-white border border-gray-200 text-gray-500'
+                }`}>
+                <span>{PLATFORM_ICONS[p] ?? '🛵'}</span>
+                {p}
+              </button>
+            ))}
+          </div>
+          {enabledPlatforms.length === 0 && (
+            <p className="text-xs text-gray-400 py-2">ยังไม่ได้เปิดแอปเดลิเวอรี — ไปเปิดที่หน้าตั้งค่า</p>
+          )}
+          {unpricedDelivery.length > 0 && (
+            <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
+              ⚠️ ยังไม่ได้ตั้งราคาเดลิเวอรี: {unpricedDelivery.map((p) => p.name).join(', ')} — ขายที่ราคาหน้าร้านซึ่งหัก GP แล้วอาจขาดทุน
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Body: products left + cart right on desktop */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left: product grid */}
@@ -138,6 +226,7 @@ function SalesPage() {
           <div className="md:hidden">
             <CartSheet
               cart={cart}
+              freeLines={freeLines}
               cartQtyByProductId={cartQtyByProductId}
               onIncrement={handleIncrement}
               onDecrement={handleDecrement}
@@ -164,17 +253,29 @@ function SalesPage() {
             {cart.length === 0 ? (
               <p className="py-10 text-center text-gray-400 text-sm">ยังไม่มีสินค้าในตะกร้า</p>
             ) : (
-              cart.map((item) => (
-                <CartItemRow
-                  key={item.key}
-                  item={item}
-                  cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
-                  onIncrement={handleIncrement}
-                  onDecrement={handleDecrement}
-                  onRemove={handleRemove}
-                  onSetQuantity={handleSetQuantity}
-                />
-              ))
+              <>
+                {cart.map((item) => (
+                  <CartItemRow
+                    key={item.key}
+                    item={item}
+                    cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
+                    onIncrement={handleIncrement}
+                    onDecrement={handleDecrement}
+                    onRemove={handleRemove}
+                    onSetQuantity={handleSetQuantity}
+                  />
+                ))}
+                {freeLines.map((line) => (
+                  <div key={line.key} className="flex items-center justify-between py-2.5">
+                    <span className="text-sm font-semibold text-green-700">
+                      🎁 แถมฟรี · {line.name}
+                    </span>
+                    <span className="text-sm font-bold text-green-600">
+                      {line.quantity} {line.unit}
+                    </span>
+                  </div>
+                ))}
+              </>
             )}
           </div>
 
@@ -211,6 +312,9 @@ function SalesPage() {
       {checkoutOpen && (
         <CheckoutModal
           cart={cart}
+          freeLines={freeLines}
+          channel={channel}
+          platform={channel === 'delivery' ? platform : null}
           onClose={() => setCheckoutOpen(false)}
           onSuccess={handleCheckoutSuccess}
         />
@@ -222,7 +326,7 @@ function SalesPage() {
 
       {damageOpen && (
         <DamageModal
-          products={activeProducts}
+          products={activeProducts.filter((p) => !p.is_bundle)}
           onClose={() => setDamageOpen(false)}
           onSubmit={async (payload) => {
             await reportDamage(payload)

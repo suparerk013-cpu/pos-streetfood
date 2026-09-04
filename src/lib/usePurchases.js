@@ -68,3 +68,17 @@ export function useDeliveryImportsInRange(from, to) {
 
   return imports
 }
+
+/** รอบจ่ายเงินทั้งหมด — ไม่กี่รายการต่อเดือน ดึงมาทั้งหมดได้ */
+export function usePayouts() {
+  const [payouts, setPayouts] = useState([])
+
+  useEffect(() => {
+    const q = query(collection(db, 'payouts'), orderBy('to', 'desc'), limit(200))
+    return onSnapshot(q, (snap) => {
+      setPayouts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    })
+  }, [])
+
+  return payouts
+}

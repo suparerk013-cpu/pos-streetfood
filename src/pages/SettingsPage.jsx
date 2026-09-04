@@ -4,7 +4,12 @@ import { useEffect, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { auth } from '../lib/firebase'
 import { logout } from '../lib/auth'
-import { DELIVERY_PLATFORMS as PLATFORMS } from '../lib/constants'
+import {
+  DEFAULT_CONSUMABLE_COST,
+  DEFAULT_GP_RATE,
+  DEFAULT_PACKAGING_COST,
+  DELIVERY_PLATFORMS as PLATFORMS,
+} from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import { db } from '../lib/firebase'
 
@@ -38,6 +43,9 @@ function SettingsPage() {
   const [saved, setSaved]           = useState(false)
   const [saveError, setSaveError]   = useState(null)
   const [deliveryPlatforms, setDeliveryPlatforms] = useState(PLATFORMS)
+  const [gpRates, setGpRates] = useState({})
+  const [packagingCost, setPackagingCost] = useState(String(DEFAULT_PACKAGING_COST))
+  const [consumableCost, setConsumableCost] = useState(String(DEFAULT_CONSUMABLE_COST))
 
   // เติมค่าจาก context ครั้งเดียวตอนโหลดเสร็จ หลังจากนั้นปล่อยให้ฟอร์มเป็นของผู้ใช้
   // ไม่ใช้ getDoc เพราะถ้าเน็ตหลุดจะค้างที่ "กำลังโหลด..." ตลอดไป
@@ -49,6 +57,14 @@ function SettingsPage() {
     setBillNote(store.bill_note ?? '')
     setLogoBase64(store.logo_base64 ?? null)
     setDeliveryPlatforms(store.enabled_delivery_platforms ?? PLATFORMS)
+    const savedGp = store.platform_gp ?? {}
+    setGpRates(
+      Object.fromEntries(
+        PLATFORMS.map((p) => [p, String(Math.round((savedGp[p] ?? DEFAULT_GP_RATE) * 100))]),
+      ),
+    )
+    setPackagingCost(String(store.packaging_cost ?? DEFAULT_PACKAGING_COST))
+    setConsumableCost(String(store.consumable_cost ?? DEFAULT_CONSUMABLE_COST))
     setHydrated(true)
   }, [store, storeLoading, hydrated])
 
@@ -87,6 +103,11 @@ function SettingsPage() {
     }
     if (newLogo) payload.logo_base64 = newLogo
     payload.enabled_delivery_platforms = deliveryPlatforms
+    payload.platform_gp = Object.fromEntries(
+      PLATFORMS.map((p) => [p, (Number(gpRates[p]) || 0) / 100]),
+    )
+    payload.packaging_cost = Number(packagingCost) || 0
+    payload.consumable_cost = Number(consumableCost) || 0
     try {
       await setDoc(doc(db, 'settings', 'store'), payload, { merge: true })
       setSaved(true)
@@ -187,6 +208,78 @@ function SettingsPage() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+
+            {/* ต้นทุนและค่า GP */}
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-col gap-4">
+              <div>
+                <p className="text-xs font-bold text-orange-500 uppercase tracking-wider">ต้นทุนและค่า GP</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  ใช้คำนวณกำไรจริงและราคาเดลิเวอรีที่แนะนำ ใส่คร่าว ๆ ไปก่อนได้
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="packaging-cost" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    ค่าบรรจุภัณฑ์ / ออเดอร์
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="packaging-cost"
+                      type="number" inputMode="decimal" step="any"
+                      value={packagingCost}
+                      onChange={(e) => setPackagingCost(e.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-800 font-bold text-sm focus:outline-none focus:border-orange-400 transition-all"
+                    />
+                    <span className="text-sm text-gray-400 shrink-0">฿</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">กล่อง ถุง น้ำจิ้มแยก</p>
+                </div>
+                <div>
+                  <label htmlFor="consumable-cost" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+                    ของประกอบ / ชิ้น
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      id="consumable-cost"
+                      type="number" inputMode="decimal" step="any"
+                      value={consumableCost}
+                      onChange={(e) => setConsumableCost(e.target.value)}
+                      className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-800 font-bold text-sm focus:outline-none focus:border-orange-400 transition-all"
+                    />
+                    <span className="text-sm text-gray-400 shrink-0">฿</span>
+                  </div>
+                  <p className="text-[11px] text-gray-400 mt-1">ไม้เสียบ น้ำจิ้ม ถ่าน</p>
+                </div>
+              </div>
+
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">
+                  ค่า GP + ภาษี ที่แต่ละแอปหัก (%)
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {PLATFORMS.filter((p) => deliveryPlatforms.includes(p)).map((p) => (
+                    <label key={p} className="block">
+                      <span className="text-xs font-medium text-gray-600">{p}</span>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <input
+                          type="number" inputMode="decimal" step="any"
+                          value={gpRates[p] ?? ''}
+                          onChange={(e) => setGpRates((prev) => ({ ...prev, [p]: e.target.value }))}
+                          placeholder="30"
+                          className="w-full h-10 rounded-xl border border-gray-200 bg-white px-3 text-sm font-bold focus:outline-none focus:border-orange-400"
+                        />
+                        <span className="text-sm text-gray-400 shrink-0">%</span>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2 leading-relaxed">
+                  ไม่ต้องรู้ตัวเลขแน่นอน — พอบันทึกรอบจ่ายเงินจริงในหน้ารายงาน
+                  ระบบจะคำนวณ % ที่ถูกหักจริงย้อนกลับให้เอง
+                </p>
               </div>
             </div>
 

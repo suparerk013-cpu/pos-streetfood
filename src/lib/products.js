@@ -45,3 +45,22 @@ export async function deleteProduct(productId) {
     archived_at: new Date(),
   })
 }
+
+/** สร้างเซ็ตใหม่ — เซ็ตไม่มี stock_qty ของตัวเอง สต็อกคำนวณจากส่วนประกอบตอนแสดงผล */
+export async function addBundle({ name, channel, components, price, delivery_price, sortOrder }) {
+  await addDoc(collection(db, 'products'), {
+    name,
+    category: 'เซ็ต',
+    price,
+    delivery_price: delivery_price ?? null,
+    is_active: true,
+    is_bundle: true,
+    channel,
+    components,
+    stock_type: 'batch',
+    unit: 'ชุด',
+    modifiers: {},
+    sort_order: sortOrder,
+    image_base64: null,
+  })
+}

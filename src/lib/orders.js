@@ -1,14 +1,11 @@
 import { collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
-import { METHOD_LABELS, paymentLabel } from './constants'
+import { DEFAULT_GP_RATE, METHOD_LABELS, paymentLabel } from './constants'
 import { db } from './firebase'
+import { buildOrderItems, stockUnitsFromItems } from './orderLines'
+import { netAfterGp } from './pricing'
 
 export { METHOD_LABELS, paymentLabel }
-
-export function summarizePayments(payments) {
-  const line = payments.map((p) => `${paymentLabel(p)} ${p.amount.toLocaleString()}`).join(' + ')
-  const changeTotal = payments.reduce((sum, p) => sum + (p.change || 0), 0)
-  return { line, changeTotal }
-}
+export { buildOrderItems, stockUnitsFromItems, summarizePayments } from './orderLines'
 
 export class InsufficientStockError extends Error {
   constructor(shortages) {
@@ -21,33 +18,37 @@ export class InsufficientStockError extends Error {
   }
 }
 
-function buildOrderItems(cart) {
-  return cart.map((item) => ({
-    product_id: item.productId,
-    name: item.name,
-    qty: item.quantity,
-    unit_price: item.price,
-    line_total: item.price * item.quantity,
-    modifiers: item.modifiers ?? {},
-  }))
-}
-
-function aggregateQtyByProduct(cart) {
-  const map = new Map()
-  cart.forEach((item) => {
-    map.set(item.productId, (map.get(item.productId) || 0) + item.quantity)
-  })
-  return map
-}
-
-export async function createOrder({ cart, payments, total, discount = 0, subtotal, shiftId = null }) {
+/**
+ * ออกบิล ตัดสต็อก และออกเลขคิว ในทรานแซกชันเดียว
+ *
+ * lines = รายการที่ขาย + ของแถม (ราคา 0 แต่ตัดสต็อกเต็ม)
+ * เซ็ตจะถูกกระจายเป็นส่วนประกอบก่อนตัดสต็อก ตัวเซ็ตเองไม่มี stock_qty ของตัวเอง
+ */
+export async function createOrder({
+  cart,
+  payments,
+  total,
+  discount = 0,
+  subtotal,
+  shiftId = null,
+  productById,
+  channel = 'store',
+  platform = null,
+  gpRate = null,
+  platformOrderNo = null,
+}) {
   const counterRef = doc(db, 'counters', 'queue_counter')
   const orderRef = doc(collection(db, 'orders'))
 
-  const qtyByProduct = aggregateQtyByProduct(cart)
+  const items = buildOrderItems(cart, productById)
+  const qtyByProduct = stockUnitsFromItems(items)
   const productIds = [...qtyByProduct.keys()]
   const productRefs = productIds.map((id) => doc(db, 'products', id))
-  const nameByProduct = new Map(cart.map((item) => [item.productId, item.name]))
+  const nameByProduct = new Map(
+    productIds.map((id) => [id, productById?.get(id)?.name ?? id]),
+  )
+
+  const effectiveGp = channel === 'delivery' ? (gpRate ?? DEFAULT_GP_RATE) : 0
 
   const queueNo = await runTransaction(db, async (transaction) => {
     // Firestore requires all reads before any writes in a transaction.
@@ -65,9 +66,7 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
         shortages.push({ name: nameByProduct.get(id) ?? id, available: currentQty, requested })
       }
     })
-    if (shortages.length > 0) {
-      throw new InsufficientStockError(shortages)
-    }
+    if (shortages.length > 0) throw new InsufficientStockError(shortages)
 
     const next = nextQueueNo(counterSnap)
 
@@ -75,7 +74,12 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
     transaction.set(orderRef, {
       queue_no: next.value,
       shift_id: shiftId,
-      items: buildOrderItems(cart),
+      channel,
+      platform,
+      gp_rate: effectiveGp,
+      net_amount: netAfterGp(total, effectiveGp),
+      platform_order_no: platformOrderNo || null,
+      items,
       subtotal: subtotal ?? total,
       discount: discount > 0 ? discount : null,
       total_amount: total,
@@ -87,8 +91,9 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
 
     productIds.forEach((id, index) => {
       const soldQty = qtyByProduct.get(id)
-      const nextQty = currentQtyByProduct.get(id) - soldQty
-      transaction.update(productRefs[index], { stock_qty: nextQty })
+      transaction.update(productRefs[index], {
+        stock_qty: currentQtyByProduct.get(id) - soldQty,
+      })
 
       const logRef = doc(collection(db, 'stock_logs'))
       transaction.set(logRef, {
@@ -104,12 +109,11 @@ export async function createOrder({ cart, payments, total, discount = 0, subtota
     return next.value
   })
 
-  return { orderId: orderRef.id, queueNo, payments, total }
+  return { orderId: orderRef.id, queueNo, payments, total, channel, platform }
 }
 
 /**
  * เลขคิวเริ่มนับ 1 ใหม่ทุกวัน — เดิมนับสะสมไปเรื่อย ๆ จนกลายเป็น "คิว 8,432"
- * เก็บวันที่ไว้ในตัวนับเพื่อรู้ว่าต้องรีเซ็ตเมื่อไร
  */
 function nextQueueNo(counterSnap) {
   const today = todayKey()
@@ -125,7 +129,10 @@ function todayKey() {
 
 export async function voidOrder(orderId, items) {
   const orderRef = doc(db, 'orders', orderId)
-  const productRefs = items.map((item) => doc(db, 'products', item.product_id))
+  // เซ็ตต้องคืนสต็อกให้ส่วนประกอบ ไม่ใช่ให้ตัวเซ็ตซึ่งไม่มีสต็อกของตัวเอง
+  const qtyByProduct = stockUnitsFromItems(items ?? [])
+  const productIds = [...qtyByProduct.keys()]
+  const productRefs = productIds.map((id) => doc(db, 'products', id))
 
   await runTransaction(db, async (transaction) => {
     const orderSnap = await transaction.get(orderRef)
@@ -134,16 +141,16 @@ export async function voidOrder(orderId, items) {
 
     transaction.update(orderRef, { is_voided: true, voided_at: serverTimestamp() })
 
-    items.forEach((item, index) => {
+    productIds.forEach((id, index) => {
       const snap = productSnaps[index]
       if (!snap.exists()) return
-      const currentQty = snap.data().stock_qty ?? 0
-      transaction.update(productRefs[index], { stock_qty: currentQty + item.qty })
+      const qty = qtyByProduct.get(id)
+      transaction.update(productRefs[index], { stock_qty: (snap.data().stock_qty ?? 0) + qty })
       const logRef = doc(collection(db, 'stock_logs'))
       transaction.set(logRef, {
-        product_id: item.product_id,
+        product_id: id,
         type: 'void',
-        qty_change: item.qty,
+        qty_change: qty,
         note: `ยกเลิกบิล #${orderSnap.data().queue_no}`,
         order_id: orderId,
         created_at: serverTimestamp(),
