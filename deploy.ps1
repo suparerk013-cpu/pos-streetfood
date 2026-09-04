@@ -1,4 +1,4 @@
-# ===== POS Street Food — Deploy Script =====
+﻿# ===== POS Street Food — Deploy Script =====
 # รันใน PowerShell ที่โฟลเดอร์โปรเจกต์:  .\deploy.ps1
 #
 # ทำตามลำดับที่ปลอดภัย: ดึงโค้ด -> ทดสอบ -> build -> deploy เว็บ
@@ -9,6 +9,9 @@
 
 $ErrorActionPreference = "Stop"
 $BRANCH = "claude/pos-streetfood-analysis-lcawl7"
+
+# ให้คอนโซลแสดงภาษาไทยได้ถูกต้อง
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
 
 function Step($n, $text) {
     Write-Host ""
