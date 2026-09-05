@@ -1,5 +1,5 @@
 import { doc, setDoc } from 'firebase/firestore'
-import { ImageOff, LogOut, Upload } from 'lucide-react'
+import { AlertTriangle, ImageOff, LogOut, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { auth } from '../lib/firebase'
@@ -12,6 +12,7 @@ import {
 } from '../lib/constants'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import { db } from '../lib/firebase'
+import { RESET_COLLECTIONS, resetAllData } from '../lib/resetData'
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
@@ -28,8 +29,114 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
   )
 }
 
+/** ต้องพิมพ์ให้ตรงคำนี้ถึงจะกดล้างได้ กันกดพลาดตอนยืนขายของ */
+const RESET_PHRASE = 'ล้างข้อมูล'
+
+function DangerZone({ online }) {
+  const [confirmText, setConfirmText] = useState('')
+  const [running, setRunning] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  const handleReset = async () => {
+    if (confirmText.trim() !== RESET_PHRASE || running) return
+    setRunning(true)
+    setError(null)
+    setResult(null)
+    try {
+      const removed = await resetAllData(setProgress)
+      setResult(removed)
+      setConfirmText('')
+    } catch (err) {
+      setError(err?.code === 'permission-denied'
+        ? 'ไม่มีสิทธิ์ลบข้อมูล ลองออกจากระบบแล้วเข้าใหม่'
+        : 'ล้างข้อมูลไม่สำเร็จ อาจเป็นเพราะเน็ตหลุดกลางคัน กดใหม่อีกครั้งได้ ของที่ลบไปแล้วไม่กลับมา')
+    } finally {
+      setRunning(false)
+      setProgress(null)
+    }
+  }
+
+  const totalRemoved = result?.reduce((sum, r) => sum + r.count, 0) ?? 0
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-red-200 flex flex-col gap-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle size={16} className="text-red-500 shrink-0" />
+        <p className="text-xs font-bold text-red-500 uppercase tracking-wider">ล้างข้อมูลทดสอบ</p>
+      </div>
+
+      <p className="text-sm text-gray-600 leading-relaxed">
+        ลบข้อมูลที่เกิดจากการลองใช้ทั้งหมด เพื่อเริ่มขายจริงจากศูนย์
+        <span className="block mt-1 font-semibold text-red-600">ลบแล้วกู้คืนไม่ได้</span>
+      </p>
+
+      <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2.5">
+        <p className="text-[11px] font-bold text-red-600 uppercase tracking-wider mb-1">จะถูกลบ</p>
+        <p className="text-xs text-red-700 leading-relaxed">
+          {RESET_COLLECTIONS.map((c) => c.label).join(' · ')}
+        </p>
+      </div>
+
+      <div className="rounded-xl bg-green-50 border border-green-100 px-3 py-2.5">
+        <p className="text-[11px] font-bold text-green-700 uppercase tracking-wider mb-1">ยังอยู่เหมือนเดิม</p>
+        <p className="text-xs text-green-800 leading-relaxed">
+          ชื่อร้าน · โลโก้ · เบอร์โทร · ที่อยู่ · ข้อความท้ายบิล · ค่า GP · ค่าแพ็ค · ค่าของประกอบ · บัญชีผู้ใช้
+        </p>
+      </div>
+
+      <div>
+        <label htmlFor="reset-confirm" className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5">
+          พิมพ์คำว่า &ldquo;{RESET_PHRASE}&rdquo; เพื่อยืนยัน
+        </label>
+        <input
+          id="reset-confirm"
+          type="text"
+          value={confirmText}
+          onChange={(e) => setConfirmText(e.target.value)}
+          placeholder={RESET_PHRASE}
+          disabled={running}
+          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-gray-800 font-medium text-sm focus:outline-none focus:border-red-400 focus:ring-2 focus:ring-red-100 transition-all"
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={handleReset}
+        disabled={confirmText.trim() !== RESET_PHRASE || running || !online}
+        className="w-full min-h-[52px] rounded-2xl bg-red-600 disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold text-sm active:scale-95 transition-all"
+      >
+        {!online
+          ? 'ออฟไลน์ — ล้างข้อมูลไม่ได้'
+          : running
+            ? `กำลังลบ ${progress?.label ?? ''} (${progress?.done ?? 0}/${progress?.total ?? RESET_COLLECTIONS.length})`
+            : 'ล้างข้อมูลทั้งหมด'}
+      </button>
+
+      {error && (
+        <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-600">{error}</p>
+      )}
+
+      {result && (
+        <div className="rounded-xl bg-green-50 border border-green-200 px-3 py-2.5">
+          <p className="text-sm font-bold text-green-700 mb-1">
+            ✓ ล้างเรียบร้อย ลบไปทั้งหมด {totalRemoved.toLocaleString()} รายการ
+          </p>
+          <p className="text-xs text-green-800 leading-relaxed">
+            {result.filter((r) => r.count > 0).map((r) => `${r.label} ${r.count}`).join(' · ') || 'ไม่มีข้อมูลค้างอยู่เลย'}
+          </p>
+          <p className="text-xs text-green-800 mt-1.5">
+            ขั้นต่อไป: ไปหน้าคลังสินค้า เพิ่มสินค้าจริงของร้าน แล้วนำเข้าสต็อก
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function SettingsPage() {
-  const { store, storeLoading } = useAppData()
+  const { store, storeLoading, online } = useAppData()
   const [shopName, setShopName]     = useState('')
   const [phone, setPhone]           = useState('')
   const [address, setAddress]       = useState('')
@@ -336,6 +443,8 @@ function SettingsPage() {
                 ออกจากระบบ
               </button>
             </div>
+
+            <DangerZone online={online} />
           </>
         )}
       </div>
