@@ -49,6 +49,12 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
       `🏦 ควรมีในลิ้นชัก  ${fmt(cashExpected)} ฿`,
       `🔢 นับได้จริง       ${fmt(summary.cash_counted)} ฿`,
       `${diffLabel}         ${diff >= 0 ? '+' : ''}${fmt(diff)} ฿`,
+      summary.stock_count?.waste_qty > 0
+        ? `🗑️ ของเหลือทิ้ง    ${summary.stock_count.waste_qty} ชิ้น (${fmt(summary.stock_count.waste_cost)} ฿)`
+        : '',
+      summary.stock_count?.missing_qty > 0
+        ? `⚠️ ของหายไม่มีบิล  ${summary.stock_count.missing_qty} ชิ้น (${fmt(summary.stock_count.missing_cost)} ฿)`
+        : '',
       summary.closing_note ? `📝 หมายเหตุ: ${summary.closing_note}` : '',
     ].filter(Boolean).join('\n')
 
@@ -100,6 +106,12 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
         <span class="label">${diffLabel}</span>
         <span class="value ${diff === 0 ? 'green' : diff > 0 ? 'blue' : 'red'}">${diff >= 0 ? '+' : ''}${fmt(diff)} ฿</span>
       </div>
+      ${summary.stock_count?.waste_qty > 0
+        ? `<div class="row"><span class="label">🗑️ ของเหลือทิ้ง</span><span class="value">${summary.stock_count.waste_qty} ชิ้น · ${fmt(summary.stock_count.waste_cost)} ฿</span></div>`
+        : ''}
+      ${summary.stock_count?.missing_qty > 0
+        ? `<div class="row"><span class="label">⚠️ ของหายไม่มีบิล</span><span class="value">${summary.stock_count.missing_qty} ชิ้น · ${fmt(summary.stock_count.missing_cost)} ฿</span></div>`
+        : ''}
       ${summary.closing_note ? `<div class="note">📝 ${summary.closing_note}</div>` : ''}
       </body></html>
     `)
@@ -143,6 +155,31 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
             <Row label="นับได้จริง"        value={`${fmt(summary.cash_counted)} ฿`} bold />
             <Row label={diffLabel}         value={`${diff >= 0 ? '+' : ''}${fmt(diff)} ฿`} valueColor={diffColor} bold />
           </div>
+
+          {/* ของเหลือ */}
+          {summary.stock_count && (
+            <div className="bg-gray-50 rounded-2xl p-3">
+              <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-2">ตรวจของเหลือ</p>
+              {(summary.stock_count.rows ?? []).map((r) => (
+                <Row
+                  key={r.product_id}
+                  label={r.name}
+                  value={`${r.counted}/${r.expected} ${r.unit}`}
+                  valueColor={r.diff === 0 ? undefined : r.diff > 0 ? 'text-blue-600' : 'text-red-500'}
+                />
+              ))}
+              {summary.stock_count.waste_qty > 0 && (
+                <Row label="🗑️ ของเหลือทิ้ง"
+                  value={`${summary.stock_count.waste_qty} ชิ้น · ${fmt(summary.stock_count.waste_cost)} ฿`}
+                  valueColor="text-amber-600" bold />
+              )}
+              {summary.stock_count.missing_qty > 0 && (
+                <Row label="⚠️ หายไปไม่มีบิล"
+                  value={`${summary.stock_count.missing_qty} ชิ้น · ${fmt(summary.stock_count.missing_cost)} ฿`}
+                  valueColor="text-red-500" bold />
+              )}
+            </div>
+          )}
 
           {/* หมายเหตุ */}
           {summary.closing_note && (

@@ -21,7 +21,8 @@ import { formatTime, toDateString } from '../lib/dates'
 import { deleteDeliveryImport, importDeliveryTotal } from '../lib/delivery'
 import { db } from '../lib/firebase'
 import { calcCashExpected, shiftCashDiff } from '../lib/shifts'
-import { resetDailyStock } from '../lib/stock'
+import { applyClosingCount, resetDailyStock } from '../lib/stock'
+import { buildCountRows, countRowsForSave, summarizeCount } from '../lib/stockCount'
 import { useOrdersForShift } from '../lib/useOrders'
 
 function formatDate(ts) {
@@ -97,6 +98,7 @@ function ShiftPage() {
     shiftsLoading,
     enabledPlatforms,
     activeProducts,
+    ingredientById,
     online,
   } = useAppData()
 
@@ -116,6 +118,8 @@ function ShiftPage() {
   const [deliveryImports, setDeliveryImports] = useState([])
   const [deliveryOpen, setDeliveryOpen] = useState(false)
   const [showBills, setShowBills] = useState(false)
+  const [stockCounts, setStockCounts] = useState({})
+  const [stockCountOpen, setStockCountOpen] = useState(false)
   const [countingOpen, setCountingOpen] = useState(false)
   const [countDraft, setCountDraft] = useState('0')
 
@@ -173,6 +177,13 @@ function ShiftPage() {
 
   const cashDiff = cashCounted !== '' ? Number(cashCounted) - summary.cashExpected : null
 
+  /** แถวนับของเหลือ — สินค้าจริงเท่านั้น เซ็ตไม่มีสต็อกของตัวเอง */
+  const countRows = useMemo(
+    () => buildCountRows(activeProducts, stockCounts, { ingredientById }),
+    [activeProducts, stockCounts, ingredientById],
+  )
+  const countSummary = useMemo(() => summarizeCount(countRows), [countRows])
+
   const handleOpenShift = async () => {
     if (currentShift || !online) return
     setOpening(true)
@@ -197,6 +208,16 @@ function ShiftPage() {
     try {
       const counted = Number(cashCounted)
       const diff    = counted - summary.cashExpected
+      // ปรับสต็อกก่อนเขียนสรุปกะ ถ้าปรับไม่สำเร็จจะได้ไม่มีสรุปที่อ้างตัวเลขที่ไม่เคยถูกบันทึก
+      const countedRows = countRows.filter((r) => r.filled)
+      for (const row of countedRows) {
+        await applyClosingCount({
+          productId: row.productId,
+          countedQty: row.counted,
+          discardLeftover: row.isDaily,
+        })
+      }
+
       const closedSummary = {
         order_count: summary.orderCount, total: summary.total,
         store_total: summary.storeTotal,
@@ -206,6 +227,16 @@ function ShiftPage() {
         cash_diff: diff, opening_float: currentShift.opening_float ?? 0,
         cash_counted: counted,
         closing_note: closingNote.trim() || null,
+        stock_count: countedRows.length > 0
+          ? {
+              waste_qty: countSummary.wasteQty,
+              waste_cost: Number(countSummary.wasteCost.toFixed(2)),
+              missing_qty: countSummary.missingQty,
+              missing_cost: Number(countSummary.missingCost.toFixed(2)),
+              extra_qty: countSummary.extraQty,
+              rows: countRowsForSave(countRows),
+            }
+          : null,
       }
       await updateDoc(doc(db, 'shifts', currentShift.id), {
         status: 'closed', closed_at: serverTimestamp(),
@@ -217,7 +248,7 @@ function ShiftPage() {
         openedAt: currentShift.opened_at,
         closedAt: { toDate: () => new Date() },
       })
-      setCashCounted(''); setClosingNote('')
+      setCashCounted(''); setClosingNote(''); setStockCounts({}); setStockCountOpen(false)
     } finally { setClosing(false) }
   }
 
@@ -295,6 +326,9 @@ function ShiftPage() {
               />
               <span className="text-sm text-gray-600 leading-snug">
                 ล้างสต็อกสินค้าที่ตั้งเป็น <span className="font-semibold">สต็อกรายวัน</span> ให้เริ่มนับใหม่
+                <span className="block text-[11px] text-gray-400 mt-0.5">
+                  ถ้าปิดกะที่แล้วนับของเหลือไว้ ระบบล้างให้ตอนปิดกะแล้ว ติ๊กไว้ก็ไม่เสียหาย
+                </span>
               </span>
             </label>
 
@@ -383,6 +417,100 @@ function ShiftPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ── นับของเหลือ (ข้ามได้) ── */}
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+            <button type="button" onClick={() => setStockCountOpen((v) => !v)}
+              className="w-full px-4 py-3 flex items-center gap-2 text-left">
+              <span className="text-base shrink-0">📦</span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-700 leading-tight">นับของเหลือ</p>
+                <p className="text-[11px] text-gray-400 leading-tight">
+                  {countSummary.filledCount > 0
+                    ? `นับแล้ว ${countSummary.filledCount}/${countSummary.totalCount} รายการ`
+                    : 'ข้ามได้ ถ้าไม่มีเวลา'}
+                </p>
+              </div>
+              {countSummary.hasIssue && (
+                <span className="shrink-0 rounded-full bg-red-100 text-red-600 text-[10px] font-bold px-2 py-0.5">
+                  หายไป {countSummary.missingQty}
+                </span>
+              )}
+              <ChevronDown size={16}
+                className={`shrink-0 text-gray-400 transition-transform ${stockCountOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {stockCountOpen && (
+              <div className="px-4 pb-4 flex flex-col gap-2 border-t border-gray-100 pt-3">
+                {countRows.length === 0 && (
+                  <p className="text-sm text-gray-400 text-center py-2">ยังไม่มีสินค้าในระบบ</p>
+                )}
+
+                {countRows.map((row) => (
+                  <div key={row.productId} className="flex items-center gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-gray-700 truncate leading-tight">{row.name}</p>
+                      <p className="text-[11px] text-gray-400 leading-tight">
+                        ควรเหลือ {row.expected} {row.unit}
+                        {row.isDaily && <span className="text-amber-600"> · เหลือถือว่าทิ้ง</span>}
+                      </p>
+                    </div>
+                    <input
+                      type="number" inputMode="numeric" min="0"
+                      value={stockCounts[row.productId] ?? ''}
+                      onChange={(e) =>
+                        setStockCounts((prev) => ({ ...prev, [row.productId]: e.target.value }))
+                      }
+                      placeholder="นับได้"
+                      aria-label={`นับได้กี่${row.unit} ${row.name}`}
+                      className="w-20 h-11 shrink-0 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center font-bold tabular-nums focus:outline-none focus:border-orange-400"
+                    />
+                    <span className={`w-14 shrink-0 text-right text-xs font-bold tabular-nums ${
+                      !row.filled ? 'text-transparent'
+                        : row.diff === 0 ? 'text-green-600'
+                        : row.diff > 0 ? 'text-blue-600' : 'text-red-500'
+                    }`}>
+                      {row.filled && (row.diff === 0 ? '✓ ตรง' : `${row.diff > 0 ? '+' : ''}${row.diff}`)}
+                    </span>
+                  </div>
+                ))}
+
+                {countSummary.filledCount > 0 && (
+                  <div className="mt-1 flex flex-col gap-1.5">
+                    {countSummary.missingQty > 0 && (
+                      <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2">
+                        <p className="text-sm font-bold text-red-600">
+                          ⚠️ หายไป {countSummary.missingQty} ชิ้น โดยไม่มีบิล
+                          <span className="font-semibold"> (ต้นทุน {countSummary.missingCost.toFixed(2)} ฿)</span>
+                        </p>
+                        <p className="text-[11px] text-red-500 mt-0.5">
+                          อาจลืมกดคิดเงิน แถมแล้วไม่ได้บันทึก หรือของหาย — เขียนสาเหตุไว้ในหมายเหตุด้านล่าง
+                        </p>
+                      </div>
+                    )}
+                    {countSummary.wasteQty > 0 && (
+                      <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
+                        <p className="text-sm font-bold text-amber-700">
+                          🗑️ ของเหลือทิ้งคืนนี้ {countSummary.wasteQty} ชิ้น = ต้นทุน {countSummary.wasteCost.toFixed(2)} ฿
+                        </p>
+                        <p className="text-[11px] text-amber-600 mt-0.5">
+                          บันทึกเข้ารายงานให้แล้ว กำไรที่เห็นจะได้ตรงกับความจริง
+                        </p>
+                      </div>
+                    )}
+                    {!countSummary.hasIssue && countSummary.wasteQty === 0 && (
+                      <p className="text-sm font-bold text-green-600 text-center py-1">✅ ของครบตามระบบ</p>
+                    )}
+                  </div>
+                )}
+
+                <p className="text-[11px] text-gray-400 leading-relaxed mt-1">
+                  กรอกเฉพาะตัวที่อยากนับก็ได้ ตัวที่เว้นว่างไว้ระบบจะไม่แตะสต็อก
+                  ยอดที่นับจะถูกบันทึกตอนกดยืนยันปิดกะ
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ── นับเงินปิดกะ ── */}
