@@ -155,53 +155,54 @@ function SalesPage() {
         </div>
       </header>
 
-      {/* สลับช่องทางขาย — ราคาและรายการสินค้าเปลี่ยนตามช่องทาง */}
-      <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1 bg-orange-50">
-        {[
-          { key: 'store', label: '🏠 หน้าร้าน' },
-          { key: 'delivery', label: '🛵 เดลิเวอรี' },
-        ].map((c) => (
-          <button key={c.key} type="button" onClick={() => setChannel(c.key)}
-            className={`flex-1 min-h-[44px] rounded-2xl border-2 font-bold text-sm transition-all ${
-              channel === c.key
-                ? 'border-orange-500 bg-white text-orange-600 shadow-sm'
-                : 'border-transparent bg-white/60 text-gray-500'
-            }`}>
-            {c.label}
-          </button>
-        ))}
-      </div>
-
-      {channel === 'delivery' && (
-        <div className="shrink-0 px-3 pb-2 bg-orange-50">
-          <div className="flex gap-1.5 overflow-x-auto">
-            {enabledPlatforms.map((p) => (
-              <button key={p} type="button" onClick={() => setPlatform(p)}
-                className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
-                  platform === p
-                    ? `${PLATFORM_BUTTON_BG[p] ?? 'bg-gray-500'} text-white shadow`
-                    : 'bg-white border border-gray-200 text-gray-500'
-                }`}>
-                <span>{PLATFORM_ICONS[p] ?? '🛵'}</span>
-                {p}
-              </button>
-            ))}
-          </div>
-          {enabledPlatforms.length === 0 && (
-            <p className="text-xs text-gray-400 py-2">ยังไม่ได้เปิดแอปเดลิเวอรี — ไปเปิดที่หน้าตั้งค่า</p>
-          )}
-          {unpricedDelivery.length > 0 && (
-            <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
-              ⚠️ ยังไม่ได้ตั้งราคาเดลิเวอรี: {unpricedDelivery.map((p) => p.name).join(', ')} — ขายที่ราคาหน้าร้านซึ่งหัก GP แล้วอาจขาดทุน
-            </p>
-          )}
-        </div>
-      )}
-
-      {/* Body: products left + cart right on desktop */}
+      {/* ตัวเลือกช่องทาง/หมวดหมู่อยู่ในคอลัมน์ซ้ายทั้งหมด แถบตะกร้าฝั่งขวาจะได้เต็มความสูง
+          ตั้งแต่ใต้หัวเรื่องจนถึงขอบล่าง ไม่มีแถบสีส้มโผล่คั่นข้างบน */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
         {/* Left: product grid */}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
+        {/* สลับช่องทางขาย — ราคาและรายการสินค้าเปลี่ยนตามช่องทาง */}
+        <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1 bg-orange-50">
+          {[
+            { key: 'store', label: '🏠 หน้าร้าน' },
+            { key: 'delivery', label: '🛵 เดลิเวอรี' },
+          ].map((c) => (
+            <button key={c.key} type="button" onClick={() => setChannel(c.key)}
+              className={`flex-1 min-h-[44px] rounded-2xl border-2 font-bold text-sm transition-all ${
+                channel === c.key
+                  ? 'border-orange-500 bg-white text-orange-600 shadow-sm'
+                  : 'border-transparent bg-white/60 text-gray-500'
+              }`}>
+              {c.label}
+            </button>
+          ))}
+        </div>
+
+        {channel === 'delivery' && (
+          <div className="shrink-0 px-3 pb-2 bg-orange-50">
+            <div className="flex gap-1.5 overflow-x-auto">
+              {enabledPlatforms.map((p) => (
+                <button key={p} type="button" onClick={() => setPlatform(p)}
+                  className={`shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-all ${
+                    platform === p
+                      ? `${PLATFORM_BUTTON_BG[p] ?? 'bg-gray-500'} text-white shadow`
+                      : 'bg-white border border-gray-200 text-gray-500'
+                  }`}>
+                  <span>{PLATFORM_ICONS[p] ?? '🛵'}</span>
+                  {p}
+                </button>
+              ))}
+            </div>
+            {enabledPlatforms.length === 0 && (
+              <p className="text-xs text-gray-400 py-2">ยังไม่ได้เปิดแอปเดลิเวอรี — ไปเปิดที่หน้าตั้งค่า</p>
+            )}
+            {unpricedDelivery.length > 0 && (
+              <p className="mt-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-1.5">
+                ⚠️ ยังไม่ได้ตั้งราคาเดลิเวอรี: {unpricedDelivery.map((p) => p.name).join(', ')} — ขายที่ราคาหน้าร้านซึ่งหัก GP แล้วอาจขาดทุน
+              </p>
+            )}
+          </div>
+        )}
+
           {categories.length > 1 && (
             <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto bg-orange-50">
               <button
