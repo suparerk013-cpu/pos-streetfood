@@ -18,6 +18,7 @@ service cloud.firestore {
     match /ingredients/{doc}       { allow read, write: if signedIn(); }
     match /purchases/{doc}         { allow read, write: if signedIn(); }
     match /delivery_imports/{doc}  { allow read, write: if signedIn(); }
+    match /payouts/{doc}           { allow read, write: if signedIn(); }
     match /settings/{doc}          { allow read, write: if signedIn(); }
     match /counters/{doc}          { allow read, write: if signedIn(); }
 

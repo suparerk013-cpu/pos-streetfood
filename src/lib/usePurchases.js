@@ -1,4 +1,5 @@
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { logSnapshotError } from './snapshotError'
 import { useEffect, useState } from 'react'
 import { db } from './firebase'
 
@@ -21,7 +22,7 @@ export function usePurchasesInRange(from, to) {
     return onSnapshot(q, (snap) => {
       setPurchases(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setLoading(false)
-    })
+    }, logSnapshotError('การซื้อวัตถุดิบ'))
   }, [from, to])
 
   return { purchases, loading }
@@ -43,7 +44,7 @@ export function useExpensesInRange(from, to) {
     return onSnapshot(q, (snap) => {
       setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setLoading(false)
-    })
+    }, logSnapshotError('ค่าใช้จ่าย'))
   }, [from, to])
 
   return { expenses, loading }
@@ -57,7 +58,7 @@ export function usePayouts() {
     const q = query(collection(db, 'payouts'), orderBy('to', 'desc'), limit(200))
     return onSnapshot(q, (snap) => {
       setPayouts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
+    }, logSnapshotError('รอบจ่ายเงินจากแอป'))
   }, [])
 
   return payouts

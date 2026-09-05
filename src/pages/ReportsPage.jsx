@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight, Download } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { logSnapshotError } from '../lib/snapshotError'
 import { BarChart, DeltaBadge, ShareBar, Sparkline } from '../components/Charts'
 import PayoutModal from '../components/PayoutModal'
 import { useAppData } from '../lib/appDataContext'
@@ -68,7 +69,11 @@ function useDamageLogs(from, to) {
       orderBy('created_at', 'desc'),
       limit(500),
     )
-    return onSnapshot(q, (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+    return onSnapshot(
+      q,
+      (snap) => setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+      logSnapshotError('ประวัติสต็อก'),
+    )
   }, [from, to])
   return logs
 }

@@ -1,4 +1,5 @@
 import { collection, limit, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { logSnapshotError } from './snapshotError'
 import { useEffect, useState } from 'react'
 import { ORDER_PAGE_SIZE } from './constants'
 import { rangeToTimestamps } from './dates'
@@ -28,7 +29,7 @@ export function useOrdersInRange(from, to, { includeVoided = false } = {}) {
       const rows = snap.docs.map((d) => ({ id: d.id, ...d.data() }))
       setOrders(includeVoided ? rows : rows.filter((o) => !o.is_voided))
       setLoading(false)
-    })
+    }, logSnapshotError('บิลขาย'))
   }, [from, to, includeVoided])
 
   return { orders, loading }
@@ -55,7 +56,7 @@ export function useOrdersForShift(shiftId) {
     return onSnapshot(q, (snap) => {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
       setLoading(false)
-    })
+    }, logSnapshotError('บิลขายในกะ'))
   }, [shiftId])
 
   return { orders, loading }

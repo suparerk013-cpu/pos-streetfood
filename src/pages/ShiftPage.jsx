@@ -9,6 +9,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore'
+import { logSnapshotError } from '../lib/snapshotError'
 import { ChevronDown, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import ModalBackdrop from '../components/ModalBackdrop'
@@ -133,7 +134,7 @@ function ShiftPage() {
     )
     return onSnapshot(q, (snap) => {
       setDeliveryImports(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
+    }, logSnapshotError('ยอดเดลิเวอรีที่บันทึกไว้'))
   }, [currentShift?.id])
 
   const summary = useMemo(() => {

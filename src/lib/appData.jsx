@@ -8,6 +8,7 @@ import {
   DELIVERY_PLATFORMS,
 } from './constants'
 import { db } from './firebase'
+import { logSnapshotError } from './snapshotError'
 
 /**
  * ข้อมูลที่ทุกหน้าใช้ร่วมกัน (สินค้า, วัตถุดิบ, กะ, ตั้งค่าร้าน, สถานะเน็ต)
@@ -24,6 +25,7 @@ export function AppDataProvider({ children }) {
   const [shiftsLoading, setShiftsLoading] = useState(true)
   const [store, setStore] = useState(null)
   const [online, setOnline] = useState(() => navigator.onLine)
+  const [dataError, setDataError] = useState(null)
 
   useEffect(() => {
     return onSnapshot(collection(db, 'products'), (snap) => {
@@ -33,7 +35,8 @@ export function AppDataProvider({ children }) {
           .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
       )
       setProductsLoading(false)
-    })
+      setDataError(null)
+    }, logSnapshotError('สินค้า', setDataError))
   }, [])
 
   useEffect(() => {
@@ -44,7 +47,7 @@ export function AppDataProvider({ children }) {
           .sort((a, b) => String(a.name).localeCompare(String(b.name), 'th')),
       )
       setIngredientsLoading(false)
-    })
+    }, logSnapshotError('วัตถุดิบ', setDataError))
   }, [])
 
   useEffect(() => {
@@ -52,13 +55,13 @@ export function AppDataProvider({ children }) {
     return onSnapshot(q, (snap) => {
       setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setShiftsLoading(false)
-    })
+    }, logSnapshotError('กะ', setDataError))
   }, [])
 
   useEffect(() => {
     return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
       setStore(snap.exists() ? snap.data() : {})
-    })
+    }, logSnapshotError('ตั้งค่าร้าน', setDataError))
   }, [])
 
   useEffect(() => {
@@ -95,7 +98,8 @@ export function AppDataProvider({ children }) {
     consumableCost: store?.consumable_cost ?? DEFAULT_CONSUMABLE_COST,
     ingredientById: new Map(ingredients.map((i) => [i.id, i])),
     online,
-  }), [products, productsLoading, ingredients, ingredientsLoading, shifts, shiftsLoading, store, online])
+    dataError,
+  }), [products, productsLoading, ingredients, ingredientsLoading, shifts, shiftsLoading, store, online, dataError])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
 }

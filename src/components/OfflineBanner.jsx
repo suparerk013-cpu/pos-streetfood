@@ -1,4 +1,4 @@
-import { WifiOff } from 'lucide-react'
+import { AlertTriangle, WifiOff } from 'lucide-react'
 import { useAppData } from '../lib/appDataContext'
 
 /**
@@ -9,7 +9,18 @@ import { useAppData } from '../lib/appDataContext'
  * แล้วเด้ง error ตอนลูกค้ายืนรออยู่หน้าเตา
  */
 function OfflineBanner() {
-  const { online } = useAppData()
+  const { online, dataError } = useAppData()
+
+  // ปัญหาสิทธิ์อ่านข้อมูลสำคัญกว่าเรื่องเน็ต เพราะแอปจะดูเหมือนว่างเปล่าทั้งที่ข้อมูลอยู่ครบ
+  if (dataError) {
+    return (
+      <div className="shrink-0 flex items-center gap-2 bg-red-600 px-3 py-2 text-white">
+        <AlertTriangle size={15} className="shrink-0" />
+        <p className="text-xs font-semibold">{dataError}</p>
+      </div>
+    )
+  }
+
   if (online) return null
 
   return (

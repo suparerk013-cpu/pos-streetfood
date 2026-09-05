@@ -1,4 +1,5 @@
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore'
+import { logSnapshotError } from '../lib/snapshotError'
 import { useEffect, useState } from 'react'
 import { db } from '../lib/firebase'
 
@@ -29,7 +30,7 @@ function StockLogModal({ product, onClose }) {
     return onSnapshot(q, (snap) => {
       setLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setLoading(false)
-    })
+    }, logSnapshotError('ประวัติสต็อกของสินค้านี้'))
   }, [product.id])
 
   return (

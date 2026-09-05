@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import BottomNav from './components/BottomNav'
+import ErrorBoundary from './components/ErrorBoundary'
 import OfflineBanner from './components/OfflineBanner'
 import OpenShiftModal from './components/OpenShiftModal'
 import Sidebar from './components/Sidebar'
@@ -63,9 +64,12 @@ function Shell() {
       <div className="flex-1 min-w-0 h-full flex flex-col">
         <OfflineBanner />
         <div className="flex-1 min-h-0 overflow-hidden">
-          <Suspense fallback={<PageFallback />}>
-            <PageComponent />
-          </Suspense>
+          {/* key=page ทำให้กลับมาใช้งานได้เองเมื่อกดเมนูไปหน้าอื่น ไม่ต้องปิดแอปทิ้ง */}
+          <ErrorBoundary key={page}>
+            <Suspense fallback={<PageFallback />}>
+              <PageComponent />
+            </Suspense>
+          </ErrorBoundary>
         </div>
         <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
       </div>
