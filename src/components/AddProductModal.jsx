@@ -11,7 +11,6 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
   const [stockQty, setStockQty] = useState('')
   const [unit, setUnit] = useState('')
   const [stockType, setStockType] = useState('batch')
-  const [modifierGroups, setModifierGroups] = useState([])
   const [imagePreview, setImagePreview] = useState(null)
   const [imageBase64, setImageBase64] = useState(null)
   const [processingImage, setProcessingImage] = useState(false)
@@ -43,29 +42,10 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
     }
   }
 
-  const addGroup = () =>
-    setModifierGroups((prev) => [...prev, { key: '', optionsText: '' }])
-  const updateGroup = (index, field, value) =>
-    setModifierGroups((prev) =>
-      prev.map((group, i) => (i === index ? { ...group, [field]: value } : group)),
-    )
-  const removeGroup = (index) =>
-    setModifierGroups((prev) => prev.filter((_, i) => i !== index))
-
   const handleSubmit = async () => {
     if (!isValid || saving || processingImage) return
     setSaving(true)
     setError(null)
-
-    const modifiers = {}
-    modifierGroups.forEach((group) => {
-      const key = group.key.trim()
-      const options = group.optionsText
-        .split(',')
-        .map((option) => option.trim())
-        .filter(Boolean)
-      if (key && options.length > 0) modifiers[key] = options
-    })
 
     try {
       await onSubmit({
@@ -75,7 +55,6 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
         stockQty: Math.max(0, Number(stockQty) || 0),
         unit: unit.trim() || 'ชิ้น',
         stockType,
-        modifiers,
         imageBase64,
         // สินค้าเดี่ยวขายหน้าร้านเสมอ — เดลิเวอรีขายเป็นเซ็ตที่ตั้งราคาเผื่อ GP ไว้แล้ว
         channel: 'store',
@@ -240,50 +219,6 @@ function AddProductModal({ onClose, onSubmit, existingCategories = [] }) {
           🏠 สินค้าที่เพิ่มตรงนี้ขายหน้าร้าน — หน้าเดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต
           สร้างเซ็ตได้ที่แท็บ &ldquo;เซ็ต&rdquo; แล้วเลือกสินค้าตัวนี้เป็นส่วนประกอบ
         </p>
-
-        <div className="mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-gray-600">
-              ตัวเลือกสินค้า (modifiers) — ไม่ใส่ก็ได้
-            </span>
-            <button
-              type="button"
-              onClick={addGroup}
-              className="text-sm text-orange-600 font-medium"
-            >
-              + เพิ่มกลุ่ม
-            </button>
-          </div>
-
-          {modifierGroups.map((group, index) => (
-            <div key={index} className="mb-2 rounded-xl border border-gray-100 p-3">
-              <div className="flex items-center gap-2 mb-2">
-                <input
-                  type="text"
-                  value={group.key}
-                  onChange={(event) => updateGroup(index, 'key', event.target.value)}
-                  placeholder="ชื่อกลุ่ม เช่น spice_level"
-                  className="flex-1 min-h-[44px] rounded-lg border border-gray-200 px-3 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={() => removeGroup(index)}
-                  className="w-9 h-9 shrink-0 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center"
-                  aria-label="ลบกลุ่ม"
-                >
-                  ×
-                </button>
-              </div>
-              <input
-                type="text"
-                value={group.optionsText}
-                onChange={(event) => updateGroup(index, 'optionsText', event.target.value)}
-                placeholder="ตัวเลือก คั่นด้วยจุลภาค เช่น เผ็ดมาก, ปานกลาง, น้อย"
-                className="w-full min-h-[44px] rounded-lg border border-gray-200 px-3 text-sm"
-              />
-            </div>
-          ))}
-        </div>
 
         {error && (
           <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>

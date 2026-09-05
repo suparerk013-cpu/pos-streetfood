@@ -2,33 +2,21 @@ import { useState } from 'react'
 import { calcItemTotal, formatModifiers } from '../lib/cart'
 import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity, onEditModifiers }) {
+function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity }) {
   const modifiersText = formatModifiers(item.modifiers)
   const atLimit = cartQtyForProduct >= (maxQty ?? item.stockQty ?? Infinity)
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
   return (
     <div className="py-3 flex items-center gap-3">
-      {/* แตะชื่อสินค้าเพื่อเลือกความเผ็ด/น้ำจิ้ม — ย้ายมาไว้ตรงนี้แทนหน้าต่างที่เคยเด้งตอนกดสินค้า */}
-      <button
-        type="button"
-        onClick={() => onEditModifiers?.(item)}
-        disabled={!onEditModifiers}
-        className="flex-1 min-w-0 text-left disabled:cursor-default"
-      >
+      <div className="flex-1 min-w-0">
         <p className="font-medium text-gray-800 truncate">{item.name}</p>
-        {onEditModifiers && (
-          <p className={`text-sm truncate ${modifiersText ? 'text-gray-400' : 'text-orange-400'}`}>
-            {modifiersText || 'แตะเพื่อเลือกความเผ็ด / น้ำจิ้ม'}
-          </p>
-        )}
-        {!onEditModifiers && modifiersText && (
-          <p className="text-sm text-gray-400 truncate">{modifiersText}</p>
-        )}
+        {/* บิลเก่าที่เคยบันทึกตัวเลือกไว้ยังแสดงได้ ถึงจะเลิกให้เลือกตอนขายแล้ว */}
+        {modifiersText && <p className="text-sm text-gray-400 truncate">{modifiersText}</p>}
         <p className="text-orange-600 font-semibold">
           {calcItemTotal(item).toLocaleString()} ฿
         </p>
-      </button>
+      </div>
 
       <div className="flex items-center gap-2 shrink-0">
         <button

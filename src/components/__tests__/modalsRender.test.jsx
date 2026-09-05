@@ -11,7 +11,6 @@ import AddProductModal from '../AddProductModal'
 import EditProductModal from '../EditProductModal'
 import BundleModal from '../BundleModal'
 import CartItemRow from '../CartItemRow'
-import ModifierModal from '../ModifierModal'
 
 const squid = {
   id: 'p1', name: 'ปลาหมึกย่าง', price: 10, unit: 'ไม้', stock_qty: 20,
@@ -46,9 +45,24 @@ describe('เรนเดอร์หน้าต่างในคลังส�
     expect(html).toContain('เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต')
   })
 
-  it('หน้าต่างเพิ่มสินค้าเรนเดอร์ได้', () => {
+  it('หน้าต่างเพิ่มสินค้าเรนเดอร์ได้ และไม่มีช่องตั้งตัวเลือกสินค้าแล้ว', () => {
     const html = render(<AddProductModal onClose={() => {}} onSubmit={() => {}} existingCategories={['squid']} />)
     expect(html).not.toContain('ช่องทางขาย')
+    expect(html).not.toContain('ตัวเลือกสินค้า')
+  })
+
+  it('รายการในตะกร้าไม่ชวนให้เลือกความเผ็ด/น้ำจิ้มอีกแล้ว', () => {
+    const line = {
+      key: 'p1', productId: 'p1', name: 'ปลาหมึกย่าง', price: 10, unit: 'ไม้',
+      stockQty: 20, modifiers: {}, quantity: 2,
+    }
+    const html = render(
+      <CartItemRow item={line} cartQtyForProduct={2} onIncrement={() => {}}
+        onDecrement={() => {}} onRemove={() => {}} onSetQuantity={() => {}} />,
+    )
+    expect(html).toContain('ปลาหมึกย่าง')
+    expect(html).not.toContain('เผ็ด')
+    expect(html).not.toContain('น้ำจิ้ม')
   })
 
   it('หน้าต่างเซ็ตเรนเดอร์ได้ทั้งตอนสร้างใหม่และตอนแก้ไข', () => {
@@ -61,39 +75,3 @@ describe('เรนเดอร์หน้าต่างในคลังส�
   })
 })
 
-describe('ตะกร้าและตัวเลือกสินค้า', () => {
-  const squidWithMods = {
-    ...squid,
-    modifiers: { spice_level: ['เผ็ดมาก', 'ปานกลาง', 'ไม่เผ็ด'], sauce: ['ซีฟู้ด', 'หวาน'] },
-  }
-  const line = {
-    key: 'p1', productId: 'p1', name: 'ปลาหมึกย่าง', price: 10, unit: 'ไม้',
-    stockQty: 20, modifiers: {}, quantity: 2,
-  }
-
-  it('รายการในตะกร้าที่มีตัวเลือก ชวนให้แตะเลือกความเผ็ด/น้ำจิ้ม', () => {
-    const html = render(
-      <CartItemRow item={line} cartQtyForProduct={2} onIncrement={() => {}} onDecrement={() => {}}
-        onRemove={() => {}} onSetQuantity={() => {}} onEditModifiers={() => {}} />,
-    )
-    expect(html).toContain('แตะเพื่อเลือกความเผ็ด / น้ำจิ้ม')
-  })
-
-  it('รายการที่ไม่มีตัวเลือก ไม่ชวนให้แตะ', () => {
-    const html = render(
-      <CartItemRow item={line} cartQtyForProduct={2} onIncrement={() => {}} onDecrement={() => {}}
-        onRemove={() => {}} onSetQuantity={() => {}} onEditModifiers={null} />,
-    )
-    expect(html).not.toContain('แตะเพื่อเลือก')
-  })
-
-  it('เปิดหน้าต่างตัวเลือกจากตะกร้า ต้องขึ้นค่าที่เคยเลือกไว้ ไม่ใช่ตัวแรกเสมอ', () => {
-    const html = render(
-      <ModifierModal product={squidWithMods} initialSelected={{ spice_level: 'ไม่เผ็ด' }}
-        onClose={() => {}} onConfirm={() => {}} />,
-    )
-    // ตัวที่ถูกเลือกจะมีกรอบส้ม ตัวอื่นเป็นกรอบเทา
-    const chosen = html.slice(html.indexOf('ไม่เผ็ด') - 260, html.indexOf('ไม่เผ็ด'))
-    expect(chosen).toContain('border-orange-600')
-  })
-})

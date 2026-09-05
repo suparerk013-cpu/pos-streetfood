@@ -4,7 +4,6 @@ import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
 import CheckoutModal from '../components/CheckoutModal'
 import DamageModal from '../components/DamageModal'
-import ModifierModal from '../components/ModifierModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { useAppData } from '../lib/appDataContext'
@@ -15,9 +14,7 @@ import { buildFreeLines, maxPaidQty } from '../lib/promo'
 import {
   addItemToCart,
   calcCartTotal,
-  getModifierCategories,
   removeItem,
-  setItemModifiers,
   setItemQuantity,
   updateItemQuantity,
 } from '../lib/cart'
@@ -39,7 +36,6 @@ function SalesPage() {
   const [successResult, setSuccessResult] = useState(null)
   const [activeCategory, setActiveCategory] = useState('all')
   const [damageOpen, setDamageOpen] = useState(false)
-  const [modifierTarget, setModifierTarget] = useState(null)
 
   // สลับช่องทางแล้วราคาเปลี่ยนทั้งกระดาน ตะกร้าเดิมจึงใช้ต่อไม่ได้
   useEffect(() => {
@@ -110,24 +106,11 @@ function SalesPage() {
    * แตะสินค้า = ลงตะกร้าทันที ไม่มีหน้าต่างถามตัวเลือกคั่น
    *
    * หน้าร้านต้องกดเร็ว ๆ ตอนลูกค้ายืนรอ การเด้งหน้าต่างถามความเผ็ด/น้ำจิ้มทุกครั้ง
-   * ทำให้การขาย 1 ไม้กลายเป็น 3 แตะ ใครอยากระบุตัวเลือกค่อยแตะที่ชื่อสินค้าในตะกร้า
+   * ทำให้การขาย 1 ไม้กลายเป็น 4 แตะ ตอนนี้เลิกใช้ตัวเลือกแล้ว เหลือแตะเดียวจบ
    */
   const handleSelectProduct = (product) => {
     if ((product.stock_qty ?? 0) <= 0) return
     setCart((prev) => addItemToCart(prev, product, {}))
-  }
-
-  /** แก้ตัวเลือกของรายการที่อยู่ในตะกร้าแล้ว — เปิดจากการแตะชื่อสินค้าในตะกร้า */
-  const handleEditModifiers = (item) => {
-    const product = productById.get(item.productId)
-    if (product && getModifierCategories(product).length > 0) {
-      setModifierTarget({ product, itemKey: item.key, selected: item.modifiers })
-    }
-  }
-
-  const handleConfirmModifiers = (selected) => {
-    setCart((prev) => setItemModifiers(prev, modifierTarget.itemKey, selected))
-    setModifierTarget(null)
   }
 
   const handleIncrement = (key) => setCart((prev) => updateItemQuantity(prev, key, 1))
@@ -270,8 +253,6 @@ function SalesPage() {
               onRemove={handleRemove}
               onSetQuantity={handleSetQuantity}
               onCheckout={openCheckout}
-              onEditModifiers={handleEditModifiers}
-              productById={productById}
               checkoutDisabled={!online}
             />
           </div>
@@ -303,11 +284,6 @@ function SalesPage() {
                     onDecrement={handleDecrement}
                     onRemove={handleRemove}
                     onSetQuantity={handleSetQuantity}
-                    onEditModifiers={
-                      getModifierCategories(productById.get(item.productId) ?? {}).length > 0
-                        ? handleEditModifiers
-                        : null
-                    }
                   />
                 ))}
                 {freeLines.map((line) => (
@@ -345,15 +321,6 @@ function SalesPage() {
           </div>
         </div>
       </div>
-
-      {modifierTarget && (
-        <ModifierModal
-          product={modifierTarget.product}
-          initialSelected={modifierTarget.selected}
-          onClose={() => setModifierTarget(null)}
-          onConfirm={handleConfirmModifiers}
-        />
-      )}
 
       {checkoutOpen && (
         <CheckoutModal

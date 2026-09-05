@@ -10,10 +10,6 @@ const INITIAL_PRODUCTS = [
     is_active: true,
     stock_type: 'batch',
     stock_qty: 0,
-    modifiers: {
-      spice_level: ['เผ็ดมาก', 'ปานกลาง', 'น้อย', 'ไม่เผ็ด'],
-      sauce: ['ซีฟู้ด', 'หวาน', 'ผสม'],
-    },
     sort_order: 1,
   },
   {
@@ -24,9 +20,6 @@ const INITIAL_PRODUCTS = [
     is_active: true,
     stock_type: 'daily',
     stock_qty: 0,
-    modifiers: {
-      sauce: ['ซีฟู้ด', 'หวาน', 'ผสม'],
-    },
     sort_order: 2,
   },
 ]

@@ -5,9 +5,7 @@ import {
   calcCartTotal,
   calcItemTotal,
   formatModifiers,
-  getModifierCategories,
   removeItem,
-  setItemModifiers,
   setItemQuantity,
   updateItemQuantity,
 } from '../cart'
@@ -109,16 +107,8 @@ describe('removeItem', () => {
   })
 })
 
-describe('ตัวเลือกสินค้า', () => {
-  it('อ่านหมวดตัวเลือกที่มีค่าเท่านั้น', () => {
-    const categories = getModifierCategories({ modifiers: { a: ['x'], b: [], c: null } })
-    expect(categories.map(([k]) => k)).toEqual(['a'])
-  })
-
-  it('สินค้าที่ไม่มีตัวเลือกคืนลิสต์ว่าง', () => {
-    expect(getModifierCategories(mussel)).toEqual([])
-  })
-
+// เลิกให้เลือกตัวเลือกตอนขายแล้ว แต่ยังต้องอ่านบิลเก่าที่เคยบันทึกไว้ได้
+describe('ตัวเลือกสินค้าของบิลเก่า', () => {
   it('คีย์ตะกร้าไม่ขึ้นกับลำดับที่ใส่ตัวเลือก', () => {
     expect(buildCartKey('p1', { b: '2', a: '1' })).toBe(buildCartKey('p1', { a: '1', b: '2' }))
   })
@@ -128,39 +118,3 @@ describe('ตัวเลือกสินค้า', () => {
   })
 })
 
-describe('setItemModifiers', () => {
-  const squid = { id: 'p1', name: 'ปลาหมึกย่าง', price: 10, stock_qty: 50, unit: 'ไม้' }
-
-  it('เปลี่ยนตัวเลือกแล้ว key เปลี่ยนตาม ปุ่มบวกลบยังทำงานกับบรรทัดเดิม', () => {
-    let cart = addItemToCart([], squid, {})
-    cart = setItemModifiers(cart, cart[0].key, { spice_level: 'เผ็ดมาก' })
-    expect(cart).toHaveLength(1)
-    expect(cart[0].modifiers).toEqual({ spice_level: 'เผ็ดมาก' })
-    expect(cart[0].key).toBe(buildCartKey('p1', { spice_level: 'เผ็ดมาก' }))
-    expect(cart[0].quantity).toBe(1)
-  })
-
-  it('เปลี่ยนไปชนกับบรรทัดที่มีตัวเลือกชุดเดียวกันอยู่แล้ว ต้องยุบรวมจำนวนกัน', () => {
-    let cart = addItemToCart([], squid, { spice_level: 'เผ็ดมาก' })
-    cart = addItemToCart(cart, squid, { spice_level: 'เผ็ดมาก' })
-    cart = addItemToCart(cart, squid, { spice_level: 'ไม่เผ็ด' })
-    expect(cart).toHaveLength(2)
-
-    const mild = cart.find((i) => i.modifiers.spice_level === 'ไม่เผ็ด')
-    cart = setItemModifiers(cart, mild.key, { spice_level: 'เผ็ดมาก' })
-
-    expect(cart).toHaveLength(1)
-    expect(cart[0].quantity).toBe(3)
-    expect(new Set(cart.map((i) => i.key)).size).toBe(cart.length)
-  })
-
-  it('เลือกค่าเดิมซ้ำ ไม่เปลี่ยนอะไรเลย', () => {
-    const cart = addItemToCart([], squid, { sauce: 'ซีฟู้ด' })
-    expect(setItemModifiers(cart, cart[0].key, { sauce: 'ซีฟู้ด' })).toBe(cart)
-  })
-
-  it('key ที่ไม่มีในตะกร้า คืนตะกร้าเดิม', () => {
-    const cart = addItemToCart([], squid, {})
-    expect(setItemModifiers(cart, 'ไม่มีจริง', { sauce: 'หวาน' })).toBe(cart)
-  })
-})
