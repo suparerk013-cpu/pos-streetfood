@@ -2,22 +2,33 @@ import { useState } from 'react'
 import { calcItemTotal, formatModifiers } from '../lib/cart'
 import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity }) {
+function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity, onEditModifiers }) {
   const modifiersText = formatModifiers(item.modifiers)
   const atLimit = cartQtyForProduct >= (maxQty ?? item.stockQty ?? Infinity)
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
   return (
     <div className="py-3 flex items-center gap-3">
-      <div className="flex-1 min-w-0">
+      {/* แตะชื่อสินค้าเพื่อเลือกความเผ็ด/น้ำจิ้ม — ย้ายมาไว้ตรงนี้แทนหน้าต่างที่เคยเด้งตอนกดสินค้า */}
+      <button
+        type="button"
+        onClick={() => onEditModifiers?.(item)}
+        disabled={!onEditModifiers}
+        className="flex-1 min-w-0 text-left disabled:cursor-default"
+      >
         <p className="font-medium text-gray-800 truncate">{item.name}</p>
-        {modifiersText && (
+        {onEditModifiers && (
+          <p className={`text-sm truncate ${modifiersText ? 'text-gray-400' : 'text-orange-400'}`}>
+            {modifiersText || 'แตะเพื่อเลือกความเผ็ด / น้ำจิ้ม'}
+          </p>
+        )}
+        {!onEditModifiers && modifiersText && (
           <p className="text-sm text-gray-400 truncate">{modifiersText}</p>
         )}
         <p className="text-orange-600 font-semibold">
           {calcItemTotal(item).toLocaleString()} ฿
         </p>
-      </div>
+      </button>
 
       <div className="flex items-center gap-2 shrink-0">
         <button

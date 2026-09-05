@@ -1,7 +1,7 @@
-import { calcCartTotal } from '../lib/cart'
+import { calcCartTotal, getModifierCategories } from '../lib/cart'
 import CartItemRow from './CartItemRow'
 
-function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, maxPaidByProduct, checkoutDisabled = false }) {
+function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDecrement, onRemove, onSetQuantity, onCheckout, onEditModifiers, productById, maxPaidByProduct, checkoutDisabled = false }) {
   const total = calcCartTotal(cart)
 
   return (
@@ -26,6 +26,11 @@ function CartSheet({ cart, freeLines = [], cartQtyByProductId, onIncrement, onDe
                 onDecrement={onDecrement}
                 onRemove={onRemove}
                 onSetQuantity={onSetQuantity}
+                onEditModifiers={
+                  getModifierCategories(productById?.get(item.productId) ?? {}).length > 0
+                    ? onEditModifiers
+                    : null
+                }
               />
             ))}
             {freeLines.map((line) => (

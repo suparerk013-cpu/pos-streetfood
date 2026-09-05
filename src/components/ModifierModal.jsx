@@ -7,13 +7,14 @@ const MODIFIER_LABELS = {
   sauce: 'น้ำจิ้ม',
 }
 
-function ModifierModal({ product, onClose, onConfirm }) {
+function ModifierModal({ product, initialSelected, onClose, onConfirm }) {
   const categories = getModifierCategories(product)
 
+  // เปิดจากตะกร้า = ต้องขึ้นค่าที่เคยเลือกไว้ ไม่ใช่รีเซ็ตกลับเป็นตัวแรกทุกครั้ง
   const [selected, setSelected] = useState(() => {
     const initial = {}
     categories.forEach(([key, options]) => {
-      initial[key] = options[0]
+      initial[key] = initialSelected?.[key] ?? options[0]
     })
     return initial
   })

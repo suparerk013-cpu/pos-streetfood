@@ -15,9 +15,10 @@ function ProductCard({ product, cartQty = 0, onSelect }) {
           : 'bg-gradient-to-br from-white to-orange-50 border-orange-200 shadow-md active:scale-[0.96] active:shadow-sm'
       }`}
     >
+      {/* ป้ายสต็อกอยู่มุมบนซ้าย เดิมอยู่มุมล่างซ้ายแล้วไปทับเลขราคาพอดี */}
       {!outOfStock && (
         <span
-          className={`absolute bottom-2 left-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm ${
+          className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm ${
             stockQty <= 5
               ? 'bg-red-500 text-white'
               : stockQty <= 10

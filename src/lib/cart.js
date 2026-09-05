@@ -77,6 +77,32 @@ export function setItemQuantity(cart, key, qty, maxPaidQty) {
     .filter((item) => item.quantity > 0)
 }
 
+/**
+ * เปลี่ยนตัวเลือก (ความเผ็ด / น้ำจิ้ม) ของรายการที่อยู่ในตะกร้าแล้ว
+ *
+ * key ของรายการสร้างจาก productId + ตัวเลือก พอเปลี่ยนตัวเลือก key ต้องเปลี่ยนตาม
+ * ถ้าเปลี่ยนแล้วไปตรงกับรายการที่มีตัวเลือกชุดเดียวกันอยู่ก่อนแล้ว ต้องยุบรวมเป็นบรรทัดเดียว
+ * ไม่ใช่ปล่อยให้มีสองบรรทัดที่ key ซ้ำกัน ซึ่งจะทำให้ปุ่มบวกลบไปโดนบรรทัดผิด
+ */
+export function setItemModifiers(cart, key, modifiers = {}) {
+  const target = cart.find((item) => item.key === key)
+  if (!target) return cart
+
+  const nextKey = buildCartKey(target.productId, modifiers)
+  if (nextKey === key) return cart
+
+  const twin = cart.find((item) => item.key === nextKey)
+  if (twin) {
+    return cart
+      .filter((item) => item.key !== key)
+      .map((item) =>
+        item.key === nextKey ? { ...item, quantity: item.quantity + target.quantity } : item,
+      )
+  }
+
+  return cart.map((item) => (item.key === key ? { ...item, key: nextKey, modifiers } : item))
+}
+
 export function removeItem(cart, key) {
   return cart.filter((item) => item.key !== key)
 }
