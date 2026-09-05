@@ -2,6 +2,7 @@ import { ImageOff, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { unitCost } from '../lib/pricing'
+import { freeQtyFor, promoTiers } from '../lib/promo'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
@@ -11,9 +12,16 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
   const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
-  const [promoOn, setPromoOn] = useState(Boolean(product.promo_buy_qty > 0))
-  const [promoBuy, setPromoBuy] = useState(String(product.promo_buy_qty ?? 10))
-  const [promoFree, setPromoFree] = useState(String(product.promo_free_qty ?? 1))
+  const savedTiers = promoTiers(product)
+  const [promoOn, setPromoOn] = useState(savedTiers.length > 0)
+  const [promoRows, setPromoRows] = useState(() =>
+    savedTiers.length > 0
+      ? savedTiers
+          .slice()
+          .sort((a, b) => a.buy - b.buy)
+          .map((tier) => ({ buy: String(tier.buy), free: String(tier.free) }))
+      : [{ buy: '10', free: '1' }],
+  )
   const [imagePreview, setImagePreview] = useState(product.image_base64 ?? null)
   const [newImageBase64, setNewImageBase64] = useState(null)
   const [processingImage, setProcessingImage] = useState(false)
@@ -24,6 +32,22 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [deleteError, setDeleteError] = useState(null)
 
   const cost = unitCost(product, { ingredientById, consumableCost })
+
+  /** โปรที่กรอกครบแล้วเท่านั้น ใช้ทั้งตอนบันทึกและตอนแสดงตัวอย่าง */
+  const validPromos = promoOn
+    ? promoRows
+        .map((row) => ({ buy: Math.floor(Number(row.buy) || 0), free: Math.floor(Number(row.free) || 0) }))
+        .filter((row) => row.buy > 0 && row.free > 0)
+    : []
+
+  const addPromoRow = () => setPromoRows((prev) => [...prev, { buy: '', free: '' }])
+  const removePromoRow = (index) => setPromoRows((prev) => prev.filter((_, i) => i !== index))
+  const updatePromoRow = (index, field, value) =>
+    setPromoRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+
+  /** ตัวอย่างให้เห็นกับตาว่าโปรที่ตั้งไว้ทั้งหมดรวมกันแล้วลูกค้าได้อะไร */
+  const previewQty = validPromos.length > 0 ? Math.max(...validPromos.map((p) => p.buy)) * 2 : 0
+  const previewFree = freeQtyFor({ promos: validPromos }, previewQty)
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving && !deleting
@@ -72,8 +96,10 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
       name: name.trim(),
       price: Number(price),
       unit: unit.trim() || 'ชิ้น',
-      promo_buy_qty: promoOn ? Math.max(1, Number(promoBuy) || 0) : null,
-      promo_free_qty: promoOn ? Math.max(1, Number(promoFree) || 0) : null,
+      promos: validPromos,
+      // ล้างข้อมูลรูปแบบเก่าทิ้ง ไม่งั้นจะมีโปรสองชุดในเอกสารเดียวกัน
+      promo_buy_qty: null,
+      promo_free_qty: null,
     }
     if (newImageBase64) updates.image_base64 = newImageBase64
 
@@ -190,31 +216,57 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
 
           {promoOn && (
             <>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-gray-600">ซื้อ</span>
-                <input
-                  type="number" inputMode="numeric" min="1"
-                  value={promoBuy}
-                  onChange={(e) => setPromoBuy(e.target.value)}
-                  aria-label="ซื้อกี่ชิ้น"
-                  className="w-20 h-10 rounded-xl border border-gray-200 bg-gray-50 px-3 text-center font-bold focus:outline-none focus:border-orange-400"
-                />
-                <span className="text-sm text-gray-600">{unit} แถม</span>
-                <input
-                  type="number" inputMode="numeric" min="1"
-                  value={promoFree}
-                  onChange={(e) => setPromoFree(e.target.value)}
-                  aria-label="แถมกี่ชิ้น"
-                  className="w-20 h-10 rounded-xl border border-gray-200 bg-gray-50 px-3 text-center font-bold focus:outline-none focus:border-orange-400"
-                />
-                <span className="text-sm text-gray-600">{unit}</span>
-              </div>
+              {promoRows.map((row, index) => (
+                <div key={index} className="flex items-center gap-2 flex-wrap">
+                  <span className="text-sm text-gray-600">ซื้อ</span>
+                  <input
+                    type="number" inputMode="numeric" min="1"
+                    value={row.buy}
+                    onChange={(e) => updatePromoRow(index, 'buy', e.target.value)}
+                    aria-label={`ซื้อกี่${unit} โปรที่ ${index + 1}`}
+                    className="w-16 h-10 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center font-bold focus:outline-none focus:border-orange-400"
+                  />
+                  <span className="text-sm text-gray-600">{unit} แถม</span>
+                  <input
+                    type="number" inputMode="numeric" min="1"
+                    value={row.free}
+                    onChange={(e) => updatePromoRow(index, 'free', e.target.value)}
+                    aria-label={`แถมกี่${unit} โปรที่ ${index + 1}`}
+                    className="w-16 h-10 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center font-bold focus:outline-none focus:border-orange-400"
+                  />
+                  <span className="text-sm text-gray-600">{unit}</span>
+                  {promoRows.length > 1 && (
+                    <button type="button" onClick={() => removePromoRow(index)}
+                      aria-label={`ลบโปรที่ ${index + 1}`}
+                      className="ml-auto w-10 h-10 shrink-0 rounded-full bg-gray-100 text-gray-500 text-lg flex items-center justify-center active:bg-gray-200">
+                      ×
+                    </button>
+                  )}
+                </div>
+              ))}
+
+              <button type="button" onClick={addPromoRow}
+                className="self-start min-h-[40px] px-4 rounded-xl border-2 border-dashed border-orange-300 text-orange-600 text-sm font-bold active:bg-orange-50">
+                + เพิ่มโปรอีกชั้น
+              </button>
+
               <div className="text-[11px] text-gray-400 leading-relaxed">
-                <p>ซื้อ {(Number(promoBuy) || 0) * 2} จะแถม {(Number(promoFree) || 0) * 2} อัตโนมัติ ไม่ต้องตั้งเพิ่ม</p>
-                <p>ใช้เฉพาะหน้าร้าน ไม่ใช้กับเดลิเวอรี เพราะโดนหัก GP อยู่แล้ว</p>
-                {cost > 0 && (
+                {validPromos.length > 1 ? (
+                  <p className="text-orange-600 font-semibold">
+                    ตั้งไว้ {validPromos.length} ชั้น — ระบบเลือกชุดที่ลูกค้าได้ของแถมมากที่สุดให้เอง
+                  </p>
+                ) : (
+                  <p>ตั้งชั้นเดียวก็ทวีคูณเอง ไม่ต้องตั้งซ้ำ</p>
+                )}
+                {previewQty > 0 && (
                   <p className="text-gray-500 font-semibold mt-0.5">
-                    ต้นทุนของแถม {(cost * (Number(promoFree) || 0)).toFixed(2)} ฿ ต่อครั้ง
+                    ตัวอย่าง: ซื้อ {previewQty} {unit} → แถม {previewFree} {unit}
+                  </p>
+                )}
+                <p>ใช้เฉพาะหน้าร้าน ไม่ใช้กับเดลิเวอรี เพราะโดนหัก GP อยู่แล้ว</p>
+                {cost > 0 && previewFree > 0 && (
+                  <p className="text-gray-500 font-semibold">
+                    ต้นทุนของแถมในตัวอย่างนี้ {(cost * previewFree).toFixed(2)} ฿
                   </p>
                 )}
               </div>

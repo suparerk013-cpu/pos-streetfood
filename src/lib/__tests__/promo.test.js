@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { buildFreeLines, effectiveQtyByProduct, freeQtyFor, hasPromo, qtyToNextFree } from '../promo'
+import {
+  buildFreeLines,
+  effectiveQtyByProduct,
+  freeQtyFor,
+  hasPromo,
+  maxPaidQty,
+  promoTiers,
+  qtyToNextFree,
+} from '../promo'
 
 const squid = { id: 'p1', name: 'ปลาหมึกย่าง', unit: 'ไม้', promo_buy_qty: 10, promo_free_qty: 1 }
 const mussel = { id: 'p2', name: 'หอยแมลงภู่', unit: 'ถุง' }
@@ -45,8 +53,9 @@ describe('qtyToNextFree', () => {
     expect(qtyToNextFree(squid, 7)).toBe(3)
   })
 
-  it('ครบพอดีแล้วไม่ต้องซื้อเพิ่ม', () => {
-    expect(qtyToNextFree(squid, 10)).toBe(0)
+  // ซื้อครบ 10 แล้วได้แถม 1 ไปแล้ว ชิ้นแถมถัดไปต้องซื้อเพิ่มอีก 10
+  it('ครบพอดีแล้วนับต่อไปยังของแถมชิ้นถัดไป', () => {
+    expect(qtyToNextFree(squid, 10)).toBe(10)
   })
 
   it('สินค้าไม่มีโปรคืน null', () => {
@@ -129,5 +138,68 @@ describe('maxPaidQty', () => {
   it('บนเดลิเวอรีไม่มีของแถม ซื้อได้เต็มสต็อก', async () => {
     const { maxPaidQty } = await import('../promo')
     expect(maxPaidQty(squid, 11, { channel: 'delivery' })).toBe(11)
+  })
+})
+
+describe('โปรหลายชั้น', () => {
+  // ซื้อ 10 แถม 1 กับ ซื้อ 20 แถม 3 ตั้งไว้พร้อมกัน
+  const tiered = {
+    id: 'p9', name: 'ปลาหมึกย่าง', unit: 'ไม้',
+    promos: [{ buy: 10, free: 1 }, { buy: 20, free: 3 }],
+  }
+
+  it('อ่านโปรได้ครบและเรียงชั้นใหญ่ก่อน', () => {
+    expect(promoTiers(tiered).map((t) => t.buy)).toEqual([20, 10])
+    expect(hasPromo(tiered)).toBe(true)
+  })
+
+  it('ยังไม่ถึงชั้นใหญ่ ใช้ชั้นเล็ก', () => {
+    expect(freeQtyFor(tiered, 10)).toBe(1)
+    expect(freeQtyFor(tiered, 19)).toBe(1)
+  })
+
+  it('ถึงชั้นใหญ่แล้วได้ตามชั้นใหญ่ ไม่ใช่ชั้นเล็กสองรอบ', () => {
+    expect(freeQtyFor(tiered, 20)).toBe(3)
+  })
+
+  it('เกินชั้นใหญ่แล้วเศษที่เหลือยังใช้ชั้นเล็กต่อได้', () => {
+    expect(freeQtyFor(tiered, 30)).toBe(4)
+    expect(freeQtyFor(tiered, 40)).toBe(6)
+  })
+
+  it('ซื้อเพิ่มแล้วของแถมต้องไม่ลดลง แม้ตั้งโปรชั้นเล็กคุ้มกว่าชั้นใหญ่', () => {
+    const odd = { id: 'p8', promos: [{ buy: 3, free: 2 }, { buy: 5, free: 1 }] }
+    let previous = 0
+    for (let qty = 0; qty <= 30; qty += 1) {
+      const now = freeQtyFor(odd, qty)
+      expect(now).toBeGreaterThanOrEqual(previous)
+      previous = now
+    }
+    // ซื้อ 6 ควรได้ 4 (3 แถม 2 สองรอบ) ไม่ใช่ 1 จากการหักชั้นใหญ่ก่อน
+    expect(freeQtyFor(odd, 6)).toBe(4)
+  })
+
+  it('เพดานจำนวนที่ซื้อได้ต้องกันสต็อกไว้แถมตามชั้นที่ได้จริง', () => {
+    // สต็อก 23: ซื้อ 20 แถม 3 = 23 พอดี
+    expect(maxPaidQty(tiered, 23)).toBe(20)
+    // สต็อก 22: ซื้อ 20 ต้องใช้ 23 เกินสต็อก จึงได้แค่ 19 (แถม 1 รวม 20)
+    expect(maxPaidQty(tiered, 22)).toBe(19)
+    // ซื้อ + แถม ต้องไม่เกินสต็อกเสมอ
+    for (let stock = 0; stock <= 60; stock += 1) {
+      const paid = maxPaidQty(tiered, stock)
+      expect(paid + freeQtyFor(tiered, paid)).toBeLessThanOrEqual(stock)
+      expect(paid + 1 + freeQtyFor(tiered, paid + 1)).toBeGreaterThan(stock)
+    }
+  })
+
+  it('ข้อมูลเก่าที่เก็บเป็นคู่เดียวยังใช้ได้เหมือนเดิม', () => {
+    const legacy = { id: 'p7', promo_buy_qty: 10, promo_free_qty: 1 }
+    expect(promoTiers(legacy)).toEqual([{ buy: 10, free: 1 }])
+    expect(freeQtyFor(legacy, 25)).toBe(2)
+  })
+
+  it('ชั้นที่กรอกไม่ครบถูกตัดทิ้ง ไม่พังทั้งโปร', () => {
+    const messy = { id: 'p6', promos: [{ buy: 10, free: 1 }, { buy: 0, free: 5 }, { buy: 5 }] }
+    expect(promoTiers(messy)).toEqual([{ buy: 10, free: 1 }])
   })
 })

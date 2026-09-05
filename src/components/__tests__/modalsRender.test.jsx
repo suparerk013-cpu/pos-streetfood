@@ -39,6 +39,22 @@ describe('เรนเดอร์หน้าต่างในคลังส�
     expect(html).toContain('ปลาหมึกย่าง')
   })
 
+  it('โปรหลายชั้นที่บันทึกไว้ขึ้นครบทุกแถว พร้อมตัวอย่างของแถมรวม', () => {
+    const tiered = { ...squid, promos: [{ buy: 10, free: 1 }, { buy: 20, free: 3 }] }
+    const html = render(<EditProductModal product={tiered} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
+    expect(html).toContain('ซื้อกี่ไม้ โปรที่ 1')
+    expect(html).toContain('ซื้อกี่ไม้ โปรที่ 2')
+    expect(html).toContain('+ เพิ่มโปรอีกชั้น')
+    // ซื้อ 40 → 20 แถม 3 สองรอบ = 6 (React แทรกคอมเมนต์คั่นตัวแปร จึงเทียบเป็นช่วง)
+    const preview = html.slice(html.indexOf('ตัวอย่าง: ซื้อ'), html.indexOf('ใช้เฉพาะหน้าร้าน'))
+    expect(preview.replace(/<!-- -->/g, '')).toContain('ซื้อ 40 ไม้ → แถม 6 ไม้')
+  })
+
+  it('สินค้าที่ยังไม่เคยตั้งโปร ขึ้นแถวว่างรอกรอกแถวเดียว ไม่มีปุ่มลบ', () => {
+    const html = render(<EditProductModal product={squid} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
+    expect(html).not.toContain('ลบโปรที่ 1')
+  })
+
   it('หน้าต่างแก้ไขสินค้าไม่มีช่องตั้งราคาเดลิเวอรีแล้ว — เดลิเวอรีขายเป็นเซ็ต', () => {
     const html = render(<EditProductModal product={squid} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
     expect(html).not.toContain('ช่องทางขาย')
