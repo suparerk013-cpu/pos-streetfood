@@ -1,0 +1,446 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ทดลองระบบต้นทุน — มหาทะเลซีฟูด</title>
+<style>
+  /* ฟอนต์ระบบล้วน ไม่โหลดจากเน็ต เปิดตอนไม่มีอินเทอร์เน็ตก็ยังสวย */
+  :root {
+    --ground:#FBF6F1; --surface:#fff; --surface-2:#F6EEE7;
+    --ink:#241B16; --muted:#7C6A5E; --line:#E7DBCF;
+    --ember:#E0521A; --ember-soft:#FDEBE0;
+    --good:#2F7D5D; --good-soft:#E4F2EA;
+    --warn:#B07405; --warn-soft:#FBF0D8;
+    --bad:#C0392B; --bad-soft:#FBE6E3;
+    --shadow:0 1px 2px rgba(61,52,46,.05), 0 8px 24px -14px rgba(61,52,46,.25);
+  }
+  * { box-sizing:border-box; }
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font-family:"Sarabun","Leelawadee UI","Segoe UI",system-ui,sans-serif;
+    font-size:15px; line-height:1.65; -webkit-font-smoothing:antialiased;
+  }
+  .wrap { max-width:900px; margin:0 auto; padding:24px 16px 72px; }
+
+  .banner {
+    background:var(--warn-soft); border:1px solid #EBD9A8; color:#7A5405;
+    border-radius:14px; padding:12px 16px; font-size:13px; line-height:1.6; margin-bottom:22px;
+  }
+  .banner b { color:#5C3F04; }
+
+  h1 { font-size:26px; font-weight:700; margin:0 0 4px; letter-spacing:-.01em; }
+  .sub { color:var(--muted); font-size:14px; margin:0 0 24px; }
+
+  section {
+    background:var(--surface); border:1px solid var(--line); border-radius:18px;
+    padding:18px 18px 20px; margin-bottom:18px; box-shadow:var(--shadow);
+  }
+  .sec-head { display:flex; align-items:baseline; gap:10px; margin-bottom:4px; flex-wrap:wrap; }
+  .step {
+    background:var(--ember); color:#fff; font-size:12px; font-weight:700;
+    width:24px; height:24px; border-radius:8px; display:inline-flex;
+    align-items:center; justify-content:center; flex-shrink:0;
+  }
+  h2 { font-size:18px; font-weight:700; margin:0; }
+  .hint { color:var(--muted); font-size:13px; margin:2px 0 16px 34px; }
+
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th { text-align:left; font-size:11px; letter-spacing:.08em; text-transform:uppercase;
+       color:var(--muted); font-weight:700; padding:0 8px 8px 0; }
+  td { padding:6px 8px 6px 0; border-top:1px solid var(--line); vertical-align:middle; }
+  tr:first-child td { border-top:none; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+
+  input[type=number], input[type=text] {
+    width:100%; border:1px solid var(--line); border-radius:10px; background:var(--surface-2);
+    padding:7px 10px; font:inherit; font-variant-numeric:tabular-nums; text-align:right; color:var(--ink);
+  }
+  input:focus { outline:none; border-color:var(--ember); background:#fff; }
+  input[type=checkbox] { width:18px; height:18px; accent-color:var(--ember); }
+  .w-sm { max-width:92px; } .w-md { max-width:120px; }
+  label.inline { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); cursor:pointer; }
+
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; }
+  .field { display:flex; flex-direction:column; gap:5px; }
+  .field span { font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+
+  .result {
+    margin-top:16px; border-radius:14px; padding:14px 16px;
+    background:var(--ember-soft); border:1px solid #F5D2BC;
+  }
+  .result .big { font-size:26px; font-weight:800; color:var(--ember); font-variant-numeric:tabular-nums; line-height:1.25; }
+  .result .cap { font-size:12px; color:var(--muted); }
+
+  .flag { margin-top:12px; border-radius:12px; padding:11px 14px; font-size:13.5px; line-height:1.6; display:none; }
+  .flag.on { display:block; }
+  .flag.warn { background:var(--warn-soft); border:1px solid #EBD9A8; color:#7A5405; }
+  .flag.bad  { background:var(--bad-soft);  border:1px solid #F1C4BE; color:#8E2A1E; }
+  .flag.good { background:var(--good-soft); border:1px solid #BFE0CE; color:#1F5A41; }
+
+  /* แถบสรุปต้นทุนต่อไม้ */
+  .stack { display:flex; height:44px; border-radius:11px; overflow:hidden; margin:6px 0 14px; }
+  .stack > div { display:flex; align-items:center; justify-content:center; color:#fff;
+                 font-size:12px; font-weight:700; font-variant-numeric:tabular-nums;
+                 white-space:nowrap; overflow:hidden; transition:width .25s ease; }
+  .s-squid { background:#B4472C; } .s-sauce { background:#E0821A; }
+  .s-misc  { background:#9A8B7A; } .s-profit{ background:var(--good); }
+
+  .legend { display:flex; flex-wrap:wrap; gap:14px; font-size:12.5px; color:var(--muted); margin-bottom:4px; }
+  .legend i { width:11px; height:11px; border-radius:3px; display:inline-block; margin-right:6px; vertical-align:-1px; }
+
+  .totals { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin-top:14px; }
+  .tile { background:var(--surface-2); border-radius:13px; padding:12px 14px; }
+  .tile .k { font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+  .tile .v { font-size:22px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.3; }
+
+  footer { color:var(--muted); font-size:13px; text-align:center; margin-top:32px; line-height:1.7; }
+  .pill { background:var(--surface-2); border-radius:999px; padding:2px 9px; font-size:12px; color:var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="banner">
+    🧪 <b>นี่คือตัวทดลอง ไม่ใช่ระบบจริง</b> — ไม่ได้เชื่อมกับแอป POS ไม่ได้ต่อฐานข้อมูล
+    ตัวเลขที่แก้ในหน้านี้ไม่ถูกบันทึกที่ไหนทั้งนั้น ปิดหน้าแล้วหาย
+    <br>ทำไว้ให้ลองเล่นดูว่าวิธีคิดต้นทุนแบบนี้ตรงกับหน้างานจริงไหม ก่อนจะลงมือทำของจริง
+  </div>
+
+  <h1>ต้นทุนปลาหมึกย่าง 1 ไม้ เท่าไหร่กันแน่</h1>
+  <p class="sub">แก้ตัวเลขช่องไหนก็ได้ ทุกอย่างคิดใหม่ให้ทันที</p>
+
+  <!-- 1 ─────────────────────────── -->
+  <section>
+    <div class="sec-head"><span class="step">1</span><h2>วัตถุดิบที่มี</h2></div>
+    <p class="hint">ติ๊ก “ของขวด” เฉพาะของที่ใช้ได้หลายหม้อ (มะขาม น้ำปลา น้ำตาล) ที่เหลือไม่ต้องตั้งอะไร</p>
+    <table>
+      <thead>
+        <tr><th style="width:38%">ชื่อ</th><th class="num" style="width:22%">ราคา</th><th style="width:18%">หน่วย</th><th style="width:22%">ของขวด?</th></tr>
+      </thead>
+      <tbody id="ingRows"></tbody>
+    </table>
+  </section>
+
+  <!-- 2 ─────────────────────────── -->
+  <section>
+    <div class="sec-head"><span class="step">2</span><h2>ทำน้ำจิ้ม 1 หม้อ</h2></div>
+    <p class="hint">กรอกที่ใช้จริงวันนี้ พรุ่งนี้ใส่ไม่เท่ากันก็กรอกใหม่ ไม่ต้องตายตัว</p>
+    <table>
+      <thead>
+        <tr><th style="width:40%">วัตถุดิบ</th><th class="num" style="width:26%">ใช้เท่าไหร่</th><th style="width:12%"></th><th class="num" style="width:22%">เป็นเงิน</th></tr>
+      </thead>
+      <tbody id="sauceRows"></tbody>
+    </table>
+
+    <div class="row" style="margin-top:16px">
+      <label class="field"><span>ได้น้ำจิ้มกี่ กก.</span><input type="number" id="sauceKg" class="w-sm" value="3" min="0.1" step="0.1"></label>
+      <label class="field"><span>หม้อนี้ใช้ได้กี่ไม้</span><input type="number" id="sauceSticks" class="w-md" value="400" min="1" step="10"></label>
+    </div>
+
+    <div class="result">
+      <div class="big" id="sauceBatch">— ฿ / หม้อ</div>
+      <div class="cap" id="sauceDetail"></div>
+    </div>
+  </section>
+
+  <!-- 3 ─────────────────────────── -->
+  <section>
+    <div class="sec-head"><span class="step">3</span><h2>เสียบหมึกเข้าสต็อก</h2></div>
+    <p class="hint">ตรงนี้แหละที่ตอบคำถาม “ซื้อมา 1 โล แต่ได้ไม่ถึง 20 ไม้”</p>
+
+    <div class="row">
+      <label class="field"><span>ใช้หมึกสด (กก.)</span><input type="number" id="squidKg" class="w-sm" value="1" min="0.1" step="0.1"></label>
+      <label class="field"><span>เสียบได้กี่ไม้</span><input type="number" id="squidSticks" class="w-sm" value="20" min="1" step="1"></label>
+      <label class="field"><span>ปกติได้กี่ไม้/กก.</span><input type="number" id="squidNormal" class="w-sm" value="20" min="1" step="1"></label>
+    </div>
+
+    <div class="result">
+      <div class="big" id="squidCost">— ฿ / ไม้</div>
+      <div class="cap" id="squidDetail"></div>
+    </div>
+    <div class="flag" id="yieldFlag"></div>
+  </section>
+
+  <!-- 4 ─────────────────────────── -->
+  <section>
+    <div class="sec-head"><span class="step">4</span><h2>ของจิปาถะ</h2></div>
+    <p class="hint">ถ่าน ไม้เสียบ ถุง ผักชีโรยหน้า — พวกนี้วัดต่อไม้ไม่ได้ ใช้หารเฉลี่ยจากรายจ่ายจริง</p>
+
+    <table>
+      <thead><tr><th style="width:60%">รายการ (ต่อสัปดาห์)</th><th class="num" style="width:40%">บาท</th></tr></thead>
+      <tbody id="miscRows"></tbody>
+    </table>
+
+    <div class="row" style="margin-top:16px">
+      <label class="field"><span>สัปดาห์นี้ขายได้กี่ไม้</span><input type="number" id="weekSticks" class="w-md" value="1450" min="1" step="50"></label>
+    </div>
+
+    <div class="result">
+      <div class="big" id="miscCost">— ฿ / ไม้</div>
+      <div class="cap" id="miscDetail"></div>
+    </div>
+    <div class="flag good on" style="background:var(--surface-2);border-color:var(--line);color:var(--muted)">
+      💡 วิธีนี้จับ “ของเน่าทิ้ง” ให้อัตโนมัติ — ผักชีซื้อ 3 กำ ใช้ 2 เน่า 1 ต้นทุนที่คิดคือ 3 กำเต็ม เพราะคุณจ่ายไปเท่านั้นจริง ๆ
+    </div>
+  </section>
+
+  <!-- 5 ─────────────────────────── -->
+  <section style="border-color:var(--ember);border-width:2px">
+    <div class="sec-head"><span class="step">5</span><h2>สรุป — ขายไม้ละเท่าไหร่ถึงจะคุ้ม</h2></div>
+    <div class="row" style="margin:6px 0 16px">
+      <label class="field"><span>ราคาขายหน้าร้าน</span><input type="number" id="price" class="w-sm" value="10" min="1" step="1"></label>
+      <label class="field"><span>อยากได้กำไรกี่ %</span><input type="number" id="targetMargin" class="w-sm" value="60" min="1" max="95" step="5"></label>
+    </div>
+
+    <div class="legend">
+      <span><i class="s-squid"></i>ปลาหมึก</span>
+      <span><i class="s-sauce"></i>น้ำจิ้ม</span>
+      <span><i class="s-misc"></i>จิปาถะ</span>
+      <span><i class="s-profit"></i>กำไร</span>
+    </div>
+    <div class="stack" id="stack"></div>
+
+    <div class="totals">
+      <div class="tile"><div class="k">ต้นทุนรวม/ไม้</div><div class="v" id="tCost">—</div></div>
+      <div class="tile"><div class="k">กำไร/ไม้</div><div class="v" id="tProfit">—</div></div>
+      <div class="tile"><div class="k">กำไร %</div><div class="v" id="tMargin">—</div></div>
+      <div class="tile"><div class="k">ราคาแนะนำ</div><div class="v" id="tBreak">—</div></div>
+    </div>
+
+    <div class="flag" id="priceFlag"></div>
+
+    <div style="margin-top:18px;padding-top:16px;border-top:1px solid var(--line)">
+      <div class="legend" style="margin-bottom:8px"><span class="pill">เทียบกับเดลิเวอรี</span></div>
+      <table>
+        <thead><tr><th>ช่องทาง</th><th class="num">ขายได้</th><th class="num">เข้ากระเป๋า</th><th class="num">กำไร/ไม้</th></tr></thead>
+        <tbody id="channelRows"></tbody>
+      </table>
+      <p class="cap" id="channelNote" style="color:var(--muted);font-size:12.5px;margin:10px 0 0"></p>
+      <div class="row" style="margin-top:12px">
+        <label class="field"><span>แอปหัก GP (%)</span><input type="number" id="gp" class="w-sm" value="30" min="0" max="60" step="1"></label>
+        <label class="field"><span>ค่ากล่อง/ออเดอร์ (฿)</span><input type="number" id="pack" class="w-sm" value="5" min="0" step="1"></label>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    ตัวเลขตั้งต้นใช้ของร้านคุณจริง — หมึก 60 ฿/กก. · ขายไม้ละ 10 ฿ · โปร 10 แถม 1<br>
+    เจอตรงไหนที่หน้างานจริงทำไม่ได้ บอก Claude ได้เลย จะได้แก้ก่อนลงมือทำของจริง
+  </footer>
+</div>
+
+<script>
+// ── ข้อมูลตั้งต้น ──────────────────────────────────────────
+// bottle = ของที่ใช้ได้หลายหม้อ ต้องหารก่อนถึงจะรู้ต้นทุนต่อหม้อ
+const ingredients = [
+  { id:'squid',    name:'ปลาหมึกสด',      price:60,  unit:'กก.',  bottle:false },
+  { id:'chili',    name:'พริก',           price:150, unit:'กก.',  bottle:false },
+  { id:'garlic',   name:'กระเทียม',       price:150, unit:'กก.',  bottle:false },
+  { id:'lime',     name:'มะนาว',          price:5,   unit:'ลูก',  bottle:false },
+  { id:'coriander',name:'ผักชี',          price:10,  unit:'กำ',   bottle:false },
+  { id:'fishsauce',name:'น้ำปลา',         price:35,  unit:'ขวด',  bottle:true,  perBatch:10 },
+  { id:'tamarind', name:'น้ำมะขามเปียก',  price:60,  unit:'ขวด',  bottle:true,  perBatch:8  },
+  { id:'sugar',    name:'น้ำตาล',         price:25,  unit:'ถุง',  bottle:true,  perBatch:4  },
+]
+
+// สูตรน้ำจิ้มเริ่มต้น — ของที่ไม่ใช่ของขวดกรอกจำนวน ของขวดระบบหารให้
+const sauceUse = { chili:0.3, garlic:0.2, lime:10, coriander:2, fishsauce:1, tamarind:1, sugar:1 }
+
+const misc = [
+  { id:'charcoal', name:'ถ่าน',            amount:300 },
+  { id:'stick',    name:'ไม้เสียบ',        amount:120 },
+  { id:'bag',      name:'ถุง + ยางรัด',    amount:200 },
+  { id:'garnish',  name:'ผักชีโรยหน้า',    amount:250 },
+]
+
+const $ = (id) => document.getElementById(id)
+const baht = (n) => n.toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
+const ing = (id) => ingredients.find((i) => i.id === id)
+
+// ── สร้างตาราง ────────────────────────────────────────────
+function buildIngredients() {
+  $('ingRows').innerHTML = ingredients.map((i) => `
+    <tr>
+      <td>${i.name}</td>
+      <td class="num"><input type="number" class="w-sm" data-price="${i.id}" value="${i.price}" min="0" step="1"></td>
+      <td style="color:var(--muted)">/ ${i.unit}</td>
+      <td>
+        <label class="inline">
+          <input type="checkbox" data-bottle="${i.id}" ${i.bottle ? 'checked' : ''}>
+          <span data-bottlewrap="${i.id}" style="${i.bottle ? '' : 'display:none'}">
+            ใช้ได้ <input type="number" data-perbatch="${i.id}" value="${i.perBatch ?? 8}" min="1" step="1" style="width:56px"> หม้อ
+          </span>
+          <span data-once="${i.id}" style="${i.bottle ? 'display:none' : ''}">ใช้หมดครั้งเดียว</span>
+        </label>
+      </td>
+    </tr>`).join('')
+}
+
+function buildSauce() {
+  $('sauceRows').innerHTML = Object.keys(sauceUse).map((id) => {
+    const i = ing(id)
+    return `<tr data-sauce="${id}">
+      <td>${i.name}</td>
+      <td class="num">
+        <span data-bottleview="${id}" style="display:none;color:var(--muted);font-size:13px">1 / <b data-share="${id}"></b> ${i.unit}</span>
+        <input type="number" class="w-sm" data-use="${id}" value="${sauceUse[id]}" min="0" step="0.1">
+      </td>
+      <td style="color:var(--muted);font-size:13px">${i.unit}</td>
+      <td class="num" data-cost="${id}">—</td>
+    </tr>`
+  }).join('')
+}
+
+function buildMisc() {
+  $('miscRows').innerHTML = misc.map((m) => `
+    <tr><td>${m.name}</td>
+    <td class="num"><input type="number" class="w-md" data-misc="${m.id}" value="${m.amount}" min="0" step="10"></td></tr>`).join('')
+}
+
+// ── คิดเลข ────────────────────────────────────────────────
+function calc() {
+  // 1. อ่านราคาวัตถุดิบ
+  ingredients.forEach((i) => {
+    i.price  = Number($(`x`) || document.querySelector(`[data-price="${i.id}"]`).value) || 0
+    i.bottle = document.querySelector(`[data-bottle="${i.id}"]`).checked
+    const pb = document.querySelector(`[data-perbatch="${i.id}"]`)
+    i.perBatch = Math.max(1, Number(pb?.value) || 1)
+    document.querySelector(`[data-bottlewrap="${i.id}"]`).style.display = i.bottle ? '' : 'none'
+    document.querySelector(`[data-once="${i.id}"]`).style.display = i.bottle ? 'none' : ''
+  })
+
+  // 2. น้ำจิ้ม — ของขวดหารเอง ของอื่นใช้ตามที่กรอก
+  let batch = 0
+  Object.keys(sauceUse).forEach((id) => {
+    const i = ing(id)
+    const input = document.querySelector(`[data-use="${id}"]`)
+    const view  = document.querySelector(`[data-bottleview="${id}"]`)
+    let cost
+    if (i.bottle) {
+      cost = i.price / i.perBatch
+      input.style.display = 'none'
+      view.style.display = ''
+      document.querySelector(`[data-share="${id}"]`).textContent = i.perBatch
+    } else {
+      input.style.display = ''
+      view.style.display = 'none'
+      cost = (Number(input.value) || 0) * i.price
+    }
+    batch += cost
+    document.querySelector(`[data-cost="${id}"]`).textContent = baht(cost) + ' ฿'
+  })
+
+  const sauceSticks = Math.max(1, Number($('sauceSticks').value) || 1)
+  const sauceKg = Math.max(0.1, Number($('sauceKg').value) || 1)
+  const saucePerStick = batch / sauceSticks
+  $('sauceBatch').textContent = baht(batch) + ' ฿ / หม้อ'
+  $('sauceDetail').textContent =
+    `ได้ ${sauceKg} กก. (${baht(batch / sauceKg)} ฿/กก.) · ใช้ได้ ${sauceSticks} ไม้ → ${baht(saucePerStick)} ฿ ต่อไม้`
+
+  // 3. หมึก — ต้นทุนจริงจากที่เสียบได้จริง
+  const kg = Math.max(0.1, Number($('squidKg').value) || 1)
+  const sticks = Math.max(1, Number($('squidSticks').value) || 1)
+  const normal = Math.max(1, Number($('squidNormal').value) || 1)
+  const squidTotal = kg * ing('squid').price
+  const squidPerStick = squidTotal / sticks
+  const yieldNow = sticks / kg
+
+  $('squidCost').textContent = baht(squidPerStick) + ' ฿ / ไม้'
+  $('squidDetail').textContent =
+    `หมึก ${kg} กก. = ${baht(squidTotal)} ฿ ÷ ${sticks} ไม้ · ได้ ${yieldNow.toFixed(1)} ไม้/กก.`
+
+  const flag = $('yieldFlag')
+  const gap = (normal - yieldNow) / normal
+  if (gap > 0.25) {
+    flag.className = 'flag bad on'
+    flag.innerHTML = `⚠️ <b>ได้แค่ ${yieldNow.toFixed(1)} ไม้/กก. ปกติได้ ${normal}</b> — ต้นทุนพุ่งจาก
+      ${baht(ing('squid').price / normal)} เป็น ${baht(squidPerStick)} ฿/ไม้
+      <br>หมึกตัวเล็กกว่าปกติ หรือเสียบเสียเยอะ? ถ้าเป็นแบบนี้บ่อย ๆ ต้องคิดราคาขายใหม่`
+  } else if (gap > 0.1) {
+    flag.className = 'flag warn on'
+    flag.innerHTML = `ได้ ${yieldNow.toFixed(1)} ไม้/กก. น้อยกว่าปกติ (${normal}) อยู่หน่อย — ต้นทุนขยับขึ้นเป็น ${baht(squidPerStick)} ฿/ไม้`
+  } else if (yieldNow > normal * 1.1) {
+    flag.className = 'flag good on'
+    flag.innerHTML = `✅ ได้ ${yieldNow.toFixed(1)} ไม้/กก. มากกว่าปกติ — ต้นทุนลดเหลือ ${baht(squidPerStick)} ฿/ไม้`
+  } else {
+    flag.className = 'flag good on'
+    flag.innerHTML = `✅ ได้ตามปกติ ต้นทุนหมึก ${baht(squidPerStick)} ฿/ไม้`
+  }
+
+  // 4. จิปาถะ
+  let miscTotal = 0
+  misc.forEach((m) => {
+    m.amount = Number(document.querySelector(`[data-misc="${m.id}"]`).value) || 0
+    miscTotal += m.amount
+  })
+  const weekSticks = Math.max(1, Number($('weekSticks').value) || 1)
+  const miscPerStick = miscTotal / weekSticks
+  $('miscCost').textContent = baht(miscPerStick) + ' ฿ / ไม้'
+  $('miscDetail').textContent = `รวม ${baht(miscTotal)} ฿ ÷ ${weekSticks.toLocaleString('th-TH')} ไม้ที่ขายได้`
+
+  // 5. สรุป
+  const price = Math.max(1, Number($('price').value) || 1)
+  const target = Math.min(0.95, Math.max(0.01, (Number($('targetMargin').value) || 60) / 100))
+  const cost = squidPerStick + saucePerStick + miscPerStick
+  const profit = price - cost
+  const margin = profit / price
+
+  const pct = (v) => Math.max(0, (v / Math.max(price, cost)) * 100)
+  $('stack').innerHTML =
+    `<div class="s-squid" style="width:${pct(squidPerStick)}%">${baht(squidPerStick)}</div>` +
+    `<div class="s-sauce" style="width:${pct(saucePerStick)}%">${saucePerStick >= 0.3 ? baht(saucePerStick) : ''}</div>` +
+    `<div class="s-misc"  style="width:${pct(miscPerStick)}%">${miscPerStick >= 0.3 ? baht(miscPerStick) : ''}</div>` +
+    (profit > 0 ? `<div class="s-profit" style="width:${pct(profit)}%">${baht(profit)}</div>` : '')
+
+  $('tCost').textContent = baht(cost) + ' ฿'
+  $('tProfit').textContent = baht(profit) + ' ฿'
+  $('tMargin').textContent = (margin * 100).toFixed(0) + '%'
+  const suggest = Math.ceil(cost / (1 - target))
+  $('tBreak').textContent = suggest + ' ฿'
+  const pf = $('priceFlag')
+  if (profit <= 0) {
+    pf.className = 'flag bad on'
+    pf.innerHTML = `🚨 <b>ขาดทุนไม้ละ ${baht(-profit)} ฿</b> — ต้นทุน ${baht(cost)} แต่ขาย ${price}
+      <br>ต้องขายอย่างน้อย <b>${baht(cost)} ฿</b> ถึงจะเท่าทุน · อยากได้กำไร ${(target*100).toFixed(0)}% ต้องขาย <b>${suggest} ฿</b>`
+  } else if (Math.round(margin * 100) < Math.round(target * 100)) {
+    pf.className = 'flag warn on'
+    pf.innerHTML = `กำไร ${(margin*100).toFixed(0)}% ต่ำกว่าเป้า ${(target*100).toFixed(0)}%
+      — อยากได้ตามเป้าต้องขายไม้ละ <b>${suggest} ฿</b> (หรือลดต้นทุนลง ${baht(cost - price*(1-target))} ฿)`
+  } else {
+    pf.className = 'flag good on'
+    pf.innerHTML = `✅ กำไร ${(margin*100).toFixed(0)}% ถึงเป้าแล้ว ราคานี้ไปต่อได้ — ต้นทุน ${baht(cost)} ฿ ขาย ${price} ฿`
+  }
+
+  // เทียบช่องทาง
+  const gp = Math.min(0.6, Math.max(0, (Number($('gp').value) || 0) / 100))
+  const net = price * (1 - gp)
+
+  // เดลิเวอรีขายเป็นเซ็ต 8 ไม้ และตั้งเป้ากำไร 35% (ต่ำกว่าหน้าร้าน เพราะโดน GP ไปแล้ว)
+  const setQty = 8, setTarget = 0.35
+  // เดลิเวอรีมีค่ากล่องต่อออเดอร์ที่หน้าร้านไม่มี ต้องบวกเข้าไปก่อนคิดราคา
+  const pack = Math.max(0, Number($('pack').value) || 0)
+  const setCost = cost * setQty + pack
+  const setPrice = Math.max(5, Math.ceil(setCost / Math.max(0.05, 1 - gp - setTarget) / 5) * 5)
+  const setNet = setPrice * (1 - gp)
+
+  $('channelRows').innerHTML = `
+    <tr><td>🏠 หน้าร้าน · 1 ไม้</td><td class="num">${baht(price)} ฿</td><td class="num">${baht(price)} ฿</td>
+        <td class="num" style="color:${profit>0?'var(--good)':'var(--bad)'};font-weight:700">${baht(profit)} ฿</td></tr>
+    <tr><td>🛵 เดลิเวอรี · 1 ไม้ ราคาเท่าหน้าร้าน</td><td class="num">${baht(price)} ฿</td><td class="num">${baht(net)} ฿</td>
+        <td class="num" style="color:${net-cost-pack>0?'var(--good)':'var(--bad)'};font-weight:700">${baht(net - cost - pack)} ฿</td></tr>
+    <tr><td>🛵 เดลิเวอรี · เซ็ต ${setQty} ไม้ <span class="pill">แนะนำ</span></td>
+        <td class="num">${setPrice} ฿</td>
+        <td class="num">${baht(setNet)} ฿</td>
+        <td class="num" style="color:${setNet-setCost>0?'var(--good)':'var(--bad)'};font-weight:700">${baht((setNet - setCost)/setQty)} ฿</td></tr>`
+
+  $('channelNote').textContent =
+    `เซ็ต ${setQty} ไม้: ต้นทุนของ ${baht(cost*setQty)} + กล่อง ${baht(pack)} = ${baht(setCost)} ฿ · ขาย ${setPrice} ฿ หัก GP เหลือ ${baht(setNet)} ฿ · กำไรทั้งเซ็ต ${baht(setNet-setCost)} ฿`
+}
+
+buildIngredients(); buildSauce(); buildMisc(); calc()
+document.addEventListener('input', calc)
+document.addEventListener('change', calc)
+</script>
+</body>
+</html>
