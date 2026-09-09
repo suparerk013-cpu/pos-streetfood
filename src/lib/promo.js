@@ -4,6 +4,10 @@
  * เช่นตั้งไว้ทั้ง "ซื้อ 10 แถม 1" และ "ซื้อ 20 แถม 3" พร้อมกัน
  * ระบบจะเลือกชุดที่ลูกค้าได้ของแถมมากที่สุดให้เอง — ซื้อ 30 ได้แถม 4 (20 แถม 3 + 10 แถม 1)
  *
+ * จำนวนในตะกร้าคือ "ของที่ลูกค้ารับไปทั้งหมด" ไม่ใช่จำนวนที่คิดเงิน
+ * คนขายกด 11 ไม้ตามที่ลูกค้าขอ ระบบแยกเองว่าคิดเงิน 10 แถม 1 = 100 บาท
+ * ถ้าให้เลขที่กดเป็นจำนวนที่คิดเงิน คนขายจะกด 11 แล้วกลายเป็นเก็บ 110 แถมของอีก 1 ไม้ฟรี
+ *
  * ใช้เฉพาะช่องทางหน้าร้าน เพราะบนเดลิเวอรีโดนหัก GP อยู่แล้ว แถมอีกจะเหลือกำไรน้อยเกินไป
  */
 
@@ -72,62 +76,76 @@ export function qtyToNextFree(product, paidQty) {
 }
 
 /**
- * แถวของแถมที่จะเพิ่มลงบิล — ราคา 0 แต่ยังตัดสต็อกเต็มจำนวน
- * คิดจากยอดรวมต่อสินค้า ไม่ใช่ต่อแถวในตะกร้า เพราะสินค้าเดียวกันอาจแยกแถวได้
+ * แยกจำนวนที่ลูกค้ารับไป ออกเป็นจำนวนที่คิดเงินกับจำนวนที่แถม
+ *
+ * หาจำนวนที่คิดเงินน้อยที่สุดที่ "คิดเงิน + แถมที่ได้" ยังครอบคลุมของที่ลูกค้ารับไปครบ
+ * ลูกค้าเอา 11 ไม้ กับโปร 10 แถม 1 → คิดเงิน 10 แถม 1
+ * ลูกค้าเอา 20 ไม้ → คิดเงิน 19 แถม 1 เพราะซื้อ 19 ก็ได้แถม 1 ครบ 20 พอดีแล้ว
+ *
+ * แบ่งครึ่งหาได้เพราะ "คิดเงิน + แถม" ไม่มีทางลดลงเมื่อคิดเงินเพิ่ม
  */
-export function buildFreeLines(cart, productById, { channel = 'store' } = {}) {
-  if (channel !== 'store') return []
+export function splitPaidAndFree(product, totalQty, { channel = 'store' } = {}) {
+  const total = Math.max(0, Math.floor(Number(totalQty) || 0))
+  if (channel !== 'store' || !hasPromo(product) || total <= 0) return { paid: total, free: 0 }
 
-  const paidByProduct = new Map()
-  cart.forEach((item) => {
-    if (item.isFree) return
-    paidByProduct.set(item.productId, (paidByProduct.get(item.productId) ?? 0) + item.quantity)
-  })
-
-  const lines = []
-  paidByProduct.forEach((paidQty, productId) => {
-    const product = productById?.get(productId)
-    const qty = freeQtyFor(product, paidQty)
-    if (qty <= 0) return
-    lines.push({
-      key: `free|${productId}`,
-      productId,
-      name: product.name,
-      unit: product.unit ?? 'ชิ้น',
-      price: 0,
-      quantity: qty,
-      modifiers: {},
-      isFree: true,
-    })
-  })
-  return lines
-}
-
-/** จำนวนที่ต้องตัดสต็อกจริงต่อสินค้า = ที่ขาย + ที่แถม */
-export function effectiveQtyByProduct(cart, productById, { channel = 'store' } = {}) {
-  const map = new Map()
-  const add = (id, qty) => map.set(id, (map.get(id) ?? 0) + qty)
-  cart.forEach((item) => add(item.productId, item.quantity))
-  buildFreeLines(cart, productById, { channel }).forEach((line) => add(line.productId, line.quantity))
-  return map
+  let low = 0
+  let high = total
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2)
+    if (mid + freeQtyFor(product, mid) >= total) high = mid
+    else low = mid + 1
+  }
+  return { paid: low, free: total - low }
 }
 
 /**
- * ซื้อได้สูงสุดกี่ชิ้นจากสต็อกที่มี เมื่อคิดของแถมเข้าไปด้วย
- * สต็อก 11 กับโปร 10 แถม 1 → ซื้อได้ 10 เพราะชิ้นที่ 11 ต้องกันไว้แถม
+ * แตกตะกร้าเป็นบรรทัดที่คิดเงินกับบรรทัดของแถม สำหรับออกบิล
  *
- * หาด้วยการแบ่งครึ่งได้ เพราะ "ซื้อ + แถม" ไม่มีทางลดลงเมื่อซื้อเพิ่มขึ้น
+ * คิดทีละบรรทัดได้เพราะสินค้าหนึ่งตัวมีได้บรรทัดเดียวในตะกร้า
+ * (คีย์ของบรรทัดคือ product id ตั้งแต่เลิกใช้ตัวเลือกความเผ็ด/น้ำจิ้ม)
  */
-export function maxPaidQty(product, stockQty, { channel = 'store' } = {}) {
-  if (!Number.isFinite(stockQty)) return Infinity
-  if (channel !== 'store' || !hasPromo(product)) return stockQty
+export function splitCart(cart = [], productById, { channel = 'store' } = {}) {
+  const paidLines = []
+  const freeLines = []
 
-  let low = 0
-  let high = Math.max(0, Math.floor(stockQty))
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2)
-    if (mid + freeQtyFor(product, mid) <= stockQty) low = mid
-    else high = mid - 1
-  }
-  return low
+  cart.forEach((item) => {
+    const product = productById?.get(item.productId)
+    const { paid, free } = splitPaidAndFree(product, item.quantity, { channel })
+    if (paid > 0) paidLines.push({ ...item, quantity: paid })
+    if (free > 0) {
+      freeLines.push({
+        key: `free|${item.key}`,
+        productId: item.productId,
+        name: item.name,
+        unit: item.unit ?? 'ชิ้น',
+        price: 0,
+        quantity: free,
+        modifiers: {},
+        isFree: true,
+      })
+    }
+  })
+
+  return { paidLines, freeLines }
+}
+
+/** ยอดที่ต้องเก็บจริงจากตะกร้า — หักของแถมออกแล้ว */
+export function cartSubtotal(cart = [], productById, { channel = 'store' } = {}) {
+  return splitCart(cart, productById, { channel }).paidLines.reduce(
+    (sum, line) => sum + line.price * line.quantity,
+    0,
+  )
+}
+
+/** ข้อมูลของแถวเดียวในตะกร้า ใช้แสดงราคาและป้าย "แถม N" */
+export function lineBreakdown(item, product, { channel = 'store' } = {}) {
+  const { paid, free } = splitPaidAndFree(product, item?.quantity, { channel })
+  return { paid, free, lineTotal: paid * (item?.price ?? 0) }
+}
+
+/** จำนวนที่ต้องตัดสต็อกต่อสินค้า = จำนวนในตะกร้า เพราะนับรวมของแถมอยู่แล้ว */
+export function effectiveQtyByProduct(cart = []) {
+  const map = new Map()
+  cart.forEach((item) => map.set(item.productId, (map.get(item.productId) ?? 0) + item.quantity))
+  return map
 }

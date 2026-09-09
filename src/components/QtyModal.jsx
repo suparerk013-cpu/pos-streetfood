@@ -4,7 +4,7 @@ import Numpad from './Numpad'
 
 function QtyModal({ item, onClose, onConfirm, maxQty }) {
   const [value, setValue] = useState('0')
-  // maxQty เผื่อของแถมไว้แล้ว (สต็อก 11 + โปร 10 แถม 1 → ซื้อได้ 10)
+  // จำนวนที่กดคือของที่ลูกค้ารับไปทั้งหมด เพดานจึงเป็นสต็อกที่มีตรง ๆ
   const stockQty = maxQty ?? item.stockQty ?? Infinity
   const qty = Number(value)
   const isValid = qty > 0 && qty <= stockQty

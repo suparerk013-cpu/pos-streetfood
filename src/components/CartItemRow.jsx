@@ -1,11 +1,16 @@
 import { useState } from 'react'
-import { calcItemTotal, formatModifiers } from '../lib/cart'
+import { formatModifiers } from '../lib/cart'
+import { lineBreakdown } from '../lib/promo'
 import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement, onRemove, onSetQuantity }) {
+function CartItemRow({ item, cartQtyForProduct, product, channel = 'store', onIncrement, onDecrement, onRemove, onSetQuantity }) {
   const modifiersText = formatModifiers(item.modifiers)
-  const atLimit = cartQtyForProduct >= (maxQty ?? item.stockQty ?? Infinity)
+  const maxQty = item.stockQty ?? Infinity
+  const atLimit = cartQtyForProduct >= maxQty
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
+
+  // จำนวนในตะกร้าคือของที่ลูกค้ารับไปทั้งหมด ราคาที่โชว์ต้องหักของแถมออกแล้ว
+  const { free, lineTotal } = lineBreakdown(item, product, { channel })
 
   return (
     <div className="py-3 flex items-center gap-3">
@@ -14,7 +19,12 @@ function CartItemRow({ item, cartQtyForProduct, maxQty, onIncrement, onDecrement
         {/* บิลเก่าที่เคยบันทึกตัวเลือกไว้ยังแสดงได้ ถึงจะเลิกให้เลือกตอนขายแล้ว */}
         {modifiersText && <p className="text-sm text-gray-400 truncate">{modifiersText}</p>}
         <p className="text-orange-600 font-semibold">
-          {calcItemTotal(item).toLocaleString()} ฿
+          {lineTotal.toLocaleString()} ฿
+          {free > 0 && (
+            <span className="ml-2 text-xs font-bold text-green-600">
+              🎁 แถม {free} {item.unit ?? 'ชิ้น'}
+            </span>
+          )}
         </p>
       </div>
 

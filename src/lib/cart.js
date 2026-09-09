@@ -54,14 +54,13 @@ export function updateItemQuantity(cart, key, delta) {
 /**
  * ตั้งจำนวนตรง ๆ จากแป้นตัวเลข
  *
- * maxPaidQty คือเพดานที่เผื่อของแถมแล้ว เช่นสต็อกเหลือ 11 กับโปร 10 แถม 1
- * ซื้อได้สูงสุด 10 ไม่ใช่ 11 เพราะไม้ที่ 11 ต้องกันไว้แถม
+ * จำนวนที่กดคือของที่ลูกค้ารับไปทั้งหมด รวมของแถมแล้ว เพดานจึงเป็นสต็อกที่มีตรง ๆ
  */
-export function setItemQuantity(cart, key, qty, maxPaidQty) {
+export function setItemQuantity(cart, key, qty, maxQty) {
   return cart
     .map((item) => {
       if (item.key !== key) return item
-      const ceiling = maxPaidQty ?? item.stockQty ?? Infinity
+      const ceiling = maxQty ?? item.stockQty ?? Infinity
       const otherQty = cart
         .filter((other) => other.productId === item.productId && other.key !== key)
         .reduce((sum, other) => sum + other.quantity, 0)

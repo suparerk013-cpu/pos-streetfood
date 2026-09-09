@@ -10,10 +10,9 @@ import { useAppData } from '../lib/appDataContext'
 import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
 import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
 import { bundleStock } from '../lib/pricing'
-import { buildFreeLines, maxPaidQty } from '../lib/promo'
+import { cartSubtotal, splitCart } from '../lib/promo'
 import {
   addItemToCart,
-  calcCartTotal,
   removeItem,
   setItemQuantity,
   updateItemQuantity,
@@ -58,36 +57,28 @@ function SalesPage() {
     [activeProducts, channel, productById],
   )
 
-  /** ของแถมคิดจากตะกร้า ไม่ได้เก็บในตะกร้า จะได้ไม่ทบซ้อนกันเอง */
-  const freeLines = useMemo(
-    () => buildFreeLines(cart, productById, { channel }),
+  /**
+   * จำนวนในตะกร้าคือของที่ลูกค้ารับไปทั้งหมด แตกออกเป็นบรรทัดที่คิดเงินกับบรรทัดแถม
+   * ตอนออกบิลเท่านั้น ตะกร้าบนหน้าจอยังโชว์จำนวนเต็มที่คนขายกดไว้
+   */
+  const { paidLines, freeLines } = useMemo(
+    () => splitCart(cart, productById, { channel }),
     [cart, productById, channel],
   )
-  const cartWithFree = useMemo(() => [...cart, ...freeLines], [cart, freeLines])
-
-  /** เพดานจำนวนที่ซื้อได้ต่อสินค้า เผื่อของแถมไว้แล้ว */
-  const maxPaidByProduct = useMemo(() => {
-    const map = new Map()
-    cart.forEach((item) => {
-      if (map.has(item.productId)) return
-      const product = productById.get(item.productId)
-      map.set(item.productId, maxPaidQty(product, item.stockQty ?? Infinity, { channel }))
-    })
-    return map
-  }, [cart, productById, channel])
 
   const unpricedDelivery = useMemo(
     () => (channel === 'delivery' ? channelProducts.filter(missingDeliveryPrice) : []),
     [channel, channelProducts],
   )
 
+  /** จำนวนในตะกร้ารวมของแถมอยู่แล้ว ใช้ตัวเลขนี้เทียบกับสต็อกได้ตรง ๆ */
   const cartQtyByProductId = useMemo(() => {
     const map = new Map()
-    cartWithFree.forEach((item) => {
+    cart.forEach((item) => {
       map.set(item.productId, (map.get(item.productId) ?? 0) + item.quantity)
     })
     return map
-  }, [cartWithFree])
+  }, [cart])
 
   const categories = useMemo(
     () => [...new Set(channelProducts.map((p) => p.category).filter(Boolean))],
@@ -117,16 +108,11 @@ function SalesPage() {
   const handleDecrement = (key) => setCart((prev) => updateItemQuantity(prev, key, -1))
   const handleRemove = (key) => setCart((prev) => removeItem(prev, key))
   /**
-   * ตั้งจำนวนตรง ๆ จากแป้นตัวเลข — เพดานต้องเผื่อของแถมด้วย
-   * สต็อกเหลือ 11 กับโปร 10 แถม 1 ซื้อได้แค่ 10 เพราะไม้ที่ 11 ต้องกันไว้แถม
+   * ตั้งจำนวนตรง ๆ จากแป้นตัวเลข
+   * เพดานคือสต็อกที่มี เพราะเลขที่กดคือของที่ออกจากร้านจริง รวมของแถมแล้ว
    */
   const handleSetQuantity = (key, qty) =>
-    setCart((prev) => {
-      const item = prev.find((i) => i.key === key)
-      const product = item ? productById.get(item.productId) : null
-      const ceiling = maxPaidQty(product, item?.stockQty ?? Infinity, { channel })
-      return setItemQuantity(prev, key, qty, ceiling)
-    })
+    setCart((prev) => setItemQuantity(prev, key, qty))
 
   const handleCheckoutSuccess = (result) => {
     setCheckoutOpen(false)
@@ -139,7 +125,8 @@ function SalesPage() {
     setCheckoutOpen(true)
   }
 
-  const total = calcCartTotal(cart)
+  /** ยอดที่เก็บจริง หักของแถมออกแล้ว — 11 ไม้ กับโปร 10 แถม 1 คือ 100 บาท */
+  const total = cartSubtotal(cart, productById, { channel })
 
   return (
     <div className="h-full w-full flex flex-col bg-orange-50 overflow-hidden">
@@ -247,7 +234,9 @@ function SalesPage() {
           <div className="md:hidden">
             <CartSheet
               cart={cart}
-              freeLines={freeLines}
+              total={total}
+              productById={productById}
+              channel={channel}
               cartQtyByProductId={cartQtyByProductId}
               onIncrement={handleIncrement}
               onDecrement={handleDecrement}
@@ -280,22 +269,13 @@ function SalesPage() {
                     key={item.key}
                     item={item}
                     cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
-                    maxQty={maxPaidByProduct.get(item.productId)}
+                    product={productById.get(item.productId)}
+                    channel={channel}
                     onIncrement={handleIncrement}
                     onDecrement={handleDecrement}
                     onRemove={handleRemove}
                     onSetQuantity={handleSetQuantity}
                   />
-                ))}
-                {freeLines.map((line) => (
-                  <div key={line.key} className="flex items-center justify-between py-2.5">
-                    <span className="text-sm font-semibold text-green-700">
-                      🎁 แถมฟรี · {line.name}
-                    </span>
-                    <span className="text-sm font-bold text-green-600">
-                      {line.quantity} {line.unit}
-                    </span>
-                  </div>
                 ))}
               </>
             )}
@@ -325,7 +305,7 @@ function SalesPage() {
 
       {checkoutOpen && (
         <CheckoutModal
-          cart={cart}
+          cart={paidLines}
           freeLines={freeLines}
           channel={channel}
           platform={channel === 'delivery' ? platform : null}

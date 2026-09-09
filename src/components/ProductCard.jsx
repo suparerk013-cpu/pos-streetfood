@@ -9,7 +9,7 @@ function ProductCard({ product, cartQty = 0, onSelect }) {
       type="button"
       onClick={() => !disabled && onSelect(product)}
       disabled={disabled}
-      className={`relative min-h-[100px] rounded-2xl border transition-all flex flex-col items-center justify-center gap-1.5 px-3 py-4 text-center overflow-hidden ${
+      className={`relative min-h-[100px] rounded-2xl border transition-all flex flex-col items-center justify-center gap-1.5 px-3 pt-8 pb-4 text-center overflow-hidden ${
         disabled
           ? 'bg-gray-100 border-gray-200 shadow-sm'
           : 'bg-gradient-to-br from-white to-orange-50 border-orange-200 shadow-md active:scale-[0.96] active:shadow-sm'
