@@ -23,6 +23,23 @@ function Step($n, $text) {
     Write-Host "=== ขั้นที่ $n : $text ===" -ForegroundColor Cyan
 }
 function Ok($text) { Write-Host "OK: $text" -ForegroundColor Green }
+
+# อัปโหลดขึ้น Firebase เจอเน็ตสะดุดแล้วล้มบ่อย ("Failed to make request")
+# ของที่ build ไว้ยังอยู่ครบ ลองใหม่ได้เลย ไม่ต้องเริ่มจากศูนย์
+function DeployWithRetry($firebase, $target, $label) {
+    $delays = @(5, 15, 30)
+    for ($i = 0; $i -lt 4; $i++) {
+        & $firebase deploy --only $target
+        if ($LASTEXITCODE -eq 0) { return $true }
+        if ($i -lt 3) {
+            $wait = $delays[$i]
+            Write-Host ""
+            Write-Host "$label ไม่ผ่าน (น่าจะเน็ตสะดุด) - รอ $wait วินาทีแล้วลองใหม่ ครั้งที่ $($i + 2) จาก 4" -ForegroundColor Yellow
+            Start-Sleep -Seconds $wait
+        }
+    }
+    return $false
+}
 function Fail($text) {
     Write-Host ""
     Write-Host "หยุด: $text" -ForegroundColor Red
@@ -121,13 +138,18 @@ Step 5 "build"
 if ($LASTEXITCODE -ne 0) { Fail "build ไม่สำเร็จ" }
 
 Step 6 "deploy เว็บ"
-& $FIREBASE deploy --only hosting
-if ($LASTEXITCODE -ne 0) { Fail "deploy hosting ไม่สำเร็จ" }
+if (-not (DeployWithRetry $FIREBASE "hosting" "deploy เว็บ")) {
+    Write-Host ""
+    Write-Host "ลองครบ 4 ครั้งแล้วยังไม่ผ่าน ตรวจอินเทอร์เน็ตแล้วรัน deploy.cmd ใหม่" -ForegroundColor Yellow
+    Write-Host "ถ้ายังไม่หาย ลองล็อกอิน Firebase ใหม่:  firebase login --reauth" -ForegroundColor White
+    Fail "deploy hosting ไม่สำเร็จ"
+}
 Ok "เว็บอัปเดตแล้ว"
 
 Step 7 "deploy security rules (ปิดช่องโหว่ฐานข้อมูล)"
-& $FIREBASE deploy --only firestore:rules,firestore:indexes
-if ($LASTEXITCODE -ne 0) { Fail "deploy rules ไม่สำเร็จ - เว็บใช้ได้ปกติ แต่ฐานข้อมูลยังไม่ถูกปิด" }
+if (-not (DeployWithRetry $FIREBASE "firestore:rules,firestore:indexes" "deploy rules")) {
+    Fail "deploy rules ไม่สำเร็จ - เว็บใช้ได้ปกติ แต่ฐานข้อมูลยังไม่ถูกปิด"
+}
 Ok "ฐานข้อมูลถูกปิดแล้ว เฉพาะคนที่ล็อกอินเท่านั้นที่เข้าถึงได้"
 
 Write-Host ""
