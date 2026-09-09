@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   cartSubtotal,
   effectiveQtyByProduct,
+  maxKeyableQty,
   freeQtyFor,
   hasPromo,
   lineBreakdown,
@@ -123,65 +124,106 @@ describe('โปรหลายชั้น', () => {
  * จำนวนในตะกร้าคือของที่ลูกค้ารับไปทั้งหมด ไม่ใช่จำนวนที่คิดเงิน
  * คนขายกด 11 ไม้ตามที่ลูกค้าขอ ต้องเก็บ 100 บาท ไม่ใช่ 110 แล้วแถมเพิ่มอีกไม้
  */
-describe('splitPaidAndFree — กด 11 ไม้ ต้องเป็น 100 บาท', () => {
+describe('splitPaidAndFree — ลูกค้าได้ของแถมเต็มสิทธิ์เสมอ', () => {
   // ปลาหมึก 10 ฿/ไม้ · ซื้อ 10 แถม 1
+  // [กด, คิดเงิน, แถม, ส่งให้ลูกค้า]
   const cases = [
-    [9, 9, 0],
-    [10, 10, 0],
-    [11, 10, 1],
-    [12, 11, 1],
-    [20, 19, 1],
-    [21, 20, 1],
-    [22, 20, 2],
-    [33, 30, 3],
+    [9, 9, 0, 9],
+    [10, 10, 1, 11],
+    [11, 10, 1, 11],
+    [12, 11, 1, 12],
+    [19, 18, 1, 19],
+    [20, 19, 1, 20],
+    [21, 20, 2, 22],
+    [22, 20, 2, 22],
   ]
 
-  it.each(cases)('รับไป %i ไม้ → คิดเงิน %i แถม %i', (total, paid, free) => {
-    expect(splitPaidAndFree(squid, total)).toEqual({ paid, free })
+  it.each(cases)('กด %i → คิดเงิน %i แถม %i ส่งให้ %i', (asked, paid, free, total) => {
+    expect(splitPaidAndFree(squid, asked)).toEqual({ paid, free, total })
   })
 
-  it('ที่คิดเงิน + ที่แถม ต้องเท่ากับที่ลูกค้ารับไปเสมอ และแถมต้องไม่เกินสิทธิ์', () => {
-    for (let total = 0; total <= 60; total += 1) {
-      const { paid, free } = splitPaidAndFree(squid, total)
-      expect(paid + free).toBe(total)
-      expect(free).toBeLessThanOrEqual(freeQtyFor(squid, paid))
+  it('กด 10 กับ กด 11 ต้องได้ผลเหมือนกันเป๊ะ คนขายกดเลขไหนก็ไม่ผิด', () => {
+    expect(splitPaidAndFree(squid, 10)).toEqual(splitPaidAndFree(squid, 11))
+  })
+
+  it('ของที่ส่งให้ต้องไม่น้อยกว่าที่ลูกค้าขอ และแถมต้องเต็มสิทธิ์ของยอดที่คิดเงิน', () => {
+    for (let asked = 0; asked <= 60; asked += 1) {
+      const { paid, free, total } = splitPaidAndFree(squid, asked)
+      expect(total).toBe(paid + free)
+      expect(total).toBeGreaterThanOrEqual(asked)
+      expect(free).toBe(freeQtyFor(squid, paid))
     }
   })
 
-  it('คิดเงินน้อยที่สุดเท่าที่ยังครอบคลุมของที่รับไปครบ', () => {
-    for (let total = 1; total <= 60; total += 1) {
-      const { paid } = splitPaidAndFree(squid, total)
+  it('คิดเงินน้อยที่สุดเท่าที่ยังส่งของครบตามที่ลูกค้าขอ', () => {
+    for (let asked = 1; asked <= 60; asked += 1) {
+      const { paid } = splitPaidAndFree(squid, asked)
       if (paid > 0) {
-        expect(paid - 1 + freeQtyFor(squid, paid - 1)).toBeLessThan(total)
+        expect(paid - 1 + freeQtyFor(squid, paid - 1)).toBeLessThan(asked)
       }
     }
   })
 
-  it('สินค้าไม่มีโปร คิดเงินเต็มจำนวน', () => {
-    expect(splitPaidAndFree(mussel, 11)).toEqual({ paid: 11, free: 0 })
+  it('สินค้าไม่มีโปร คิดเงินเต็มจำนวน ไม่มีของแถม', () => {
+    expect(splitPaidAndFree(mussel, 11)).toEqual({ paid: 11, free: 0, total: 11 })
   })
 
   it('เดลิเวอรีไม่แถม คิดเงินเต็มจำนวน', () => {
-    expect(splitPaidAndFree(squid, 11, { channel: 'delivery' })).toEqual({ paid: 11, free: 0 })
+    expect(splitPaidAndFree(squid, 11, { channel: 'delivery' })).toEqual({ paid: 11, free: 0, total: 11 })
   })
 
-  it('โปรหลายชั้นก็แยกถูก — ซื้อ 20 แถม 3 คู่กับ ซื้อ 10 แถม 1', () => {
+  it('โปรหลายชั้นเลือกทางที่ลูกค้าจ่ายน้อยที่สุดที่ยังได้ของครบตามที่ขอ', () => {
     const tiered = { id: 'p3', promos: [{ buy: 10, free: 1 }, { buy: 20, free: 3 }] }
-    expect(splitPaidAndFree(tiered, 23)).toEqual({ paid: 20, free: 3 })
-    expect(splitPaidAndFree(tiered, 22)).toEqual({ paid: 20, free: 2 })
+    // ขอ 20 ไม้: จ่าย 19 ได้แถม 1 ครบ 20 พอดี ถูกกว่าจ่าย 20 แล้วได้ 23
+    expect(splitPaidAndFree(tiered, 20)).toEqual({ paid: 19, free: 1, total: 20 })
+    // ขอ 21 ขึ้นไป ต้องข้ามไปชั้น 20 แถม 3 แล้วได้ 23 ไม้เต็มสิทธิ์
+    expect(splitPaidAndFree(tiered, 21)).toEqual({ paid: 20, free: 3, total: 23 })
+    expect(splitPaidAndFree(tiered, 23)).toEqual({ paid: 20, free: 3, total: 23 })
+  })
+})
+
+describe('maxKeyableQty', () => {
+  it('สต็อก 10 กดได้แค่ 9 เพราะกด 10 ต้องส่งของ 11 ไม้ซึ่งไม่มี', () => {
+    expect(maxKeyableQty(squid, 10)).toBe(9)
+  })
+
+  it('สต็อก 11 กดได้ 11 พอดี — จ่าย 10 แถม 1', () => {
+    expect(maxKeyableQty(squid, 11)).toBe(11)
+  })
+
+  it('สต็อก 17 กดได้ 17 เต็ม', () => {
+    expect(maxKeyableQty(squid, 17)).toBe(17)
+  })
+
+  it('กดเต็มเพดานแล้วของที่ต้องส่งต้องไม่เกินสต็อก และกดเพิ่มอีกชิ้นต้องเกิน', () => {
+    for (let stock = 0; stock <= 60; stock += 1) {
+      const cap = maxKeyableQty(squid, stock)
+      expect(splitPaidAndFree(squid, cap).total).toBeLessThanOrEqual(stock)
+      expect(splitPaidAndFree(squid, cap + 1).total).toBeGreaterThan(stock)
+    }
+  })
+
+  it('สินค้าไม่มีโปร เพดานคือสต็อกตรง ๆ', () => {
+    expect(maxKeyableQty(mussel, 10)).toBe(10)
+  })
+
+  it('เดลิเวอรีไม่แถม เพดานคือสต็อกตรง ๆ', () => {
+    expect(maxKeyableQty(squid, 10, { channel: 'delivery' })).toBe(10)
   })
 })
 
 describe('splitCart / cartSubtotal', () => {
-  it('กด 11 ไม้ → บิลแยกเป็นขาย 10 กับแถม 1 เก็บเงิน 100', () => {
-    const cart = [line('p1', 11)]
+  it('กด 10 ไม้ → เก็บ 100 และมีบรรทัดแถม 1 ไม้ ส่งของรวม 11', () => {
+    const cart = [line('p1', 10)]
     const { paidLines, freeLines } = splitCart(cart, productById)
 
-    expect(paidLines).toHaveLength(1)
     expect(paidLines[0].quantity).toBe(10)
-    expect(freeLines).toHaveLength(1)
     expect(freeLines[0]).toMatchObject({ productId: 'p1', quantity: 1, price: 0, isFree: true })
     expect(cartSubtotal(cart, productById)).toBe(100)
+  })
+
+  it('กด 11 ไม้ → เก็บ 100 เท่ากับกด 10', () => {
+    expect(cartSubtotal([line('p1', 11)], productById)).toBe(100)
   })
 
   it('กด 12 ไม้ → เก็บ 110', () => {
@@ -189,8 +231,7 @@ describe('splitCart / cartSubtotal', () => {
   })
 
   it('สินค้าที่ไม่มีโปรไม่มีบรรทัดแถม', () => {
-    const { freeLines } = splitCart([line('p2', 5)], productById)
-    expect(freeLines).toHaveLength(0)
+    expect(splitCart([line('p2', 5)], productById).freeLines).toHaveLength(0)
   })
 
   it('เดลิเวอรีไม่มีของแถม เก็บเต็มจำนวน', () => {
@@ -205,18 +246,18 @@ describe('splitCart / cartSubtotal', () => {
 })
 
 describe('lineBreakdown', () => {
-  it('แถวในตะกร้าโชว์ราคาที่หักของแถมแล้ว พร้อมจำนวนที่แถม', () => {
-    expect(lineBreakdown(line('p1', 11), squid)).toEqual({ paid: 10, free: 1, lineTotal: 100 })
+  it('กด 10 โชว์ราคา 100 พร้อมบอกว่าต้องส่ง 11 ไม้', () => {
+    expect(lineBreakdown(line('p1', 10), squid)).toEqual({ paid: 10, free: 1, total: 11, lineTotal: 100 })
   })
 
   it('สินค้าไม่มีโปรโชว์ราคาเต็ม', () => {
-    expect(lineBreakdown(line('p2', 3), mussel)).toEqual({ paid: 3, free: 0, lineTotal: 30 })
+    expect(lineBreakdown(line('p2', 3), mussel)).toEqual({ paid: 3, free: 0, total: 3, lineTotal: 30 })
   })
 })
 
 describe('effectiveQtyByProduct', () => {
-  it('ตัดสต็อกเท่ากับจำนวนที่กด เพราะรวมของแถมอยู่แล้ว', () => {
-    const map = effectiveQtyByProduct([line('p1', 11), line('p2', 2)])
+  it('ตัดสต็อกเท่ากับที่คิดเงินบวกที่แถม ไม่ใช่แค่เลขที่กด', () => {
+    const map = effectiveQtyByProduct([line('p1', 10), line('p2', 2)], productById)
     expect(map.get('p1')).toBe(11)
     expect(map.get('p2')).toBe(2)
   })

@@ -4,9 +4,9 @@
  * เช่นตั้งไว้ทั้ง "ซื้อ 10 แถม 1" และ "ซื้อ 20 แถม 3" พร้อมกัน
  * ระบบจะเลือกชุดที่ลูกค้าได้ของแถมมากที่สุดให้เอง — ซื้อ 30 ได้แถม 4 (20 แถม 3 + 10 แถม 1)
  *
- * จำนวนในตะกร้าคือ "ของที่ลูกค้ารับไปทั้งหมด" ไม่ใช่จำนวนที่คิดเงิน
- * คนขายกด 11 ไม้ตามที่ลูกค้าขอ ระบบแยกเองว่าคิดเงิน 10 แถม 1 = 100 บาท
- * ถ้าให้เลขที่กดเป็นจำนวนที่คิดเงิน คนขายจะกด 11 แล้วกลายเป็นเก็บ 110 แถมของอีก 1 ไม้ฟรี
+ * เลขที่คนขายกดคือ "จำนวนที่ลูกค้าขอ" ระบบคิดเงินให้เอง และลูกค้าได้ของแถมเต็มสิทธิ์เสมอ
+ * กด 10 หรือกด 11 ได้ผลเหมือนกัน — เก็บ 100 บาท ส่งของ 11 ไม้ คนขายกดเลขไหนก็ไม่ผิด
+ * ถ้าให้เลขที่กดเป็นจำนวนที่คิดเงินตรง ๆ กด 11 จะกลายเป็นเก็บ 110 แล้วแถมอีก 1 ไม้ฟรี
  *
  * ใช้เฉพาะช่องทางหน้าร้าน เพราะบนเดลิเวอรีโดนหัก GP อยู่แล้ว แถมอีกจะเหลือกำไรน้อยเกินไป
  */
@@ -84,18 +84,45 @@ export function qtyToNextFree(product, paidQty) {
  *
  * แบ่งครึ่งหาได้เพราะ "คิดเงิน + แถม" ไม่มีทางลดลงเมื่อคิดเงินเพิ่ม
  */
-export function splitPaidAndFree(product, totalQty, { channel = 'store' } = {}) {
-  const total = Math.max(0, Math.floor(Number(totalQty) || 0))
-  if (channel !== 'store' || !hasPromo(product) || total <= 0) return { paid: total, free: 0 }
+export function splitPaidAndFree(product, askedQty, { channel = 'store' } = {}) {
+  const asked = Math.max(0, Math.floor(Number(askedQty) || 0))
+  if (channel !== 'store' || !hasPromo(product) || asked <= 0) {
+    return { paid: asked, free: 0, total: asked }
+  }
 
   let low = 0
-  let high = total
+  let high = asked
   while (low < high) {
     const mid = Math.floor((low + high) / 2)
-    if (mid + freeQtyFor(product, mid) >= total) high = mid
+    if (mid + freeQtyFor(product, mid) >= asked) high = mid
     else low = mid + 1
   }
-  return { paid: low, free: total - low }
+
+  // ของแถมให้เต็มสิทธิ์ของจำนวนที่คิดเงินเสมอ ไม่ตัดให้พอดีกับที่ลูกค้าขอ
+  // ลูกค้าขอ 10 ไม้ จ่ายครบ 10 แล้วก็ต้องได้แถม 1 รวมเป็น 11 ไม้
+  const free = freeQtyFor(product, low)
+  return { paid: low, free, total: low + free }
+}
+
+/**
+ * กดได้สูงสุดกี่ชิ้นจากสต็อกที่มี เมื่อคิดของแถมที่ต้องส่งมอบด้วย
+ *
+ * สต็อก 10 ไม้ กับโปร 10 แถม 1 กดได้แค่ 9 เพราะถ้ากด 10 ต้องส่งของ 11 ไม้
+ * ซึ่งไม่มีในสต็อก ต้องเติมของก่อนถึงจะขายโปรได้
+ */
+export function maxKeyableQty(product, stockQty, { channel = 'store' } = {}) {
+  if (!Number.isFinite(stockQty)) return Infinity
+  const stock = Math.max(0, Math.floor(stockQty))
+  if (channel !== 'store' || !hasPromo(product)) return stock
+
+  let low = 0
+  let high = stock
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2)
+    if (mid + freeQtyFor(product, mid) <= stock) low = mid
+    else high = mid - 1
+  }
+  return low + freeQtyFor(product, low)
 }
 
 /**
@@ -137,15 +164,19 @@ export function cartSubtotal(cart = [], productById, { channel = 'store' } = {})
   )
 }
 
-/** ข้อมูลของแถวเดียวในตะกร้า ใช้แสดงราคาและป้าย "แถม N" */
+/** ข้อมูลของแถวเดียวในตะกร้า ใช้แสดงราคา ป้าย "แถม N" และจำนวนที่ต้องส่งมอบ */
 export function lineBreakdown(item, product, { channel = 'store' } = {}) {
-  const { paid, free } = splitPaidAndFree(product, item?.quantity, { channel })
-  return { paid, free, lineTotal: paid * (item?.price ?? 0) }
+  const { paid, free, total } = splitPaidAndFree(product, item?.quantity, { channel })
+  return { paid, free, total, lineTotal: paid * (item?.price ?? 0) }
 }
 
-/** จำนวนที่ต้องตัดสต็อกต่อสินค้า = จำนวนในตะกร้า เพราะนับรวมของแถมอยู่แล้ว */
-export function effectiveQtyByProduct(cart = []) {
+/** จำนวนที่ต้องตัดสต็อกต่อสินค้า = ที่คิดเงิน + ที่แถม */
+export function effectiveQtyByProduct(cart = [], productById, { channel = 'store' } = {}) {
   const map = new Map()
-  cart.forEach((item) => map.set(item.productId, (map.get(item.productId) ?? 0) + item.quantity))
+  cart.forEach((item) => {
+    const product = productById?.get(item.productId)
+    const { total } = splitPaidAndFree(product, item.quantity, { channel })
+    map.set(item.productId, (map.get(item.productId) ?? 0) + total)
+  })
   return map
 }

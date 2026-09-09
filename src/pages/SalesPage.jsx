@@ -10,7 +10,7 @@ import { useAppData } from '../lib/appDataContext'
 import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
 import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
 import { bundleStock } from '../lib/pricing'
-import { cartSubtotal, splitCart } from '../lib/promo'
+import { cartSubtotal, maxKeyableQty, splitCart } from '../lib/promo'
 import {
   addItemToCart,
   removeItem,
@@ -71,7 +71,20 @@ function SalesPage() {
     [channel, channelProducts],
   )
 
-  /** จำนวนในตะกร้ารวมของแถมอยู่แล้ว ใช้ตัวเลขนี้เทียบกับสต็อกได้ตรง ๆ */
+  /**
+   * กดได้สูงสุดกี่ชิ้นต่อสินค้า
+   * ต่ำกว่าสต็อกได้ เพราะกดครบชุดโปรแล้วต้องมีของเหลือพอส่งของแถมด้วย
+   */
+  const maxByProduct = useMemo(() => {
+    const map = new Map()
+    cart.forEach((item) => {
+      if (map.has(item.productId)) return
+      const product = productById.get(item.productId)
+      map.set(item.productId, maxKeyableQty(product, item.stockQty ?? Infinity, { channel }))
+    })
+    return map
+  }, [cart, productById, channel])
+
   const cartQtyByProductId = useMemo(() => {
     const map = new Map()
     cart.forEach((item) => {
@@ -101,10 +114,15 @@ function SalesPage() {
    */
   const handleSelectProduct = (product) => {
     if ((product.stock_qty ?? 0) <= 0) return
-    setCart((prev) => addItemToCart(prev, product, {}))
+    const ceiling = maxKeyableQty(product, product.stock_qty ?? Infinity, { channel })
+    setCart((prev) => addItemToCart(prev, product, {}, ceiling))
   }
 
-  const handleIncrement = (key) => setCart((prev) => updateItemQuantity(prev, key, 1))
+  const handleIncrement = (key) =>
+    setCart((prev) => {
+      const item = prev.find((i) => i.key === key)
+      return updateItemQuantity(prev, key, 1, maxByProduct.get(item?.productId))
+    })
   const handleDecrement = (key) => setCart((prev) => updateItemQuantity(prev, key, -1))
   const handleRemove = (key) => setCart((prev) => removeItem(prev, key))
   /**
@@ -112,7 +130,10 @@ function SalesPage() {
    * เพดานคือสต็อกที่มี เพราะเลขที่กดคือของที่ออกจากร้านจริง รวมของแถมแล้ว
    */
   const handleSetQuantity = (key, qty) =>
-    setCart((prev) => setItemQuantity(prev, key, qty))
+    setCart((prev) => {
+      const item = prev.find((i) => i.key === key)
+      return setItemQuantity(prev, key, qty, maxByProduct.get(item?.productId))
+    })
 
   const handleCheckoutSuccess = (result) => {
     setCheckoutOpen(false)
@@ -235,6 +256,7 @@ function SalesPage() {
             <CartSheet
               cart={cart}
               total={total}
+              maxByProduct={maxByProduct}
               productById={productById}
               channel={channel}
               cartQtyByProductId={cartQtyByProductId}
@@ -269,6 +291,7 @@ function SalesPage() {
                     key={item.key}
                     item={item}
                     cartQtyForProduct={cartQtyByProductId?.get(item.productId) ?? item.quantity}
+                    maxQty={maxByProduct.get(item.productId)}
                     product={productById.get(item.productId)}
                     channel={channel}
                     onIncrement={handleIncrement}

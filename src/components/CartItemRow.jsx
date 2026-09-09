@@ -3,14 +3,14 @@ import { formatModifiers } from '../lib/cart'
 import { lineBreakdown } from '../lib/promo'
 import QtyModal from './QtyModal'
 
-function CartItemRow({ item, cartQtyForProduct, product, channel = 'store', onIncrement, onDecrement, onRemove, onSetQuantity }) {
+function CartItemRow({ item, cartQtyForProduct, maxQty, product, channel = 'store', onIncrement, onDecrement, onRemove, onSetQuantity }) {
   const modifiersText = formatModifiers(item.modifiers)
-  const maxQty = item.stockQty ?? Infinity
-  const atLimit = cartQtyForProduct >= maxQty
+  const ceiling = maxQty ?? item.stockQty ?? Infinity
+  const atLimit = cartQtyForProduct >= ceiling
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
-  // จำนวนในตะกร้าคือของที่ลูกค้ารับไปทั้งหมด ราคาที่โชว์ต้องหักของแถมออกแล้ว
-  const { free, lineTotal } = lineBreakdown(item, product, { channel })
+  // ราคาที่โชว์คือที่เก็บจริง ส่วน total คือจำนวนที่ต้องหยิบให้ลูกค้า (รวมของแถมแล้ว)
+  const { free, total, lineTotal } = lineBreakdown(item, product, { channel })
 
   return (
     <div className="py-3 flex items-center gap-3">
@@ -21,8 +21,8 @@ function CartItemRow({ item, cartQtyForProduct, product, channel = 'store', onIn
         <p className="text-orange-600 font-semibold">
           {lineTotal.toLocaleString()} ฿
           {free > 0 && (
-            <span className="ml-2 text-xs font-bold text-green-600">
-              🎁 แถม {free} {item.unit ?? 'ชิ้น'}
+            <span className="block text-xs font-bold text-green-600 leading-tight">
+              🎁 แถม {free} · ส่ง {total} {item.unit ?? 'ชิ้น'}
             </span>
           )}
         </p>
@@ -67,7 +67,7 @@ function CartItemRow({ item, cartQtyForProduct, product, channel = 'store', onIn
       {qtyModalOpen && (
         <QtyModal
           item={item}
-          maxQty={maxQty}
+          maxQty={ceiling}
           onClose={() => setQtyModalOpen(false)}
           onConfirm={(qty) => onSetQuantity(item.key, qty)}
         />

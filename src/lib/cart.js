@@ -11,9 +11,11 @@ function totalQtyForProduct(cart, productId) {
     .reduce((sum, item) => sum + item.quantity, 0)
 }
 
-export function addItemToCart(cart, product, selectedModifiers = {}) {
+export function addItemToCart(cart, product, selectedModifiers = {}, maxQty) {
   const stockQty = product.stock_qty ?? 0
-  if (totalQtyForProduct(cart, product.id) >= stockQty) return cart
+  // เพดานอาจต่ำกว่าสต็อก เพราะกดครบชุดโปรแล้วต้องมีของพอส่งของแถมด้วย
+  const ceiling = maxQty ?? stockQty
+  if (totalQtyForProduct(cart, product.id) >= ceiling) return cart
 
   const key = buildCartKey(product.id, selectedModifiers)
   const existing = cart.find((item) => item.key === key)
@@ -38,13 +40,13 @@ export function addItemToCart(cart, product, selectedModifiers = {}) {
   ]
 }
 
-export function updateItemQuantity(cart, key, delta) {
+export function updateItemQuantity(cart, key, delta, maxQty) {
   return cart
     .map((item) => {
       if (item.key !== key) return item
       if (delta > 0) {
         const total = totalQtyForProduct(cart, item.productId)
-        if (total >= (item.stockQty ?? Infinity)) return item
+        if (total >= (maxQty ?? item.stockQty ?? Infinity)) return item
       }
       return { ...item, quantity: item.quantity + delta }
     })
