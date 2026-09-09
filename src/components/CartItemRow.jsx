@@ -9,8 +9,8 @@ function CartItemRow({ item, cartQtyForProduct, maxQty, product, channel = 'stor
   const atLimit = cartQtyForProduct >= ceiling
   const [qtyModalOpen, setQtyModalOpen] = useState(false)
 
-  // ราคาที่โชว์คือที่เก็บจริง ส่วน total คือจำนวนที่ต้องหยิบให้ลูกค้า (รวมของแถมแล้ว)
-  const { free, total, lineTotal } = lineBreakdown(item, product, { channel })
+  // ราคาที่โชว์คือที่เก็บจริง หักของแถมออกแล้ว
+  const { free, lineTotal } = lineBreakdown(item, product, { channel })
 
   return (
     <div className="py-3 flex items-center gap-3">
@@ -22,7 +22,7 @@ function CartItemRow({ item, cartQtyForProduct, maxQty, product, channel = 'stor
           {lineTotal.toLocaleString()} ฿
           {free > 0 && (
             <span className="block text-xs font-bold text-green-600 leading-tight">
-              🎁 แถม {free} · ส่ง {total} {item.unit ?? 'ชิ้น'}
+              แถม {free} {item.unit ?? 'ชิ้น'}
             </span>
           )}
         </p>
