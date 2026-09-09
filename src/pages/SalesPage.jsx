@@ -1,4 +1,4 @@
-import { PackageX } from 'lucide-react'
+import { PackageX, Search, X } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
@@ -10,6 +10,7 @@ import { useAppData } from '../lib/appDataContext'
 import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
 import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
 import { bundleStock } from '../lib/pricing'
+import { searchProducts } from '../lib/productSearch'
 import { cartSubtotal, maxKeyableQty, splitCart } from '../lib/promo'
 import {
   addItemToCart,
@@ -34,12 +35,14 @@ function SalesPage() {
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [successResult, setSuccessResult] = useState(null)
   const [activeCategory, setActiveCategory] = useState('all')
+  const [search, setSearch] = useState('')
   const [damageOpen, setDamageOpen] = useState(false)
 
   // สลับช่องทางแล้วราคาเปลี่ยนทั้งกระดาน ตะกร้าเดิมจึงใช้ต่อไม่ได้
   useEffect(() => {
     setCart([])
     setActiveCategory('all')
+    setSearch('')
   }, [channel])
 
   useEffect(() => {
@@ -98,13 +101,16 @@ function SalesPage() {
     [channelProducts],
   )
 
-  const visibleProducts = useMemo(
-    () =>
-      activeCategory === 'all'
-        ? channelProducts
-        : channelProducts.filter((p) => p.category === activeCategory),
-    [channelProducts, activeCategory],
-  )
+  /**
+   * พิมพ์ค้นหาแล้วค้นทั้งร้าน ไม่ติดหมวดที่เลือกค้างไว้
+   * ไม่งั้นเลือกหมวด "ปลาหมึก" อยู่ พิมพ์ "ลูกชิ้น" จะไม่เจอ แล้วงงว่าทำไม
+   */
+  const visibleProducts = useMemo(() => {
+    if (search.trim() !== '') return searchProducts(channelProducts, search)
+    return activeCategory === 'all'
+      ? channelProducts
+      : channelProducts.filter((p) => p.category === activeCategory)
+  }, [channelProducts, activeCategory, search])
 
   /**
    * แตะสินค้า = ลงตะกร้าทันที ไม่มีหน้าต่างถามตัวเลือกคั่น
@@ -138,6 +144,7 @@ function SalesPage() {
   const handleCheckoutSuccess = (result) => {
     setCheckoutOpen(false)
     setCart([])
+    setSearch('')
     setSuccessResult(result)
   }
 
@@ -211,7 +218,33 @@ function SalesPage() {
           </div>
         )}
 
-          {categories.length > 1 && (
+        {/* ช่องค้นหา — ไม่ auto focus เด็ดขาด ไม่งั้นเปิดหน้าขายทีคีย์บอร์ดเด้งบังครึ่งจอ */}
+        <div className="shrink-0 px-3 pt-1 pb-2 bg-orange-50">
+          <div className="flex items-center gap-2 rounded-2xl bg-white border-2 border-transparent px-3 shadow-sm transition-colors focus-within:border-orange-400 focus-within:shadow">
+            <Search size={17} className="shrink-0 text-orange-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="ค้นหาสินค้า..."
+              enterKeyHint="search"
+              aria-label="ค้นหาสินค้า"
+              className="flex-1 min-w-0 h-11 bg-transparent text-sm font-semibold text-gray-700 placeholder:text-gray-400 placeholder:font-medium focus:outline-none"
+            />
+            {search !== '' && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                aria-label="ล้างคำค้นหา"
+                className="shrink-0 w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center active:scale-90 transition-transform"
+              >
+                <X size={15} />
+              </button>
+            )}
+          </div>
+        </div>
+
+          {categories.length > 1 && search.trim() === '' && (
             <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto bg-orange-50">
               <button
                 type="button"
@@ -243,9 +276,11 @@ function SalesPage() {
                 cartQtyByProductId={cartQtyByProductId}
                 onSelectProduct={handleSelectProduct}
                 emptyMessage={
-                  channel === 'delivery'
-                    ? 'เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต\nไปสร้างเซ็ตที่ คลังสินค้า › แท็บเซ็ต'
-                    : undefined
+                  search.trim() !== ''
+                    ? `ไม่พบสินค้าที่ตรงกับ "${search.trim()}"\nลองพิมพ์สั้นลง หรือกดกากบาทเพื่อล้างคำค้น`
+                    : channel === 'delivery'
+                      ? 'เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต\nไปสร้างเซ็ตที่ คลังสินค้า › แท็บเซ็ต'
+                      : undefined
                 }
               />
             )}
