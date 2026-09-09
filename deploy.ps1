@@ -83,7 +83,19 @@ git fetch origin $BRANCH
 if ($LASTEXITCODE -ne 0) { Fail "git fetch ไม่สำเร็จ ตรวจอินเทอร์เน็ต" }
 git checkout $BRANCH
 git pull origin $BRANCH
-if ($LASTEXITCODE -ne 0) { Fail "git pull ไม่สำเร็จ - ถ้าเคยแก้ไฟล์เองให้บอก Claude" }
+if ($LASTEXITCODE -ne 0) {
+    # ส่วนใหญ่เกิดจากไฟล์ในเครื่องถูกแก้ทับ (npm install แก้ package-lock.json)
+    # git เลยไม่กล้าดึงของใหม่มาทับ บอกให้เห็นไปเลยว่าไฟล์ไหน จะได้ไม่ต้องเดา
+    Write-Host ""
+    Write-Host "ไฟล์ในเครื่องที่ถูกแก้ไว้:" -ForegroundColor Yellow
+    git status --short
+    Write-Host ""
+    Write-Host "แก้ด้วยการโยนการแก้ไขในเครื่องทิ้ง แล้วเอาของจาก GitHub มาแทน:" -ForegroundColor Yellow
+    Write-Host "    git reset --hard origin/$BRANCH" -ForegroundColor White
+    Write-Host ""
+    Write-Host "ไฟล์ .env ไม่หาย git ไม่แตะต้องอยู่แล้ว" -ForegroundColor Gray
+    Fail "git pull ไม่สำเร็จ"
+}
 Ok ("อยู่ที่ " + (git log --oneline -1))
 
 Step 2 "ติดตั้ง dependencies"
