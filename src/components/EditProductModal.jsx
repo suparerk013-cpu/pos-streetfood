@@ -6,6 +6,16 @@ import { freeQtyFor, promoTiers } from '../lib/promo'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
 
+/**
+ * ให้แต่ละแถวโปรมี id ของตัวเอง ใช้เป็น key แทน index
+ * ถ้าใช้ index แล้วลบแถวกลาง React จะจับคู่ช่องกรอกผิดแถว ค่าที่พิมพ์ไว้เลื่อนตำแหน่ง
+ */
+let promoRowSeq = 0
+const newPromoRow = (buy = '', free = '') => {
+  promoRowSeq += 1
+  return { id: promoRowSeq, buy, free }
+}
+
 function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const { ingredientById, consumableCost } = useAppData()
   const [name, setName] = useState(product.name)
@@ -19,8 +29,8 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
       ? savedTiers
           .slice()
           .sort((a, b) => a.buy - b.buy)
-          .map((tier) => ({ buy: String(tier.buy), free: String(tier.free) }))
-      : [{ buy: '10', free: '1' }],
+          .map((tier) => newPromoRow(String(tier.buy), String(tier.free)))
+      : [newPromoRow('10', '1')],
   )
   const [imagePreview, setImagePreview] = useState(product.image_base64 ?? null)
   const [newImageBase64, setNewImageBase64] = useState(null)
@@ -40,10 +50,10 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
         .filter((row) => row.buy > 0 && row.free > 0)
     : []
 
-  const addPromoRow = () => setPromoRows((prev) => [...prev, { buy: '', free: '' }])
-  const removePromoRow = (index) => setPromoRows((prev) => prev.filter((_, i) => i !== index))
-  const updatePromoRow = (index, field, value) =>
-    setPromoRows((prev) => prev.map((row, i) => (i === index ? { ...row, [field]: value } : row)))
+  const addPromoRow = () => setPromoRows((prev) => [...prev, newPromoRow()])
+  const removePromoRow = (id) => setPromoRows((prev) => prev.filter((row) => row.id !== id))
+  const updatePromoRow = (id, field, value) =>
+    setPromoRows((prev) => prev.map((row) => (row.id === id ? { ...row, [field]: value } : row)))
 
   /** ตัวอย่างให้เห็นกับตาว่าโปรที่ตั้งไว้ทั้งหมดรวมกันแล้วลูกค้าได้อะไร */
   const previewQty = validPromos.length > 0 ? Math.max(...validPromos.map((p) => p.buy)) * 2 : 0
@@ -217,12 +227,12 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
           {promoOn && (
             <>
               {promoRows.map((row, index) => (
-                <div key={index} className="flex items-center gap-2 flex-wrap">
+                <div key={row.id} className="flex items-center gap-2 flex-wrap">
                   <span className="text-sm text-gray-600">ซื้อ</span>
                   <input
                     type="number" inputMode="numeric" min="1"
                     value={row.buy}
-                    onChange={(e) => updatePromoRow(index, 'buy', e.target.value)}
+                    onChange={(e) => updatePromoRow(row.id, 'buy', e.target.value)}
                     aria-label={`ซื้อกี่${unit} โปรที่ ${index + 1}`}
                     className="w-16 h-10 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center font-bold focus:outline-none focus:border-orange-400"
                   />
@@ -230,13 +240,13 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
                   <input
                     type="number" inputMode="numeric" min="1"
                     value={row.free}
-                    onChange={(e) => updatePromoRow(index, 'free', e.target.value)}
+                    onChange={(e) => updatePromoRow(row.id, 'free', e.target.value)}
                     aria-label={`แถมกี่${unit} โปรที่ ${index + 1}`}
                     className="w-16 h-10 rounded-xl border border-gray-200 bg-gray-50 px-2 text-center font-bold focus:outline-none focus:border-orange-400"
                   />
                   <span className="text-sm text-gray-600">{unit}</span>
                   {promoRows.length > 1 && (
-                    <button type="button" onClick={() => removePromoRow(index)}
+                    <button type="button" onClick={() => removePromoRow(row.id)}
                       aria-label={`ลบโปรที่ ${index + 1}`}
                       className="ml-auto w-10 h-10 shrink-0 rounded-full bg-gray-100 text-gray-500 text-lg flex items-center justify-center active:bg-gray-200">
                       ×

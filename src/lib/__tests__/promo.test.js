@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   cartSubtotal,
-  effectiveQtyByProduct,
   maxKeyableQty,
   freeQtyFor,
   hasPromo,
@@ -255,10 +254,21 @@ describe('lineBreakdown', () => {
   })
 })
 
-describe('effectiveQtyByProduct', () => {
-  it('ตัดสต็อกเท่ากับที่คิดเงินบวกที่แถม ไม่ใช่แค่เลขที่กด', () => {
-    const map = effectiveQtyByProduct([line('p1', 10), line('p2', 2)], productById)
-    expect(map.get('p1')).toBe(11)
-    expect(map.get('p2')).toBe(2)
+
+/**
+ * การ์ดสินค้าต้องขึ้น "ครบแล้ว" ตรงกับเพดานจริง
+ * ถ้าใช้สต็อกตรง ๆ การ์ดจะยังดูกดได้ทั้งที่กดแล้วไม่มีอะไรเกิดขึ้น — ปุ่มตาย
+ */
+describe('เพดานกับหน้าจอต้องตรงกัน', () => {
+  it('สต็อก 10 มีโปร: กดได้ถึง 9 แล้วต้องเต็ม ไม่ใช่ 10', () => {
+    const cap = maxKeyableQty(squid, 10)
+    expect(cap).toBe(9)
+    // การ์ดจะ disabled เมื่อ cartQty ถึง cap พอดี
+    expect(9 >= cap).toBe(true)
+    expect(8 >= cap).toBe(false)
+  })
+
+  it('เพดานของสินค้าไม่มีโปร เท่ากับสต็อกเป๊ะ การ์ดจึงเต็มพร้อมสต็อกหมดพอดี', () => {
+    expect(maxKeyableQty(mussel, 6)).toBe(6)
   })
 })

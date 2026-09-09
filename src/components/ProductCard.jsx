@@ -1,7 +1,9 @@
-function ProductCard({ product, cartQty = 0, onSelect }) {
+function ProductCard({ product, cartQty = 0, maxQty, onSelect }) {
   const stockQty = product.stock_qty ?? 0
   const outOfStock = stockQty <= 0
-  const cartFull = !outOfStock && cartQty >= stockQty
+  // เพดานจริงอาจต่ำกว่าสต็อก เพราะโปรแถมกินของในสต็อกด้วย
+  // ถ้าใช้สต็อกตรง ๆ การ์ดจะยังดูกดได้ทั้งที่กดแล้วไม่มีอะไรเกิดขึ้น
+  const cartFull = !outOfStock && cartQty >= (maxQty ?? stockQty)
   const disabled = outOfStock || cartFull
 
   return (

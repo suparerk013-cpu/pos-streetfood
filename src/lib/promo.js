@@ -169,14 +169,3 @@ export function lineBreakdown(item, product, { channel = 'store' } = {}) {
   const { paid, free, total } = splitPaidAndFree(product, item?.quantity, { channel })
   return { paid, free, total, lineTotal: paid * (item?.price ?? 0) }
 }
-
-/** จำนวนที่ต้องตัดสต็อกต่อสินค้า = ที่คิดเงิน + ที่แถม */
-export function effectiveQtyByProduct(cart = [], productById, { channel = 'store' } = {}) {
-  const map = new Map()
-  cart.forEach((item) => {
-    const product = productById?.get(item.productId)
-    const { total } = splitPaidAndFree(product, item.quantity, { channel })
-    map.set(item.productId, (map.get(item.productId) ?? 0) + total)
-  })
-  return map
-}
