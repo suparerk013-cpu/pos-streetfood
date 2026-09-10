@@ -38,7 +38,7 @@
 
   nav{display:flex;background:linear-gradient(90deg,#C2410C,#B91C1C);flex-shrink:0}
   nav button{flex:1;background:none;border:none;color:rgba(255,255,255,.72);font:inherit;
-             font-size:11px;font-weight:700;padding:8px 2px 9px;cursor:pointer;
+             font-size:10.5px;font-weight:700;padding:8px 2px 9px;cursor:pointer;
              display:flex;flex-direction:column;align-items:center;gap:3px}
   nav button .ic{font-size:17px;line-height:1}
   nav button.on{color:#fff}
@@ -46,6 +46,7 @@
 
   .card{background:var(--surface);border:1px solid var(--line);border-radius:16px;
         padding:13px 14px;margin-bottom:11px}
+  .card.accent{border-color:#F3C9AE}
   .card h2{font-size:15px;font-weight:700;margin:0 0 2px}
   .card .sub{font-size:12px;color:var(--muted);margin:0 0 10px}
 
@@ -54,7 +55,7 @@
        font-size:13.5px;cursor:pointer;background:var(--ember);color:#fff}
   .btn.ghost{background:var(--surface);color:var(--ember);border:2px dashed #F3C3A6}
   .btn.grey{background:var(--surface-2);color:var(--muted)}
-  .btn:disabled{background:#E6DED7;color:#A99C92;cursor:not-allowed}
+  .btn.sm{padding:8px 12px;font-size:12.5px;flex:0 0 auto}
 
   .list{display:flex;flex-direction:column}
   .item{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid var(--line)}
@@ -67,12 +68,10 @@
   .item .rt small{color:var(--muted);font-size:11.5px}
   .tag{font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;margin-left:5px;
        background:var(--surface-2);color:var(--muted)}
-  .tag.made{background:var(--good-soft);color:var(--good)}
   .tag.low{background:var(--bad-soft);color:var(--bad)}
 
-  .empty{color:var(--muted);font-size:13px;text-align:center;padding:16px 0}
+  .empty{color:var(--muted);font-size:13px;text-align:center;padding:14px 0}
 
-  /* modal */
   .back{position:fixed;inset:0;background:rgba(30,18,12,.55);display:flex;align-items:flex-end;
         justify-content:center;z-index:20}
   .sheet{background:var(--surface);width:100%;max-width:520px;max-height:92dvh;overflow-y:auto;
@@ -108,7 +107,7 @@
   .msg.bad{background:var(--bad-soft);color:#8E2A1E}
   .msg.good{background:var(--good-soft);color:#1F5A41}
 
-  .bar{display:flex;height:34px;border-radius:9px;overflow:hidden;margin:8px 0 10px}
+  .bar{display:flex;height:32px;border-radius:9px;overflow:hidden;margin:8px 0 10px}
   .bar>div{display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;
            font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden}
   .b1{background:#B4472C}.b2{background:#E0821A}.b3{background:#9A8B7A}.b4{background:var(--good)}
@@ -135,225 +134,247 @@
 <div id="modal"></div>
 
 <script>
-// ═══ ข้อมูล ═══════════════════════════════════════════════
+// ═══ ข้อมูลตั้งต้น ════════════════════════════════════════
 const SEED = {
+  // วัตถุดิบซื้อมา — บันทึกแบบเดิม ไม่เกี่ยวกับว่าจะเอาไปทำอะไร
   ing: [
-    { id:'squid', name:'ปลาหมึกสด',     unit:'กก.', price:60,  stock:2,   bottle:false, made:false },
-    { id:'chili', name:'พริก',          unit:'กก.', price:150, stock:0.5, bottle:false, made:false },
-    { id:'garlic',name:'กระเทียม',      unit:'กก.', price:150, stock:0.4, bottle:false, made:false },
-    { id:'lime',  name:'มะนาว',         unit:'ลูก', price:5,   stock:30,  bottle:false, made:false },
-    { id:'cori',  name:'ผักชี',         unit:'กำ',  price:10,  stock:5,   bottle:false, made:false },
-    { id:'fish',  name:'น้ำปลา',        unit:'ขวด', price:35,  stock:2, bottle:true, perBatch:10, made:false },
-    { id:'tam',   name:'น้ำมะขามเปียก', unit:'ขวด', price:60,  stock:1, bottle:true, perBatch:8,  made:false },
-    { id:'sugar', name:'น้ำตาล',        unit:'ถุง', price:25,  stock:2, bottle:true, perBatch:4,  made:false },
+    { id:'squid',  name:'ปลาหมึกสด',      unit:'กก.', price:60,  stock:2,   bottle:false },
+    { id:'mussel', name:'หอยแมลงภู่สด',   unit:'กก.', price:80,  stock:3,   bottle:false },
+    { id:'chili',  name:'พริก',           unit:'กก.', price:150, stock:0.6, bottle:false },
+    { id:'garlic', name:'กระเทียม',       unit:'กก.', price:150, stock:0.5, bottle:false },
+    { id:'lime',   name:'มะนาว',          unit:'ลูก', price:5,   stock:30,  bottle:false },
+    { id:'cori',   name:'ผักชี',          unit:'กำ',  price:10,  stock:5,   bottle:false },
+    { id:'fish',   name:'น้ำปลา',         unit:'ขวด', price:35,  stock:2, bottle:true, perBatch:10 },
+    { id:'tam',    name:'น้ำมะขามเปียก',  unit:'ขวด', price:60,  stock:1, bottle:true, perBatch:8  },
+    { id:'sugar',  name:'น้ำตาล',         unit:'ถุง', price:25,  stock:2, bottle:true, perBatch:4  },
   ],
+
+  // น้ำจิ้มแยกออกมาต่างหาก มีได้หลายสูตร แต่ละสูตรมีวัตถุดิบของตัวเอง
+  sauces: [
+    { id:'s_squid', name:'น้ำจิ้มหมึกย่าง', icon:'🦑', unit:'กก.', stock:0,
+      recipe:[{ing:'chili',qty:0.2},{ing:'garlic',qty:0.15},{ing:'tam',qty:1},{ing:'sugar',qty:1},{ing:'fish',qty:1}],
+      lastKg:2, lastServes:300, batch:null },
+    { id:'s_sea',   name:'น้ำจิ้มซีฟู้ด',   icon:'🌶️', unit:'กก.', stock:0,
+      recipe:[{ing:'chili',qty:0.3},{ing:'garlic',qty:0.2},{ing:'lime',qty:10},{ing:'cori',qty:2},{ing:'fish',qty:1},{ing:'sugar',qty:1}],
+      lastKg:3, lastServes:400, batch:null },
+  ],
+
   prod: [
-    { id:'squidgrill', name:'ปลาหมึกย่าง', unit:'ไม้', price:10, stock:0, cost:0,
-      mainIng:'squid', perUnit:0.05, normalYield:20 },
+    { id:'p_squid',  name:'ปลาหมึกย่าง',   unit:'ไม้', price:10, stock:0, cost:0,
+      mainIng:'squid',  perUnit:0.05, normalYield:20, sauce:'s_squid' },
+    { id:'p_mussel', name:'หอยแมลงภู่นึ่ง', unit:'ถุง', price:50, stock:0, cost:0,
+      mainIng:'mussel', perUnit:0.5,  normalYield:2,  sauce:'s_sea' },
   ],
-  // สูตรน้ำจิ้มที่ใช้ล่าสุด ใช้เติมฟอร์มครั้งถัดไป
-  sauceRecipe: [
-    { ing:'chili', qty:0.3 }, { ing:'garlic', qty:0.2 }, { ing:'lime', qty:10 },
-    { ing:'cori', qty:2 }, { ing:'fish', qty:1 }, { ing:'tam', qty:1 }, { ing:'sugar', qty:1 },
-  ],
-  sauce: null,          // { costPerUnit, unit, sticks, costPerStick, at }
-  misc: { charcoal:300, stick:120, bag:200, garnish:250, sticksSold:1450 },
+
+  misc: { charcoal:300, stick:120, bag:200, garnish:250, sold:1450 },
   logs: [],
 }
-const KEY = 'costlab-demo-v1'
+const KEY = 'costlab-demo-v2'
 let db = load()
 let tab = 'ing'
 
 function load() {
-  try {
-    const raw = localStorage.getItem(KEY)
-    if (raw) return JSON.parse(raw)
-  } catch { /* เปิดจากไฟล์บางเบราว์เซอร์อ่านไม่ได้ ใช้ค่าตั้งต้นแทน */ }
+  try { const raw = localStorage.getItem(KEY); if (raw) return JSON.parse(raw) }
+  catch { /* บางเบราว์เซอร์เปิดจากไฟล์แล้วอ่านไม่ได้ ใช้ค่าตั้งต้นแทน */ }
   return structuredClone(SEED)
 }
-function save() {
-  try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* ไม่เป็นไร ยังใช้ในหน้านี้ได้ */ }
-}
+function save() { try { localStorage.setItem(KEY, JSON.stringify(db)) } catch { /* ไม่เป็นไร */ } }
 function resetAll() {
   if (!confirm('ล้างข้อมูลตัวอย่างทั้งหมด กลับไปเริ่มใหม่?')) return
   db = structuredClone(SEED); save(); render()
 }
 
 const $ = (s) => document.querySelector(s)
-const bt = (n) => (Math.round(n * 100) / 100).toLocaleString('th-TH', { minimumFractionDigits:2, maximumFractionDigits:2 })
-const qty = (n) => (Math.round(n * 1000) / 1000).toLocaleString('th-TH')
+const bt = (n) => (Math.round(n*100)/100).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})
+const qty = (n) => (Math.round(n*1000)/1000).toLocaleString('th-TH')
 const ing = (id) => db.ing.find((i) => i.id === id)
-const esc = (s) => String(s).replace(/[<>&"]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))
-const logIt = (t) => { db.logs.unshift({ t, at:new Date().toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }); db.logs = db.logs.slice(0,30) }
+const sauceOf = (id) => db.sauces.find((s) => s.id === id)
+const esc = (s) => String(s).replace(/[<>&"]/g,(c)=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]))
+const now = () => new Date().toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})
+const logIt = (t) => { db.logs.unshift({ t, at:now() }); db.logs = db.logs.slice(0,30) }
 
-/** ต้นทุนที่ใช้ไปของวัตถุดิบ 1 แถวในสูตร — ของขวดหารตามจำนวนหม้อที่ใช้ได้ */
-function useCost(id, q) {
-  const i = ing(id); if (!i) return 0
-  return i.bottle ? (i.price / Math.max(1, i.perBatch)) * q : i.price * q
-}
-/** ของขวดตัดสต็อกเป็นเศษส่วนของขวด ไม่ใช่ทั้งขวด */
-function useStock(id, q) {
-  const i = ing(id); if (!i) return 0
-  return i.bottle ? q / Math.max(1, i.perBatch) : q
-}
+/** ของขวดคิดเป็นเศษส่วนของขวด ของอื่นคิดตามจำนวนที่กรอก */
+const useCost  = (id,q) => { const i=ing(id); return !i?0: i.bottle ? (i.price/Math.max(1,i.perBatch))*q : i.price*q }
+const useStock = (id,q) => { const i=ing(id); return !i?0: i.bottle ? q/Math.max(1,i.perBatch) : q }
 
-// ═══ ต้นทุน 3 ชั้น ════════════════════════════════════════
-function costBreakdown() {
-  const p = db.prod[0]
-  const main = p.cost || 0
-  const sauce = db.sauce ? db.sauce.costPerStick : 0
+/** ต้นทุนน้ำจิ้มต่อ 1 ชิ้นของสินค้า — ยังไม่เคยทำก็เป็น 0 */
+const saucePerServe = (sid) => { const s = sauceOf(sid); return s && s.batch ? s.batch.perServe : 0 }
+
+function costOf(p) {
   const m = db.misc
-  const miscTotal = m.charcoal + m.stick + m.bag + m.garnish
-  const misc = miscTotal / Math.max(1, m.sticksSold)
-  return { main, sauce, misc, total: main + sauce + misc, price: p.price }
+  const misc = (m.charcoal+m.stick+m.bag+m.garnish) / Math.max(1,m.sold)
+  const sauce = saucePerServe(p.sauce)
+  return { main:p.cost||0, sauce, misc, total:(p.cost||0)+sauce+misc }
 }
 
 // ═══ หน้าจอ ═══════════════════════════════════════════════
 function render() {
   $('#nav').innerHTML = [
-    ['ing','🥬','วัตถุดิบ'], ['prod','📦','คลังสินค้า'], ['rep','📊','ต้นทุน'],
+    ['ing','🥬','วัตถุดิบ'],['sauce','🍲','น้ำจิ้ม'],['prod','📦','คลัง'],['rep','📊','ต้นทุน'],
   ].map(([k,ic,l]) => `<button class="${tab===k?'on':''}" onclick="go('${k}')"><span class="ic">${ic}</span>${l}</button>`).join('')
-  $('#main').innerHTML = tab === 'ing' ? viewIng() : tab === 'prod' ? viewProd() : viewRep()
+  $('#main').innerHTML = tab==='ing'?viewIng():tab==='sauce'?viewSauce():tab==='prod'?viewProd():viewRep()
   save()
 }
-function go(k) { tab = k; render() }
+const go = (k) => { tab = k; render() }
 
+// ── แท็บ 1: วัตถุดิบ (บันทึกแบบเดิม) ─────────────────────
 function viewIng() {
-  const rows = db.ing.map((i) => {
-    const low = i.stock <= 0
-    return `<div class="item">
-      <div class="nm"><b>${esc(i.name)}${i.made?'<span class="tag made">ทำเอง</span>':''}${i.bottle?'<span class="tag">ของขวด</span>':''}</b>
-        <small>${bt(i.price)} ฿/${esc(i.unit)}${i.bottle?` · ใช้ได้ ${i.perBatch} หม้อ`:''}</small></div>
-      <div class="rt"><b class="${low?'':''}" style="color:${low?'var(--bad)':'inherit'}">${qty(i.stock)}</b>
-        <small>${esc(i.unit)}</small></div>
-    </div>`
-  }).join('')
-
   return `
-  <div class="rowbtn">
-    <button class="btn" onclick="openBuy()">+ บันทึกซื้อ</button>
-    <button class="btn ghost" onclick="openMake()">🍲 บันทึกผลิต</button>
-  </div>
+  <div class="rowbtn"><button class="btn" onclick="openBuy()">+ บันทึกซื้อวัตถุดิบ</button></div>
   <div class="card">
-    <h2>วัตถุดิบในคลัง</h2>
-    <p class="sub">ซื้อมาแล้วบันทึกที่นี่ · ของทำเองอย่างน้ำจิ้มก็อยู่ในลิสต์เดียวกัน</p>
-    <div class="list">${rows}</div>
+    <h2>วัตถุดิบที่ซื้อมา</h2>
+    <p class="sub">ปลาหมึก หอย พริก มะนาว น้ำปลา — ซื้ออะไรก็บันทึกที่นี่ที่เดียว</p>
+    <div class="list">${db.ing.map((i) => `<div class="item">
+      <div class="nm"><b>${esc(i.name)}${i.bottle?'<span class="tag">ของขวด</span>':''}</b>
+        <small>${bt(i.price)} ฿/${esc(i.unit)}${i.bottle?` · ใช้ได้ ${i.perBatch} หม้อ`:''}</small></div>
+      <div class="rt"><b style="color:${i.stock<=0?'var(--bad)':'inherit'}">${qty(i.stock)}</b><small>${esc(i.unit)}</small></div>
+    </div>`).join('')}</div>
   </div>
-  ${db.sauce ? `<div class="card">
-    <h2>น้ำจิ้มหม้อล่าสุด</h2>
-    <div class="kv"><span>ต้นทุนต่อ ${esc(db.sauce.unit)}</span><b>${bt(db.sauce.costPerUnit)} ฿</b></div>
-    <div class="kv"><span>หม้อนี้ใช้ได้</span><b>${db.sauce.sticks} ไม้</b></div>
-    <div class="kv"><span>คิดเป็นต่อไม้</span><b style="color:var(--ember)">${bt(db.sauce.costPerStick)} ฿</b></div>
-    <p class="sub" style="margin:8px 0 0">ทำเมื่อ ${esc(db.sauce.at)}</p>
-  </div>` : `<div class="card"><p class="empty">ยังไม่เคยบันทึกผลิตน้ำจิ้ม<br>กด “🍲 บันทึกผลิต” เพื่อลองดู</p></div>`}
+  <div class="card"><p class="sub" style="margin:0">
+    🍲 น้ำจิ้มไม่ได้ซื้อมา แต่ทำเอง — ไปบันทึกที่แท็บ <b>น้ำจิ้ม</b>
+  </p></div>
   ${viewLogs()}`
 }
 
-function viewProd() {
-  const c = costBreakdown()
-  const rows = db.prod.map((p) => `<div class="item">
-    <div class="nm"><b>${esc(p.name)}</b><small>ขาย ${bt(p.price)} ฿/${esc(p.unit)} · ทุนหมึก ${p.cost?bt(p.cost):'—'} ฿</small></div>
-    <div class="rt"><b>${qty(p.stock)}</b><small>${esc(p.unit)}</small></div>
-  </div>`).join('')
-
+// ── แท็บ 2: น้ำจิ้ม (แยกออกมา รองรับหลายสูตร) ────────────
+function viewSauce() {
   return `
-  <div class="rowbtn"><button class="btn" onclick="openStockIn()">📥 นำเข้าสต็อก</button></div>
+  <div class="card"><h2>น้ำจิ้มที่ทำเอง</h2>
+    <p class="sub" style="margin:0">แต่ละสูตรใช้วัตถุดิบคนละชุด และผูกกับสินค้าคนละตัว</p></div>
+
+  ${db.sauces.map((s) => {
+    const uses = db.prod.filter((p) => p.sauce === s.id).map((p) => p.name).join(', ') || 'ยังไม่ได้ผูกกับสินค้า'
+    return `<div class="card accent">
+      <div style="display:flex;align-items:flex-start;gap:9px">
+        <div style="font-size:22px;line-height:1.2">${s.icon}</div>
+        <div style="flex:1;min-width:0">
+          <h2>${esc(s.name)}</h2>
+          <p class="sub" style="margin:0 0 8px">ใช้กับ: ${esc(uses)}</p>
+        </div>
+      </div>
+      ${s.batch ? `
+        <div class="kv"><span>ต้นทุนหม้อล่าสุด</span><b>${bt(s.batch.total)} ฿</b></div>
+        <div class="kv"><span>ได้ ${qty(s.batch.kg)} ${esc(s.unit)} · ราคาต่อ ${esc(s.unit)}</span><b>${bt(s.batch.perKg)} ฿</b></div>
+        <div class="kv"><span>ใช้ได้ ${s.batch.serves} ชิ้น → ต่อชิ้น</span><b style="color:var(--ember)">${bt(s.batch.perServe)} ฿</b></div>
+        <div class="kv"><span>คงเหลือในคลัง</span><b>${qty(s.stock)} ${esc(s.unit)}</b></div>
+        <p class="sub" style="margin:8px 0 0">ทำเมื่อ ${esc(s.batch.at)}</p>
+      ` : `<p class="empty">ยังไม่เคยทำสูตรนี้ — ต้นทุนน้ำจิ้มของสินค้าที่ใช้สูตรนี้จะยังเป็น 0</p>`}
+      <div class="rowbtn" style="margin:11px 0 0">
+        <button class="btn" onclick="openMake('${s.id}')">🍲 บันทึกทำ${esc(s.name)}</button>
+      </div>
+    </div>`
+  }).join('')}
+  ${viewLogs()}`
+}
+
+// ── แท็บ 3: คลังสินค้า ───────────────────────────────────
+function viewProd() {
+  const m = db.misc
+  const miscPer = (m.charcoal+m.stick+m.bag+m.garnish)/Math.max(1,m.sold)
+  return `
   <div class="card">
     <h2>สินค้า</h2>
-    <p class="sub">เสียบเสร็จแล้วบันทึกเข้าสต็อก พร้อมบอกว่าใช้หมึกไปเท่าไหร่</p>
-    <div class="list">${rows}</div>
+    <p class="sub">เตรียมของเสร็จแล้วบันทึกเข้าสต็อก พร้อมบอกว่าใช้วัตถุดิบไปเท่าไหร่</p>
+    <div class="list">${db.prod.map((p) => `<div class="item">
+      <div class="nm"><b>${esc(p.name)}</b>
+        <small>ขาย ${bt(p.price)} ฿/${esc(p.unit)} · ทุนหลัก ${p.cost?bt(p.cost)+' ฿':'—'} · ${esc(sauceOf(p.sauce)?.name??'')}</small></div>
+      <div class="rt"><b>${qty(p.stock)}</b><small>${esc(p.unit)}</small></div>
+    </div>`).join('')}</div>
+    <div class="rowbtn" style="margin:12px 0 0">
+      ${db.prod.map((p) => `<button class="btn" onclick="openStockIn('${p.id}')">📥 ${esc(p.name)}</button>`).join('')}
+    </div>
   </div>
   <div class="card">
     <h2>ของจิปาถะ (ต่อสัปดาห์)</h2>
-    <p class="sub">ถ่าน ไม้เสียบ ถุง ผักชีโรยหน้า — เฉลี่ยจากรายจ่ายจริง</p>
+    <p class="sub">ถ่าน ไม้เสียบ ถุง ผักชีโรยหน้า — วัดต่อชิ้นไม่ได้ ใช้หารเฉลี่ย</p>
     ${[['charcoal','ถ่าน'],['stick','ไม้เสียบ'],['bag','ถุง + ยางรัด'],['garnish','ผักชีโรยหน้า']]
       .map(([k,l]) => `<label class="f"><span>${l} (฿)</span>
         <input type="number" value="${db.misc[k]}" min="0" step="10" oninput="setMisc('${k}',this.value)"></label>`).join('')}
-    <label class="f"><span>สัปดาห์นี้ขายได้กี่ไม้</span>
-      <input type="number" value="${db.misc.sticksSold}" min="1" step="50" oninput="setMisc('sticksSold',this.value)"></label>
-    <div class="out"><div class="big">${bt(c.misc)} ฿ / ไม้</div></div>
+    <label class="f"><span>สัปดาห์นี้ขายได้กี่ชิ้น</span>
+      <input type="number" value="${db.misc.sold}" min="1" step="50" oninput="setMisc('sold',this.value)"></label>
+    <div class="out"><div class="big" id="miscOut">${bt(miscPer)} ฿ / ชิ้น</div></div>
   </div>`
 }
 
+// ── แท็บ 4: ต้นทุน ───────────────────────────────────────
 function viewRep() {
-  const c = costBreakdown()
-  const profit = c.price - c.total
-  const margin = c.price > 0 ? profit / c.price : 0
-  const den = Math.max(c.price, c.total) || 1
-  const w = (v) => Math.max(0, (v / den) * 100)
-  const ready = c.main > 0
-
-  return `
-  <div class="card">
-    <h2>ต้นทุนปลาหมึกย่าง 1 ไม้</h2>
-    <p class="sub">${ready ? 'คิดจากที่คุณบันทึกไว้จริง' : 'ยังไม่ได้นำเข้าสต็อก ต้นทุนหมึกจึงยังเป็น 0'}</p>
-    <div class="lg"><span><i class="b1"></i>หมึก</span><span><i class="b2"></i>น้ำจิ้ม</span>
-      <span><i class="b3"></i>จิปาถะ</span><span><i class="b4"></i>กำไร</span></div>
-    <div class="bar">
-      <div class="b1" style="width:${w(c.main)}%">${c.main>=0.6?bt(c.main):''}</div>
-      <div class="b2" style="width:${w(c.sauce)}%">${c.sauce>=0.6?bt(c.sauce):''}</div>
-      <div class="b3" style="width:${w(c.misc)}%">${c.misc>=0.6?bt(c.misc):''}</div>
-      ${profit>0?`<div class="b4" style="width:${w(profit)}%">${bt(profit)}</div>`:''}
-    </div>
-    <div class="kv"><span>🦑 ปลาหมึก</span><b>${bt(c.main)} ฿</b></div>
-    <div class="kv"><span>🍲 น้ำจิ้ม</span><b>${bt(c.sauce)} ฿</b></div>
-    <div class="kv"><span>🔥 จิปาถะ</span><b>${bt(c.misc)} ฿</b></div>
-    <div class="kv"><span><b>ต้นทุนรวม</b></span><b>${bt(c.total)} ฿</b></div>
-    <div class="kv"><span>ราคาขาย</span><b>${bt(c.price)} ฿</b></div>
-    <div class="kv"><span><b>กำไร</b></span>
-      <b style="color:${profit>0?'var(--good)':'var(--bad)'}">${bt(profit)} ฿ (${(margin*100).toFixed(0)}%)</b></div>
-    ${!ready ? `<div class="msg warn">ไปที่ 📦 คลังสินค้า → นำเข้าสต็อก แล้วบอกว่าใช้หมึกไปกี่กิโล ต้นทุนถึงจะขึ้น</div>` :
-      profit<=0 ? `<div class="msg bad">🚨 ขาดทุนไม้ละ ${bt(-profit)} ฿ ต้องขายอย่างน้อย ${bt(c.total)} ฿</div>` :
-      margin<0.5 ? `<div class="msg warn">กำไร ${(margin*100).toFixed(0)}% บางไปหน่อย — ขาย ${Math.ceil(c.total/0.4)} ฿ จะได้ 60%</div>` :
-      `<div class="msg good">✅ กำไร ${(margin*100).toFixed(0)}% ราคานี้ไปต่อได้</div>`}
-  </div>
-  ${viewLogs()}`
+  return db.prod.map((p) => {
+    const c = costOf(p)
+    const profit = p.price - c.total
+    const margin = p.price>0 ? profit/p.price : 0
+    const den = Math.max(p.price, c.total) || 1
+    const w = (v) => Math.max(0,(v/den)*100)
+    const s = sauceOf(p.sauce)
+    return `<div class="card">
+      <h2>${esc(p.name)} 1 ${esc(p.unit)}</h2>
+      <p class="sub">${c.main>0?'คิดจากที่บันทึกไว้จริง':'ยังไม่ได้นำเข้าสต็อก ต้นทุนหลักจึงยังเป็น 0'}</p>
+      <div class="lg"><span><i class="b1"></i>วัตถุดิบหลัก</span><span><i class="b2"></i>น้ำจิ้ม</span>
+        <span><i class="b3"></i>จิปาถะ</span><span><i class="b4"></i>กำไร</span></div>
+      <div class="bar">
+        <div class="b1" style="width:${w(c.main)}%">${c.main>=1.5?bt(c.main):''}</div>
+        <div class="b2" style="width:${w(c.sauce)}%">${c.sauce>=1.5?bt(c.sauce):''}</div>
+        <div class="b3" style="width:${w(c.misc)}%">${c.misc>=1.5?bt(c.misc):''}</div>
+        ${profit>0?`<div class="b4" style="width:${w(profit)}%">${bt(profit)}</div>`:''}
+      </div>
+      <div class="kv"><span>วัตถุดิบหลัก (${esc(ing(p.mainIng)?.name??'')})</span><b>${bt(c.main)} ฿</b></div>
+      <div class="kv"><span>${s?esc(s.icon+' '+s.name):'น้ำจิ้ม'}</span><b>${bt(c.sauce)} ฿</b></div>
+      <div class="kv"><span>🔥 จิปาถะ</span><b>${bt(c.misc)} ฿</b></div>
+      <div class="kv"><span><b>ต้นทุนรวม</b></span><b>${bt(c.total)} ฿</b></div>
+      <div class="kv"><span>ราคาขาย</span><b>${bt(p.price)} ฿</b></div>
+      <div class="kv"><span><b>กำไร</b></span>
+        <b style="color:${profit>0?'var(--good)':'var(--bad)'}">${bt(profit)} ฿ (${(margin*100).toFixed(0)}%)</b></div>
+      ${c.main<=0 ? `<div class="msg warn">ไปที่ 📦 คลัง → นำเข้าสต็อก แล้วบอกว่าใช้วัตถุดิบไปเท่าไหร่</div>`
+        : !s?.batch ? `<div class="msg warn">ยังไม่เคยทำ${esc(s?.name??'น้ำจิ้ม')} ต้นทุนยังไม่ครบ</div>`
+        : profit<=0 ? `<div class="msg bad">🚨 ขาดทุน ${bt(-profit)} ฿ ต้องขายอย่างน้อย ${bt(c.total)} ฿</div>`
+        : margin<0.5 ? `<div class="msg warn">กำไร ${(margin*100).toFixed(0)}% บางไป — ขาย ${Math.ceil(c.total/0.4)} ฿ จะได้ 60%</div>`
+        : `<div class="msg good">✅ กำไร ${(margin*100).toFixed(0)}% ราคานี้ไปต่อได้</div>`}
+    </div>`
+  }).join('') + viewLogs()
 }
 
 function viewLogs() {
   if (!db.logs.length) return ''
   return `<div class="card"><h2>ที่บันทึกไว้ล่าสุด</h2>
-    ${db.logs.map((l) => `<div class="log">${esc(l.at)} · ${esc(l.t)}</div>`).join('')}</div>`
+    ${db.logs.map((l)=>`<div class="log">${esc(l.at)} · ${esc(l.t)}</div>`).join('')}</div>`
 }
 
-function setMisc(k, v) { db.misc[k] = Math.max(k==='sticksSold'?1:0, Number(v)||0); save()
-  if (tab==='prod') { const c = costBreakdown(); const el = document.querySelector('.card:last-child .big'); if (el) el.textContent = bt(c.misc)+' ฿ / ไม้' } }
+function setMisc(k,v){ db.misc[k]=Math.max(k==='sold'?1:0,Number(v)||0); save()
+  const m=db.misc, el=$('#miscOut')
+  if (el) el.textContent = bt((m.charcoal+m.stick+m.bag+m.garnish)/Math.max(1,m.sold))+' ฿ / ชิ้น' }
 
 // ═══ หน้าต่าง ═════════════════════════════════════════════
 const closeM = () => { $('#modal').innerHTML = '' }
-function sheet(html) {
-  $('#modal').innerHTML = `<div class="back" onclick="if(event.target===this)closeM()"><div class="sheet">${html}</div></div>`
-}
+const sheet = (html) => { $('#modal').innerHTML =
+  `<div class="back" onclick="if(event.target===this)closeM()"><div class="sheet">${html}</div></div>` }
+const saveRow = (fn) => `<div class="rowbtn" style="margin-top:14px">
+  <button class="btn grey" onclick="closeM()">ยกเลิก</button>
+  <button class="btn" onclick="${fn}">บันทึก</button></div>`
 
-// ── บันทึกซื้อ ────────────────────────────────────────────
+// ── บันทึกซื้อวัตถุดิบ (แบบเดิม) ─────────────────────────
 function openBuy() {
   sheet(`<h3>บันทึกซื้อวัตถุดิบ</h3><p class="sub">ซื้อมาเท่าไหร่ จ่ายไปกี่บาท</p>
     <label class="f"><span>วัตถุดิบ</span>
       <select id="bIng" onchange="buyPick()">
-        ${db.ing.filter(i=>!i.made).map(i=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}
+        ${db.ing.map((i)=>`<option value="${i.id}">${esc(i.name)} (${esc(i.unit)})</option>`).join('')}
         <option value="__new">+ วัตถุดิบใหม่…</option>
       </select></label>
-    <div id="bNew" style="display:none">
-      <div class="two"><label class="f"><span>ชื่อ</span><input id="bName" placeholder="เช่น ลูกชิ้น"></label>
-      <label class="f"><span>หน่วย</span><input id="bUnit" placeholder="ถุง"></label></div>
-    </div>
+    <div id="bNew" style="display:none"><div class="two">
+      <label class="f"><span>ชื่อ</span><input id="bName" placeholder="เช่น ลูกชิ้น"></label>
+      <label class="f"><span>หน่วย</span><input id="bUnit" placeholder="ถุง"></label></div></div>
     <div class="two">
       <label class="f"><span>จำนวน</span><input type="number" id="bQty" value="1" min="0.01" step="0.1" oninput="buyCalc()"></label>
-      <label class="f"><span>จ่ายไป (฿)</span><input type="number" id="bAmt" value="60" min="0" step="1" oninput="buyCalc()"></label>
-    </div>
+      <label class="f"><span>จ่ายไป (฿)</span><input type="number" id="bAmt" value="60" min="0" step="1" oninput="buyCalc()"></label></div>
     <div class="chk"><input type="checkbox" id="bBottle" onchange="buyCalc()">
       <label for="bBottle">เป็นของขวด/กระปุก ใช้ได้หลายหม้อ</label></div>
     <label class="f" id="bPBwrap" style="display:none"><span>1 ขวดใช้ทำน้ำจิ้มได้กี่หม้อ</span>
       <input type="number" id="bPB" value="8" min="1" step="1" oninput="buyCalc()"></label>
     <div class="out"><div class="big" id="bOut">—</div><div class="cap" id="bCap"></div></div>
-    <div class="rowbtn" style="margin-top:14px">
-      <button class="btn grey" onclick="closeM()">ยกเลิก</button>
-      <button class="btn" onclick="doBuy()">บันทึก</button></div>`)
+    ${saveRow('doBuy()')}`)
   buyPick()
 }
 function buyPick() {
   const v = $('#bIng').value
-  $('#bNew').style.display = v === '__new' ? '' : 'none'
+  $('#bNew').style.display = v==='__new' ? '' : 'none'
   const i = ing(v)
   if (i) { $('#bBottle').checked = !!i.bottle; if (i.bottle) $('#bPB').value = i.perBatch }
   buyCalc()
@@ -361,167 +382,164 @@ function buyPick() {
 function buyCalc() {
   const bottle = $('#bBottle').checked
   $('#bPBwrap').style.display = bottle ? '' : 'none'
-  const q = Number($('#bQty').value) || 0, a = Number($('#bAmt').value) || 0
+  const q = Number($('#bQty').value)||0, a = Number($('#bAmt').value)||0
   const i = ing($('#bIng').value)
-  const unit = $('#bIng').value === '__new' ? ($('#bUnit').value || 'หน่วย') : (i ? i.unit : 'หน่วย')
-  if (q <= 0) { $('#bOut').textContent = '—'; $('#bCap').textContent = ''; return }
-  $('#bOut').textContent = bt(a / q) + ' ฿ / ' + unit
+  const unit = $('#bIng').value==='__new' ? ($('#bUnit').value||'หน่วย') : (i?i.unit:'หน่วย')
+  if (q<=0) { $('#bOut').textContent='—'; $('#bCap').textContent=''; return }
+  $('#bOut').textContent = bt(a/q)+' ฿ / '+unit
   $('#bCap').textContent = bottle
-    ? `ของขวด → คิดเป็น ${bt(a / q / Math.max(1, Number($('#bPB').value) || 1))} ฿ ต่อหม้อน้ำจิ้ม`
+    ? `ของขวด → คิดเป็น ${bt(a/q/Math.max(1,Number($('#bPB').value)||1))} ฿ ต่อหม้อน้ำจิ้ม`
     : 'ใช้หมดครั้งเดียว ไม่ต้องตั้งอะไรเพิ่ม'
 }
 function doBuy() {
   const sel = $('#bIng').value
-  const q = Number($('#bQty').value) || 0, a = Number($('#bAmt').value) || 0
-  if (q <= 0) return alert('ใส่จำนวนก่อน')
+  const q = Number($('#bQty').value)||0, a = Number($('#bAmt').value)||0
+  if (q<=0) return alert('ใส่จำนวนก่อน')
   let i
-  if (sel === '__new') {
-    const name = ($('#bName').value || '').trim()
+  if (sel==='__new') {
+    const name = ($('#bName').value||'').trim()
     if (!name) return alert('ใส่ชื่อวัตถุดิบก่อน')
-    i = { id: 'x' + Date.now(), name, unit: ($('#bUnit').value || 'หน่วย').trim(), price:0, stock:0, bottle:false, made:false }
+    i = { id:'x'+Date.now(), name, unit:($('#bUnit').value||'หน่วย').trim(), price:0, stock:0, bottle:false }
     db.ing.push(i)
   } else i = ing(sel)
-  i.price = a / q
+  i.price = a/q
   i.stock += q
   i.bottle = $('#bBottle').checked
-  if (i.bottle) i.perBatch = Math.max(1, Number($('#bPB').value) || 1)
+  if (i.bottle) i.perBatch = Math.max(1, Number($('#bPB').value)||1)
   logIt(`ซื้อ ${i.name} ${qty(q)} ${i.unit} = ${bt(a)} ฿`)
   closeM(); render()
 }
 
-// ── บันทึกผลิต (น้ำจิ้ม) ──────────────────────────────────
-let makeRows = []
-function openMake() {
-  makeRows = db.sauceRecipe.map((r) => ({ ...r }))
-  sheet(`<h3>🍲 บันทึกผลิต : น้ำจิ้มซีฟู้ด</h3>
+// ── บันทึกทำน้ำจิ้ม (แยกตามสูตร) ────────────────────────
+let mkId = null, mkRows = []
+function openMake(sid) {
+  const s = sauceOf(sid); if (!s) return
+  mkId = sid
+  mkRows = s.recipe.map((r) => ({ ...r }))
+  sheet(`<h3>${s.icon} บันทึกทำ${esc(s.name)}</h3>
     <p class="sub">กรอกที่ใช้จริงวันนี้ พรุ่งนี้ใส่ไม่เท่ากันก็กรอกใหม่ได้</p>
     <div id="mRows"></div>
-    <button class="btn ghost" style="width:100%;margin:4px 0 14px" onclick="addMakeRow()">+ เพิ่มวัตถุดิบ</button>
+    <button class="btn ghost" style="width:100%;margin:4px 0 14px" onclick="addMkRow()">+ เพิ่มวัตถุดิบ</button>
     <div class="two">
-      <label class="f"><span>ได้น้ำจิ้ม (กก.)</span><input type="number" id="mKg" value="3" min="0.1" step="0.1" oninput="makeCalc()"></label>
-      <label class="f"><span>ใช้ได้กี่ไม้</span><input type="number" id="mSticks" value="400" min="1" step="10" oninput="makeCalc()"></label>
-    </div>
+      <label class="f"><span>ได้กี่ ${esc(s.unit)}</span>
+        <input type="number" id="mKg" value="${s.lastKg}" min="0.1" step="0.1" oninput="mkCalc()"></label>
+      <label class="f"><span>หม้อนี้ใช้ได้กี่ชิ้น</span>
+        <input type="number" id="mServes" value="${s.lastServes}" min="1" step="10" oninput="mkCalc()"></label></div>
     <div class="out"><div class="big" id="mOut">—</div><div class="cap" id="mCap"></div></div>
     <div id="mMsg"></div>
-    <div class="rowbtn" style="margin-top:14px">
-      <button class="btn grey" onclick="closeM()">ยกเลิก</button>
-      <button class="btn" onclick="doMake()">บันทึก</button></div>`)
-  drawMakeRows()
+    ${saveRow('doMake()')}`)
+  drawMkRows()
 }
-function drawMakeRows() {
-  $('#mRows').innerHTML = makeRows.map((r, n) => {
+function drawMkRows() {
+  $('#mRows').innerHTML = mkRows.map((r,n) => {
     const i = ing(r.ing)
-    const opts = db.ing.filter((x) => !x.made).map((x) => `<option value="${x.id}"${x.id===r.ing?' selected':''}>${esc(x.name)}</option>`).join('')
+    const opts = db.ing.map((x)=>`<option value="${x.id}"${x.id===r.ing?' selected':''}>${esc(x.name)}</option>`).join('')
     const input = i && i.bottle
       ? `<div class="fixed">1/${i.perBatch} ${esc(i.unit)}</div>`
-      : `<input type="number" value="${r.qty}" min="0" step="0.1" oninput="setMakeQty(${n},this.value)">`
+      : `<input type="number" value="${r.qty}" min="0" step="0.1" oninput="setMkQty(${n},this.value)">`
     return `<div class="useRow">
-      <select onchange="setMakeIng(${n},this.value)">${opts}</select>
-      ${input}
-      <span class="cost">${bt(useCost(r.ing, i && i.bottle ? 1 : r.qty))} ฿</span>
-      <button class="del" onclick="delMakeRow(${n})">×</button></div>`
+      <select onchange="setMkIng(${n},this.value)">${opts}</select>${input}
+      <span class="cost">${bt(useCost(r.ing, i&&i.bottle?1:r.qty))} ฿</span>
+      <button class="del" onclick="delMkRow(${n})">×</button></div>`
   }).join('')
-  makeCalc()
+  mkCalc()
 }
-function setMakeIng(n, v) { makeRows[n].ing = v; drawMakeRows() }
-function setMakeQty(n, v) { makeRows[n].qty = Math.max(0, Number(v) || 0); drawMakeRows() }
-function delMakeRow(n) { makeRows.splice(n, 1); drawMakeRows() }
-function addMakeRow() { const free = db.ing.find((i) => !i.made); if (free) { makeRows.push({ ing: free.id, qty: 1 }); drawMakeRows() } }
+const setMkIng = (n,v) => { mkRows[n].ing = v; drawMkRows() }
+const setMkQty = (n,v) => { mkRows[n].qty = Math.max(0,Number(v)||0); drawMkRows() }
+const delMkRow = (n) => { mkRows.splice(n,1); drawMkRows() }
+const addMkRow = () => { if (db.ing[0]) { mkRows.push({ ing:db.ing[0].id, qty:1 }); drawMkRows() } }
 
-function makeTotals() {
-  let total = 0
-  const short = []
-  makeRows.forEach((r) => {
+function mkTotals() {
+  let total = 0; const short = []
+  mkRows.forEach((r) => {
     const i = ing(r.ing); if (!i) return
     const q = i.bottle ? 1 : r.qty
-    total += useCost(r.ing, q)
-    const need = useStock(r.ing, q)
-    if (need > i.stock + 1e-9) short.push(`${i.name} (ต้องใช้ ${qty(need)} มี ${qty(i.stock)} ${i.unit})`)
+    total += useCost(r.ing,q)
+    const need = useStock(r.ing,q)
+    if (need > i.stock + 1e-9) short.push(`${i.name} (ใช้ ${qty(need)} มี ${qty(i.stock)} ${i.unit})`)
   })
   return { total, short }
 }
-function makeCalc() {
-  const { total, short } = makeTotals()
-  const kg = Math.max(0.1, Number($('#mKg').value) || 1)
-  const st = Math.max(1, Number($('#mSticks').value) || 1)
-  $('#mOut').textContent = bt(total) + ' ฿ / หม้อ'
-  $('#mCap').textContent = `ได้ ${qty(kg)} กก. (${bt(total/kg)} ฿/กก.) · ใช้ได้ ${st} ไม้ → ${bt(total/st)} ฿ ต่อไม้`
+function mkCalc() {
+  const s = sauceOf(mkId)
+  const { total, short } = mkTotals()
+  const kg = Math.max(0.1, Number($('#mKg').value)||1)
+  const serves = Math.max(1, Number($('#mServes').value)||1)
+  $('#mOut').textContent = bt(total)+' ฿ / หม้อ'
+  $('#mCap').textContent = `ได้ ${qty(kg)} ${s.unit} (${bt(total/kg)} ฿/${s.unit}) · ใช้ได้ ${serves} ชิ้น → ${bt(total/serves)} ฿ ต่อชิ้น`
   $('#mMsg').innerHTML = short.length
-    ? `<div class="msg bad">⚠️ วัตถุดิบไม่พอ: ${esc(short.join(' · '))}<br>บันทึกได้ แต่คลังจะติดลบ ลองบันทึกซื้อก่อน</div>` : ''
+    ? `<div class="msg bad">⚠️ วัตถุดิบไม่พอ: ${esc(short.join(' · '))}<br>บันทึกได้ แต่คลังจะติดลบ</div>` : ''
 }
 function doMake() {
-  const { total } = makeTotals()
+  const s = sauceOf(mkId); if (!s) return
+  const { total } = mkTotals()
   if (total <= 0) return alert('ยังไม่ได้ใส่วัตถุดิบ')
-  const kg = Math.max(0.1, Number($('#mKg').value) || 1)
-  const st = Math.max(1, Number($('#mSticks').value) || 1)
+  const kg = Math.max(0.1, Number($('#mKg').value)||1)
+  const serves = Math.max(1, Number($('#mServes').value)||1)
 
-  makeRows.forEach((r) => {
+  mkRows.forEach((r) => {
     const i = ing(r.ing); if (!i) return
-    i.stock = Math.round((i.stock - useStock(r.ing, i.bottle ? 1 : r.qty)) * 1000) / 1000
+    i.stock = Math.round((i.stock - useStock(r.ing, i.bottle?1:r.qty))*1000)/1000
   })
 
-  let sauce = db.ing.find((i) => i.id === 'sauce')
-  if (!sauce) { sauce = { id:'sauce', name:'น้ำจิ้มซีฟู้ด', unit:'กก.', price:0, stock:0, bottle:false, made:true }; db.ing.push(sauce) }
-  sauce.price = total / kg
-  sauce.stock = Math.round((sauce.stock + kg) * 1000) / 1000
+  s.recipe = mkRows.map((r)=>({ ...r }))
+  s.lastKg = kg; s.lastServes = serves
+  s.stock = Math.round((s.stock + kg)*1000)/1000
+  s.batch = { total, kg, serves, perKg: total/kg, perServe: total/serves, at: now() }
 
-  db.sauceRecipe = makeRows.map((r) => ({ ...r }))
-  db.sauce = { costPerUnit: total/kg, unit:'กก.', sticks: st, costPerStick: total/st,
-               at: new Date().toLocaleString('th-TH',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}) }
-  logIt(`ทำน้ำจิ้ม ${qty(kg)} กก. ต้นทุน ${bt(total)} ฿ (${bt(total/st)} ฿/ไม้)`)
+  logIt(`ทำ${s.name} ${qty(kg)} ${s.unit} = ${bt(total)} ฿ (${bt(total/serves)} ฿/ชิ้น)`)
   closeM(); render()
 }
 
 // ── นำเข้าสต็อก ──────────────────────────────────────────
-function openStockIn() {
-  const p = db.prod[0]
+let siId = null
+function openStockIn(pid) {
+  const p = db.prod.find((x)=>x.id===pid); if (!p) return
+  siId = pid
   const i = ing(p.mainIng)
   sheet(`<h3>📥 นำเข้าสต็อก : ${esc(p.name)}</h3>
     <p class="sub">บอกด้วยว่าใช้วัตถุดิบไปเท่าไหร่ ต้นทุนถึงจะเป็นของจริง</p>
-    <label class="f"><span>เสียบได้กี่ไม้</span>
-      <input type="number" id="sSticks" value="20" min="1" step="1" oninput="stockCalc(true)"></label>
+    <label class="f"><span>ได้กี่${esc(p.unit)}</span>
+      <input type="number" id="sQty" value="${p.normalYield}" min="1" step="1" oninput="siCalc(true)"></label>
     <label class="f"><span>ใช้ ${esc(i.name)} (${esc(i.unit)})</span>
-      <input type="number" id="sUse" value="1" min="0.01" step="0.1" oninput="stockCalc(false)"></label>
+      <input type="number" id="sUse" value="1" min="0.01" step="0.1" oninput="siCalc(false)"></label>
     <div class="out"><div class="big" id="sOut">—</div><div class="cap" id="sCap"></div></div>
     <div id="sMsg"></div>
-    <div class="rowbtn" style="margin-top:14px">
-      <button class="btn grey" onclick="closeM()">ยกเลิก</button>
-      <button class="btn" onclick="doStockIn()">บันทึก</button></div>`)
-  stockCalc(true)
+    ${saveRow('doStockIn()')}`)
+  siCalc(true)
 }
-/** พิมพ์จำนวนไม้แล้วเติมปริมาณวัตถุดิบให้ตามสูตร แต่แก้ทับได้ตลอด */
-function stockCalc(fromSticks) {
-  const p = db.prod[0], i = ing(p.mainIng)
-  const st = Math.max(1, Number($('#sSticks').value) || 1)
-  if (fromSticks) $('#sUse').value = Math.round(st * p.perUnit * 1000) / 1000
-  const use = Math.max(0.001, Number($('#sUse').value) || 0.001)
-  const total = use * i.price
-  const per = total / st
-  const yieldNow = st / use
-  $('#sOut').textContent = bt(per) + ' ฿ / ไม้'
-  $('#sCap').textContent = `${esc(i.name)} ${qty(use)} ${esc(i.unit)} = ${bt(total)} ฿ ÷ ${st} ไม้ · ได้ ${yieldNow.toFixed(1)} ไม้/${esc(i.unit)}`
+/** พิมพ์จำนวนแล้วเติมปริมาณวัตถุดิบให้ตามสูตร แต่แก้ทับได้ตลอด */
+function siCalc(fromQty) {
+  const p = db.prod.find((x)=>x.id===siId), i = ing(p.mainIng)
+  const n = Math.max(1, Number($('#sQty').value)||1)
+  if (fromQty) $('#sUse').value = Math.round(n*p.perUnit*1000)/1000
+  const use = Math.max(0.001, Number($('#sUse').value)||0.001)
+  const total = use*i.price, per = total/n, y = n/use
 
-  const gap = (p.normalYield - yieldNow) / p.normalYield
+  $('#sOut').textContent = bt(per)+' ฿ / '+p.unit
+  $('#sCap').textContent = `${esc(i.name)} ${qty(use)} ${esc(i.unit)} = ${bt(total)} ฿ ÷ ${n} ${esc(p.unit)} · ได้ ${y.toFixed(1)} ${esc(p.unit)}/${esc(i.unit)}`
+
+  const gap = (p.normalYield - y)/p.normalYield
   let msg = ''
-  if (use > i.stock + 1e-9) msg += `<div class="msg bad">⚠️ ${esc(i.name)} มีแค่ ${qty(i.stock)} ${esc(i.unit)} แต่จะใช้ ${qty(use)} — บันทึกซื้อก่อนดีกว่า</div>`
-  if (gap > 0.25) msg += `<div class="msg bad">⚠️ ได้แค่ ${yieldNow.toFixed(1)} ไม้/${esc(i.unit)} ปกติได้ ${p.normalYield} — ต้นทุนพุ่งจาก ${bt(i.price/p.normalYield)} เป็น ${bt(per)} ฿/ไม้</div>`
-  else if (gap > 0.1) msg += `<div class="msg warn">ได้ ${yieldNow.toFixed(1)} ไม้/${esc(i.unit)} น้อยกว่าปกติ (${p.normalYield}) ต้นทุนขยับเป็น ${bt(per)} ฿/ไม้</div>`
-  else msg += `<div class="msg good">✅ ได้ตามปกติ ต้นทุน ${bt(per)} ฿/ไม้</div>`
+  if (use > i.stock + 1e-9) msg += `<div class="msg bad">⚠️ ${esc(i.name)} มีแค่ ${qty(i.stock)} ${esc(i.unit)} แต่จะใช้ ${qty(use)}</div>`
+  if (gap > 0.25) msg += `<div class="msg bad">⚠️ ได้แค่ ${y.toFixed(1)} ${esc(p.unit)}/${esc(i.unit)} ปกติได้ ${p.normalYield} — ต้นทุนพุ่งจาก ${bt(i.price/p.normalYield)} เป็น ${bt(per)} ฿</div>`
+  else if (gap > 0.1) msg += `<div class="msg warn">ได้ ${y.toFixed(1)} น้อยกว่าปกติ (${p.normalYield}) ต้นทุนขยับเป็น ${bt(per)} ฿</div>`
+  else msg += `<div class="msg good">✅ ได้ตามปกติ ต้นทุน ${bt(per)} ฿/${esc(p.unit)}</div>`
   $('#sMsg').innerHTML = msg
 }
 function doStockIn() {
-  const p = db.prod[0], i = ing(p.mainIng)
-  const st = Math.max(1, Number($('#sSticks').value) || 1)
-  const use = Math.max(0.001, Number($('#sUse').value) || 0.001)
-  const per = (use * i.price) / st
+  const p = db.prod.find((x)=>x.id===siId), i = ing(p.mainIng)
+  const n = Math.max(1, Number($('#sQty').value)||1)
+  const use = Math.max(0.001, Number($('#sUse').value)||0.001)
+  const per = (use*i.price)/n
 
   // ต้นทุนสต็อกเป็นค่าเฉลี่ยถ่วงน้ำหนัก ของเก่ากับของใหม่คนละราคาก็รวมกันได้ถูก
-  const totalQty = p.stock + st
-  p.cost = totalQty > 0 ? (p.cost * p.stock + per * st) / totalQty : per
-  p.stock = totalQty
-  i.stock = Math.round((i.stock - use) * 1000) / 1000
+  const tot = p.stock + n
+  p.cost = tot>0 ? (p.cost*p.stock + per*n)/tot : per
+  p.stock = tot
+  i.stock = Math.round((i.stock - use)*1000)/1000
 
-  logIt(`เข้าสต็อก ${p.name} ${st} ไม้ ใช้ ${esc(i.name)} ${qty(use)} ${i.unit} (${bt(per)} ฿/ไม้)`)
+  logIt(`เข้าสต็อก ${p.name} ${n} ${p.unit} ใช้ ${i.name} ${qty(use)} ${i.unit} (${bt(per)} ฿/${p.unit})`)
   closeM(); render()
 }
 
