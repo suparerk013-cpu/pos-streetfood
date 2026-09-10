@@ -134,15 +134,23 @@ describe('แท็บย่อยในหน้าน้ำจิ้ม', () =
 
   it('เปิดแท็บซื้อของได้ตรงจากลิงก์ในหน้าค่าใช้จ่าย', () => {
     const html = render(<SaucePage initialTab="shopping" />)
-    expect(html).toContain('เตรียมรายการ')
-    expect(html).toContain('ระบบแนะนำจากสูตรน้ำจิ้ม')
+    expect(html).toContain('ต้องซื้อ')
   })
 
-  it('แท็บซื้อของแนะนำของที่ใกล้หมดพร้อมจำนวนที่ควรซื้อ', () => {
+  it('แท็บซื้อของเป็นรายการหน้าเดียว แตะแถวเพื่อบันทึก', () => {
     const text = plain(render(<SaucePage initialTab="shopping" />)).replace(/<[^>]+>/g, '')
+    expect(text).toContain('แตะเพื่อบันทึก')
     expect(text).toContain('พริก')
     // ต้องมี 5 × 0.2 = 1 กก. เหลือ 0.3 → ขาด 0.7 ปัดขึ้นเป็น 0.75
-    expect(text).toContain('+ ซื้อ 0.75 กก.')
+    expect(text).toContain('ซื้อ 0.75 กก.')
+    // ไม่มีขั้นตอนหลายจอแล้ว
+    expect(text).not.toContain('ตรวจแล้วบันทึก')
+  })
+
+  it('บอกของที่เหลือกับราคาครั้งก่อนในแถวเดียว ตัดสินใจได้ตอนยืนหน้าแผง', () => {
+    const text = plain(render(<SaucePage initialTab="shopping" />)).replace(/<[^>]+>/g, '')
+    expect(text).toContain('เหลือ 0.3 กก.')
+    expect(text).toContain('ครั้งก่อน 150.00 ฿/กก.')
   })
 
   it('แท็บรายงานเตือนไม่ให้เอาตัวเลขไปหักกำไรซ้ำ', () => {
