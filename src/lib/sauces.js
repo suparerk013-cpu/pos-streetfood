@@ -21,6 +21,7 @@ import {
   where,
   writeBatch,
 } from 'firebase/firestore'
+import { toDateString } from './dates'
 import { db } from './firebase'
 import { SAUCE_ICONS, batchTotals, cleanRecipe } from './sauceCost'
 
@@ -72,7 +73,7 @@ export function updateSauce(sauceId, updates) {
  * ที่ต้องเก็บซ้ำบนตัวสูตรเพราะหน้าขายกับหน้ารายงานคิดต้นทุนสินค้าทุกครั้งที่วาดจอ
  * ถ้าต้องไปไล่หาหม้อล่าสุดจาก collection ประวัติทุกรอบจะช้าและเปลืองโควตาอ่าน
  */
-export async function recordSauceBatch({ sauceId, sauceName, lines, yieldQty, serves, note, ingredientById }) {
+export async function recordSauceBatch({ sauceId, sauceName, lines, yieldQty, serves, note, date, ingredientById }) {
   const totals = batchTotals(lines, { yieldQty, serves, ingredientById })
   const batch = writeBatch(db)
 
@@ -91,6 +92,9 @@ export async function recordSauceBatch({ sauceId, sauceName, lines, yieldQty, se
     lines: totals.lines,
     ...summary,
     note: String(note ?? '').trim(),
+    // เก็บวันที่เป็นสตริงคู่กับ created_at เพราะรายงานต้องกรองตามช่วงวัน
+    // เทียบสตริง 'YYYY-MM-DD' ตรง ๆ ได้ ไม่ต้องแปลง Timestamp ทุกครั้งที่ query
+    date: date ?? toDateString(),
     created_at: serverTimestamp(),
   })
 

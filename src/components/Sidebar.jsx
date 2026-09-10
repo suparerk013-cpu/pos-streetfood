@@ -12,7 +12,7 @@ const NAV_ITEMS = [
   { key: 'settings',  label: 'ตั้งค่า',    icon: Settings },
 ]
 
-function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
+function Sidebar({ current, onNavigate, lowStockCount = 0, sauceAlerts = 0 }) {
   const { shopName, store, sauceEnabled } = useAppData()
   const logoBase64 = store.logo_base64 ?? null
 
@@ -55,6 +55,11 @@ function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
                   {key === 'inventory' && lowStockCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                       {lowStockCount > 9 ? '9+' : lowStockCount}
+                    </span>
+                  )}
+                  {key === 'sauce' && sauceAlerts > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {sauceAlerts > 9 ? '9+' : sauceAlerts}
                     </span>
                   )}
                 </span>

@@ -10,9 +10,11 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 vi.mock('../../lib/firebase', () => ({ db: {}, auth: {} }))
 vi.mock('firebase/firestore', () => ({
   collection: () => ({}), doc: () => ({}), query: () => ({}), where: () => ({}),
-  orderBy: () => ({}), limit: () => ({}), onSnapshot: () => () => {},
+  orderBy: () => ({}), limit: () => ({}),
+  // ของจริง onSnapshot ยิงกลับทันทีแม้ไม่มีข้อมูล ถ้า mock ไม่ยิง หน้าจะค้างที่ 'กำลังโหลด'
+  onSnapshot: (_q, cb) => { cb({ docs: [] }); return () => {} },
   serverTimestamp: () => new Date(), addDoc: async () => ({}), updateDoc: async () => {},
-  deleteDoc: async () => {}, getDocs: async () => ({ docs: [] }),
+  deleteDoc: async () => {}, getDocs: async () => ({ docs: [] }), increment: (n) => n,
   writeBatch: () => ({ set: () => {}, update: () => {}, delete: () => {}, commit: async () => {} }),
 }))
 
@@ -29,7 +31,7 @@ const sauceWithBatch = {
 const freshSauce = { id: 's2', name: 'น้ำจิ้มซีฟู้ด', icon: '🌶️', unit: 'กก.', recipe: [], last_batch: null }
 
 const ingredients = [
-  { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, is_active: true, stock_qty: 1 },
+  { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, is_active: true, stock_qty: 0.3 },
   { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, is_active: true, stock_qty: 2, content_qty: 700, content_unit: 'มล.' },
 ]
 
@@ -88,6 +90,64 @@ describe('หน้าน้ำจิ้ม', () => {
   it('ไม่มีสูตรสักอัน ขึ้นคำแนะนำแทนหน้าว่าง', () => {
     const html = render(<SaucePage />, { ...ctx, sauces: [], sauceById: new Map() })
     expect(html).toContain('ยังไม่มีสูตรน้ำจิ้ม')
+  })
+})
+
+describe('แจ้งเตือนของหมด', () => {
+  it('บอกว่าทำได้อีกกี่หม้อ และตัวไหนจะหมดก่อน', () => {
+    // พริกเหลือ 0.3 ใช้หม้อละ 0.2 → ทำได้อีก 1 หม้อ
+    const text = plain(render(<SaucePage />)).replace(/<[^>]+>/g, '')
+    expect(text).toContain('ทำได้อีก 1 หม้อ')
+    expect(text).toContain('พริกจะหมดก่อน')
+  })
+
+  it('ของไม่พอทำหม้อถัดไป ขึ้นเตือนพร้อมชื่อของที่ขาด', () => {
+    const empty = ingredients.map((i) => (i.id === 'chili' ? { ...i, stock_qty: 0 } : i))
+    const html = render(<SaucePage />, {
+      ...ctx, ingredients: empty, activeIngredients: empty,
+      ingredientById: new Map(empty.map((i) => [i.id, i])),
+    })
+    expect(plain(html)).toContain('ทำหม้อถัดไปไม่ได้')
+  })
+
+  it('ตอนของหมดกางตารางให้เลย เห็นทีละตัวว่าใครเหลือเท่าไหร่', () => {
+    // ของหมดไม่พร้อมกัน บอกแค่จำนวนหม้อจึงไม่พอ ต้องเห็นทุกตัวในตารางเดียว
+    const empty = ingredients.map((i) => (i.id === 'chili' ? { ...i, stock_qty: 0 } : i))
+    const text = plain(render(<SaucePage />, {
+      ...ctx, ingredients: empty, activeIngredients: empty,
+      ingredientById: new Map(empty.map((i) => [i.id, i])),
+    })).replace(/<[^>]+>/g, '')
+    expect(text).toContain('ใช้/หม้อ')
+    expect(text).toContain('พริก')
+    expect(text).toContain('น้ำปลา')
+  })
+})
+
+describe('แท็บย่อยในหน้าน้ำจิ้ม', () => {
+  it('มีครบสี่แท็บ', () => {
+    const html = render(<SaucePage />)
+    expect(html).toContain('สูตร')
+    expect(html).toContain('ซื้อของ')
+    expect(html).toContain('ประวัติ')
+    expect(html).toContain('รายงาน')
+  })
+
+  it('เปิดแท็บซื้อของได้ตรงจากลิงก์ในหน้าค่าใช้จ่าย', () => {
+    const html = render(<SaucePage initialTab="shopping" />)
+    expect(html).toContain('เตรียมรายการ')
+    expect(html).toContain('ระบบแนะนำจากสูตรน้ำจิ้ม')
+  })
+
+  it('แท็บซื้อของแนะนำของที่ใกล้หมดพร้อมจำนวนที่ควรซื้อ', () => {
+    const text = plain(render(<SaucePage initialTab="shopping" />)).replace(/<[^>]+>/g, '')
+    expect(text).toContain('พริก')
+    // ต้องมี 5 × 0.2 = 1 กก. เหลือ 0.3 → ขาด 0.7 ปัดขึ้นเป็น 0.75
+    expect(text).toContain('+ ซื้อ 0.75 กก.')
+  })
+
+  it('แท็บรายงานเตือนไม่ให้เอาตัวเลขไปหักกำไรซ้ำ', () => {
+    const html = plain(render(<SaucePage initialTab="report" />))
+    expect(html).toContain('อย่าเอาไปหักกำไรซ้ำ')
   })
 })
 

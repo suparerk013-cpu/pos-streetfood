@@ -131,7 +131,7 @@ function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase,
   )
 }
 
-function ExpensesPage() {
+function ExpensesPage({ onNavigate }) {
   const { activeIngredients, ingredientById, ingredientsLoading, shopName, online } = useAppData()
 
   const [tab, setTab] = useState('ingredients')
@@ -373,6 +373,22 @@ function ExpensesPage() {
                   {seeding ? 'กำลังเพิ่ม...' : 'เพิ่มรายการตั้งต้น 19 อย่าง'}
                 </button>
               </div>
+            )}
+
+            {/* ทางลัดไปรายการที่ต้องซื้อ — คนคิดว่า "ซื้อของ" อยู่คู่กับค่าใช้จ่าย
+                ถ้าซ่อนไว้แค่ในแท็บน้ำจิ้มจะหาไม่เจอตอนรีบจะออกไปตลาด */}
+            {onNavigate && (
+              <button type="button" onClick={() => onNavigate('sauce', 'shopping')}
+                className="rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
+                <span className="text-xl shrink-0">🛒</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-gray-800">จะไปตลาด?</p>
+                  <p className="text-[11px] text-gray-400">
+                    ดูรายการที่ต้องซื้อจากสูตรน้ำจิ้ม แล้วบันทึกเข้าคลังทีเดียวตอนกลับ
+                  </p>
+                </div>
+                <span className="text-gray-300 shrink-0">›</span>
+              </button>
             )}
 
             {/* รายการวัตถุดิบ */}

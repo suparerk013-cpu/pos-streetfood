@@ -8,6 +8,7 @@ import { AppDataProvider } from './lib/appData'
 import { useAppData } from './lib/appDataContext'
 import { watchAuth } from './lib/auth'
 import { LOW_STOCK_THRESHOLD } from './lib/constants'
+import { sauceAlertCount } from './lib/sauceStock'
 import LoginPage from './pages/LoginPage'
 import SalesPage from './pages/SalesPage'
 
@@ -41,7 +42,7 @@ function PageFallback() {
 }
 
 function Shell() {
-  const { activeProducts, shiftsLoading, currentShift, sauceEnabled } = useAppData()
+  const { activeProducts, shiftsLoading, currentShift, sauceEnabled, sauces, ingredientById } = useAppData()
   const [page, setPage] = useState('sales')
   const [shiftModalDismissed, setShiftModalDismissed] = useState(false)
 
@@ -50,8 +51,19 @@ function Shell() {
     [activeProducts],
   )
 
-  const handleNavigate = (p) => {
+  // เตือนตั้งแต่หน้าขายว่ามีสูตรไหนทำหม้อถัดไปไม่ได้ จะได้ไม่ต้องกดเข้าไปเช็คเอง
+  const sauceAlerts = useMemo(
+    () => (sauceEnabled ? sauceAlertCount(sauces, ingredientById) : 0),
+    [sauceEnabled, sauces, ingredientById],
+  )
+
+  // หน้าที่มีแท็บย่อยรับค่านี้ไปเปิดแท็บที่ถูกต้องเลย เช่นกด "ไปตลาด" จากหน้าค่าใช้จ่าย
+  // แล้วเด้งเข้าแท็บซื้อของของหน้าน้ำจิ้มทันที ไม่ต้องกดหาเอง
+  const [pageTab, setPageTab] = useState(null)
+
+  const handleNavigate = (p, tab = null) => {
     if (p === 'sales') setShiftModalDismissed(false)
+    setPageTab(tab)
     setPage(p)
   }
 
@@ -68,18 +80,18 @@ function Shell() {
 
   return (
     <div className="h-screen w-full flex overflow-hidden">
-      <Sidebar current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
+      <Sidebar current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} sauceAlerts={sauceAlerts} />
       <div className="flex-1 min-w-0 h-full flex flex-col">
         <OfflineBanner />
         <div className="flex-1 min-h-0 overflow-hidden">
           {/* key=page ทำให้กลับมาใช้งานได้เองเมื่อกดเมนูไปหน้าอื่น ไม่ต้องปิดแอปทิ้ง */}
           <ErrorBoundary key={page}>
             <Suspense fallback={<PageFallback />}>
-              <PageComponent />
+              <PageComponent onNavigate={handleNavigate} initialTab={pageTab} />
             </Suspense>
           </ErrorBoundary>
         </div>
-        <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} sauceEnabled={sauceEnabled} />
+        <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} sauceEnabled={sauceEnabled} sauceAlerts={sauceAlerts} />
       </div>
 
       {showOpenShiftModal && <OpenShiftModal onClose={() => setShiftModalDismissed(true)} />}

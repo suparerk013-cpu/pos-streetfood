@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
+import { trim } from '../lib/format'
 import {
   batchTotals,
   entryUnitsFor,
@@ -260,11 +261,6 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
       )}
     </ModalBackdrop>
   )
-}
-
-/** ตัดศูนย์ท้ายทศนิยมทิ้ง — 0.10 ขวดอ่านยากกว่า 0.1 ขวด และ 2.00 กก. ก็ควรเป็น 2 กก. */
-function trim(value) {
-  return Number(Number(value).toFixed(3)).toString()
 }
 
 export default SauceBatchModal

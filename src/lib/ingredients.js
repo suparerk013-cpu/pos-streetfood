@@ -95,6 +95,60 @@ export async function recordPurchase({
   await batch.commit()
 }
 
+/**
+ * บันทึกของที่ซื้อมาทั้งตะกร้าในครั้งเดียว — ใช้ตอนกลับจากตลาด
+ *
+ * เขียนทุกอย่างในชุดเดียว ทั้งรายการซื้อ ราคาล่าสุด และสต็อกที่เพิ่ม
+ * ถ้าแยกบันทึกทีละตัวแล้วเน็ตหลุดกลางทาง จะได้ของครึ่งตะกร้าเข้าคลัง
+ * อีกครึ่งหาย แล้วต้องมานั่งไล่ว่าตัวไหนเข้าไปแล้วบ้าง
+ *
+ * ของที่ยังไม่มีในทะเบียน (เจอของใหม่ในตลาด) สร้างให้ก่อนแล้วค่อยบันทึกซื้อ
+ */
+export async function recordPurchases(items = [], { date }) {
+  const rows = []
+  for (const item of items) {
+    let ingredientId = item.ingredientId
+    if (!ingredientId) {
+      ingredientId = await addIngredient({
+        name: item.ingredientName,
+        unit: item.unit,
+        category: item.category,
+      })
+    }
+    rows.push({ ...item, ingredientId })
+  }
+
+  const batch = writeBatch(db)
+  rows.forEach((row) => {
+    const qty = Number(row.qty) || 0
+    const totalAmount = Number(row.totalAmount) || 0
+    const unitPrice = qty > 0 ? totalAmount / qty : 0
+
+    batch.set(doc(collection(db, 'purchases')), {
+      ingredient_id: row.ingredientId,
+      ingredient_name: row.ingredientName,
+      category: row.category ?? 'other',
+      unit: row.unit ?? 'ชิ้น',
+      qty,
+      unit_price: unitPrice,
+      total_amount: totalAmount,
+      date,
+      vendor: row.vendor?.trim() || null,
+      note: row.note?.trim() || null,
+      created_at: serverTimestamp(),
+    })
+
+    batch.update(doc(db, 'ingredients', row.ingredientId), {
+      last_price: unitPrice,
+      last_purchased_at: date,
+      stock_qty: increment(qty),
+    })
+  })
+
+  await batch.commit()
+  return rows.length
+}
+
 export function updatePurchase(purchaseId, updates) {
   return updateDoc(doc(db, 'purchases', purchaseId), updates)
 }

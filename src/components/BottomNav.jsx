@@ -11,7 +11,7 @@ const TABS = [
   { key: 'settings', label: 'ตั้งค่า', icon: Settings },
 ]
 
-function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true }) {
+function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true, sauceAlerts = 0 }) {
   const tabs = TABS.filter((tab) => !tab.needsSauce || sauceEnabled)
 
   return (
@@ -32,6 +32,11 @@ function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true
               {key === 'inventory' && lowStockCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center">
                   {lowStockCount > 9 ? '9+' : lowStockCount}
+                </span>
+              )}
+              {key === 'sauce' && sauceAlerts > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center">
+                  {sauceAlerts > 9 ? '9+' : sauceAlerts}
                 </span>
               )}
             </div>
