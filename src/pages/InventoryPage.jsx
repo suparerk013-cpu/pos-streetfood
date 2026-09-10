@@ -1,35 +1,30 @@
-import { collection, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import AddProductModal from '../components/AddProductModal'
 import EditProductModal from '../components/EditProductModal'
 import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/AppDataContext'
 import { addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { adjustStock, restockProduct } from '../lib/stock'
 
 const LOW_STOCK_THRESHOLD = 10
 
 function InventoryPage() {
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { products: rawProducts, productsLoading: loading } = useAppData()
+  const products = useMemo(
+    () => [...rawProducts].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+    [rawProducts],
+  )
   const [stockModalTarget, setStockModalTarget] = useState(null)
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
   const [logTarget, setLogTarget] = useState(null)
   const [search, setSearch] = useState('')
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const items = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      setProducts(items)
-      setLoading(false)
-    })
-    return unsubscribe
-  }, [])
+  const handleToggleActive = async (product) => {
+    await updateProduct(product.id, { is_active: !product.is_active })
+  }
 
   const handleStockSubmit = async (qty, note) => {
     const { product } = stockModalTarget
@@ -105,11 +100,12 @@ function InventoryPage() {
           {visibleProducts.map((product) => {
             const qty = product.stock_qty ?? 0
             const isLow = qty < LOW_STOCK_THRESHOLD
+            const isInactive = !product.is_active
 
             return (
               <div
                 key={product.id}
-                className="rounded-2xl bg-white border border-orange-100 p-4"
+                className={`rounded-2xl bg-white border p-4 ${isInactive ? 'border-gray-200 opacity-60' : 'border-orange-100'}`}
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-start gap-3">
@@ -125,7 +121,14 @@ function InventoryPage() {
                       )}
                     </div>
                     <div>
-                      <p className="font-bold text-gray-800">{product.name}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-gray-800">{product.name}</p>
+                        {isInactive && (
+                          <span className="inline-block rounded-full bg-gray-200 text-gray-500 text-[10px] font-semibold px-2 py-0.5">
+                            ปิดการขายอยู่
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm text-gray-400">
                         {product.category} · {product.price} ฿ ·{' '}
                         {product.stock_type === 'daily' ? 'สต็อกรายวัน' : 'สต็อกล็อต'}
@@ -166,6 +169,17 @@ function InventoryPage() {
                   >
                     📋 ประวัติ
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => handleToggleActive(product)}
+                    className={`min-h-[44px] flex-1 rounded-xl font-medium active:scale-95 transition-transform text-sm ${
+                      isInactive
+                        ? 'bg-green-50 border border-green-200 text-green-700'
+                        : 'bg-amber-50 border border-amber-200 text-amber-700'
+                    }`}
+                  >
+                    {isInactive ? '✓ เปิดขายอีกครั้ง' : '⏸ ปิดการขายชั่วคราว'}
+                  </button>
                 </div>
               </div>
             )
@@ -192,6 +206,10 @@ function InventoryPage() {
           onClose={() => setEditTarget(null)}
           onSubmit={handleEditProduct}
           onDelete={handleDeleteProduct}
+          onToggleActive={async () => {
+            await handleToggleActive(editTarget)
+            setEditTarget(null)
+          }}
         />
       )}
 

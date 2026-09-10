@@ -8,13 +8,14 @@ async function applyStockChange(productId, qtyChange, type, note) {
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(productRef)
     const currentQty = snap.exists() ? (snap.data().stock_qty ?? 0) : 0
-    const nextQty = currentQty + qtyChange
+    const nextQty = Math.max(0, currentQty + qtyChange)
+    const appliedChange = nextQty - currentQty
 
     transaction.update(productRef, { stock_qty: nextQty })
     transaction.set(logRef, {
       product_id: productId,
       type,
-      qty_change: qtyChange,
+      qty_change: appliedChange,
       note: note || null,
       order_id: null,
       created_at: serverTimestamp(),

@@ -1,19 +1,6 @@
 import { useState } from 'react'
+import { formatDate, formatTime, PAYMENT_METHOD_LABELS as METHOD_LABELS } from '../lib/format'
 import { voidOrder } from '../lib/orders'
-
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
-
-function formatTime(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
-}
 
 function BillModal({ order, onClose, onVoided }) {
   const [confirmVoid, setConfirmVoid] = useState(false)

@@ -1,10 +1,6 @@
 import { addDoc, collection, doc, runTransaction, serverTimestamp } from 'firebase/firestore'
 import { db } from './firebase'
-
-export const PAYMENT_METHOD_LABELS = {
-  cash: 'เงินสด',
-  promptpay: 'โอน (PromptPay)',
-}
+import { PAYMENT_METHOD_LABELS } from './format'
 
 export function summarizePayments(payments) {
   const line = payments

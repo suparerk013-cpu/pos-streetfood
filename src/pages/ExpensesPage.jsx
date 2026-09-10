@@ -1,8 +1,7 @@
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import ExpenseModal from '../components/ExpenseModal'
-import { db } from '../lib/firebase'
 import { createExpense, EXPENSE_CATEGORY_COLORS, EXPENSE_CATEGORY_LABELS, toDateString } from '../lib/expenses'
+import { useExpenses, useOrders } from '../lib/hooks'
 
 const RANGE_PRESETS = [
   { key: 'today', label: 'วันนี้' },
@@ -51,9 +50,9 @@ function orderDateStr(order) {
 }
 
 function ExpensesPage() {
-  const [expenses, setExpenses] = useState([])
-  const [orders, setOrders] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { expenses, loading } = useExpenses()
+  const { orders: allOrders } = useOrders()
+  const orders = useMemo(() => allOrders.filter((o) => !o.is_voided), [allOrders])
   const [modalOpen, setModalOpen] = useState(false)
   const [rangePreset, setRangePreset] = useState('today')
   const [customFrom, setCustomFrom] = useState(toDateString())
@@ -71,20 +70,6 @@ function ExpensesPage() {
 
   const goPrevMonth = () => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
   const goNextMonth = () => setMonthCursor((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
-
-  useEffect(() => {
-    return onSnapshot(collection(db, 'expenses'), (snapshot) => {
-      setExpenses(snapshot.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setLoading(false)
-    })
-  }, [])
-
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
-    })
-  }, [])
 
   const { from, to } =
     rangePreset === 'custom' ? { from: customFrom, to: customTo }

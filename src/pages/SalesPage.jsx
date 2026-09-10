@@ -1,6 +1,5 @@
-import { collection, doc, onSnapshot } from 'firebase/firestore'
 import { PackageX } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import CartItemRow from '../components/CartItemRow'
 import CartSheet from '../components/CartSheet'
 import CheckoutModal from '../components/CheckoutModal'
@@ -8,38 +7,25 @@ import DamageModal from '../components/DamageModal'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { addItemToCart, calcCartTotal, removeItem, setItemQuantity, updateItemQuantity } from '../lib/cart'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/AppDataContext'
 import { seedInitialProducts } from '../lib/seedProducts'
 import { reportDamage } from '../lib/stock'
 
 function SalesPage() {
-  const [products, setProducts] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { activeProducts, productsLoading, storeSettings } = useAppData()
+  const shopName = storeSettings.shop_name ?? ''
+  const products = useMemo(
+    () => [...activeProducts].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+    [activeProducts],
+  )
+  const loading = productsLoading
   const [cart, setCart] = useState([])
   const [seeding, setSeeding] = useState(false)
+  const [seedError, setSeedError] = useState(null)
   const [checkoutOpen, setCheckoutOpen] = useState(false)
   const [successResult, setSuccessResult] = useState(null)
-  const [shopName, setShopName] = useState('')
   const [activeCategory, setActiveCategory] = useState('all')
   const [damageOpen, setDamageOpen] = useState(false)
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopName(snap.data().shop_name ?? '')
-    })
-  }, [])
-
-  useEffect(() => {
-    const unsubscribe = onSnapshot(collection(db, 'products'), (snapshot) => {
-      const items = snapshot.docs
-        .map((docSnap) => ({ id: docSnap.id, ...docSnap.data() }))
-        .filter((product) => product.is_active)
-        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-      setProducts(items)
-      setLoading(false)
-    })
-    return unsubscribe
-  }, [])
 
   const cartQtyByProductId = useMemo(() => {
     const map = new Map()
@@ -71,8 +57,11 @@ function SalesPage() {
 
   const handleSeed = async () => {
     setSeeding(true)
+    setSeedError(null)
     try {
       await seedInitialProducts()
+    } catch (err) {
+      setSeedError(err?.message ?? String(err))
     } finally {
       setSeeding(false)
     }
@@ -105,6 +94,10 @@ function SalesPage() {
           )}
         </div>
       </header>
+
+      {seedError && (
+        <p className="shrink-0 bg-red-50 text-red-600 text-xs px-4 py-2">Seed error: {seedError}</p>
+      )}
 
       {/* Body: products left + cart right on desktop */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">

@@ -11,9 +11,13 @@ function DamageModal({ products, onClose, onSubmit }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
+  const selectedProduct = products.find((p) => p.id === productId) ?? null
+  const availableQty = selectedProduct?.stock_qty ?? 0
   const parsedQty = Number(qty)
+  const exceedsStock = selectedProduct !== null && parsedQty > availableQty
   const finalReason = reason === 'อื่นๆ' ? customReason.trim() : reason
-  const isValid = productId !== '' && Number.isInteger(parsedQty) && parsedQty > 0 && finalReason !== ''
+  const isValid =
+    productId !== '' && Number.isInteger(parsedQty) && parsedQty > 0 && finalReason !== '' && !exceedsStock
   const canClose = !saving
 
   const handleSubmit = async () => {
@@ -66,8 +70,15 @@ function DamageModal({ products, onClose, onSubmit }) {
             min="1"
             value={qty}
             onChange={(event) => setQty(event.target.value)}
-            className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
+            className={`mt-1 w-full min-h-[52px] rounded-xl border px-4 text-lg ${
+              exceedsStock ? 'border-red-300 bg-red-50' : 'border-gray-200'
+            }`}
           />
+          {exceedsStock && (
+            <p className="mt-1 text-xs font-semibold text-red-500">
+              มีสินค้าเหลืออยู่แค่ {availableQty} {selectedProduct?.unit ?? 'ชิ้น'} กรอกจำนวนไม่เกินนี้
+            </p>
+          )}
         </label>
 
         <div className="mb-4">

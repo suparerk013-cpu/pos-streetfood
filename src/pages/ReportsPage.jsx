@@ -3,6 +3,9 @@ import { Download } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { db } from '../lib/firebase'
 import { toDateString } from '../lib/expenses'
+import { PAYMENT_METHOD_LABELS as METHOD_LABELS } from '../lib/format'
+import { useAppData } from '../lib/AppDataContext'
+import { useExpenses, useOrders } from '../lib/hooks'
 
 const RANGE_PRESETS = [
   { key: 'today', label: 'วันนี้' },
@@ -11,7 +14,6 @@ const RANGE_PRESETS = [
 ]
 
 const LOW_STOCK_THRESHOLD = 5
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
 
 function getRange(preset) {
   const today = new Date()
@@ -50,35 +52,18 @@ function exportCSV(orders, from, to) {
 }
 
 function ReportsPage() {
-  const [orders, setOrders]         = useState([])
-  const [expenses, setExpenses]     = useState([])
-  const [products, setProducts]     = useState([])
+  const { activeProducts: products } = useAppData()
+  const { orders: allOrders } = useOrders()
+  const { expenses } = useExpenses()
   const [damageLogs, setDamageLogs] = useState([])
   const [preset, setPreset]         = useState('today')
 
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
-    })
-  }, [])
+  const orders = useMemo(() => allOrders.filter((o) => !o.is_voided), [allOrders])
 
   useEffect(() => {
     const q = query(collection(db, 'stock_logs'), orderBy('created_at', 'desc'))
     return onSnapshot(q, (snap) => {
       setDamageLogs(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((l) => l.type === 'damage'))
-    })
-  }, [])
-
-  useEffect(() => {
-    return onSnapshot(collection(db, 'expenses'), (snap) => {
-      setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-    })
-  }, [])
-
-  useEffect(() => {
-    return onSnapshot(collection(db, 'products'), (snap) => {
-      setProducts(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((p) => p.is_active))
     })
   }, [])
 

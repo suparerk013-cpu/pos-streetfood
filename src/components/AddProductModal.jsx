@@ -1,20 +1,20 @@
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/AppDataContext'
 import ModalBackdrop from './ModalBackdrop'
 
 const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
 
 function AddProductModal({ onClose, onSubmit }) {
+  const { storeSettings } = useAppData()
+  const shopPlatforms = storeSettings.enabled_delivery_platforms ?? PLATFORMS
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [category, setCategory] = useState('')
   const [stockQty, setStockQty] = useState('')
   const [unit, setUnit] = useState('')
   const [stockType, setStockType] = useState('batch')
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, ''])),
   )
@@ -27,12 +27,6 @@ function AddProductModal({ onClose, onSubmit }) {
 
   const isValid = name.trim() !== '' && Number(price) > 0
   const canClose = !saving
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]

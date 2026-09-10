@@ -1,7 +1,10 @@
-import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, updateDoc } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { addDoc, collection, doc, serverTimestamp, updateDoc } from 'firebase/firestore'
+import { useMemo, useState } from 'react'
 import ShiftSummaryModal from '../components/ShiftSummaryModal'
 import { db } from '../lib/firebase'
+import { elapsed, formatDate, formatTime } from '../lib/format'
+import { useAppData } from '../lib/AppDataContext'
+import { useOrders } from '../lib/hooks'
 import { importDeliveryTotal } from '../lib/orders'
 
 const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
@@ -11,24 +14,6 @@ const PLATFORM_COLORS = {
   'LINE MAN':   'border-yellow-200 bg-yellow-50 focus:border-yellow-400 focus:ring-yellow-100',
   'Shopee Food':'border-orange-200 bg-orange-50 focus:border-orange-400 focus:ring-orange-100',
   Robinhood:    'border-purple-200 bg-purple-50 focus:border-purple-400 focus:ring-purple-100',
-}
-
-function formatTime(ts) {
-  if (!ts?.toDate) return '--:--'
-  return ts.toDate().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(ts) {
-  if (!ts?.toDate) return ''
-  return ts.toDate().toLocaleDateString('th-TH', { weekday: 'short', day: 'numeric', month: 'short' })
-}
-
-function elapsed(ts) {
-  if (!ts?.toDate) return ''
-  const diff = Math.floor((Date.now() - ts.toDate().getTime()) / 60000)
-  const h = Math.floor(diff / 60)
-  const m = diff % 60
-  return h > 0 ? `${h} ชม. ${m} น.` : `${m} นาที`
 }
 
 function ShiftHistorySection({ shifts, onSelect }) {
@@ -82,9 +67,10 @@ function ShiftHistorySection({ shifts, onSelect }) {
 }
 
 function ShiftPage() {
-  const [shifts, setShifts]   = useState([])
-  const [orders, setOrders]   = useState([])
-  const [loading, setLoading] = useState(true)
+  const { shifts, shiftsLoading: loading, storeSettings } = useAppData()
+  const { orders: allOrders } = useOrders()
+  const orders = useMemo(() => allOrders.filter((o) => !o.is_voided), [allOrders])
+  const shopPlatforms = storeSettings.enabled_delivery_platforms ?? PLATFORMS
 
   const [openingFloat, setOpeningFloat] = useState('500')
   const [opening, setOpening]           = useState(false)
@@ -100,28 +86,6 @@ function ShiftPage() {
   )
   const [importingPlatform, setImportingPlatform] = useState(null)
   const [importedPlatform, setImportedPlatform]   = useState(null)
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
-
-  useEffect(() => {
-    const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setLoading(false)
-    })
-  }, [])
-
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
-    })
-  }, [])
 
   const currentShift  = useMemo(() => shifts.find((s) => s.status === 'open') ?? null, [shifts])
   const closedShifts  = useMemo(() => shifts.filter((s) => s.status === 'closed'), [shifts])

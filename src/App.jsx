@@ -1,9 +1,9 @@
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
-import { useEffect, useMemo, useState } from 'react'
+import { useState } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import BottomNav from './components/BottomNav'
 import OpenShiftModal from './components/OpenShiftModal'
 import Sidebar from './components/Sidebar'
-import { db } from './lib/firebase'
+import { AppDataProvider, useAppData } from './lib/AppDataContext'
 import DocumentsPage from './pages/DocumentsPage'
 import ExpensesPage from './pages/ExpensesPage'
 import InventoryPage from './pages/InventoryPage'
@@ -12,60 +12,41 @@ import SalesPage from './pages/SalesPage'
 import SettingsPage from './pages/SettingsPage'
 import ShiftPage from './pages/ShiftPage'
 
-const PAGES = {
-  sales: SalesPage,
-  reports: ReportsPage,
-  documents: DocumentsPage,
-  inventory: InventoryPage,
-  shift: ShiftPage,
-  expenses: ExpensesPage,
-  settings: SettingsPage,
-}
+const NAV_KEYS = ['sales', 'reports', 'documents', 'inventory', 'shift', 'expenses', 'settings']
 
-const LOW_STOCK_THRESHOLD = 10
-
-function App() {
-  const [page, setPage] = useState('sales')
-  const [shifts, setShifts] = useState([])
-  const [shiftLoading, setShiftLoading] = useState(true)
+function AppShell() {
+  const navigate = useNavigate()
+  const location = useLocation()
   const [shiftModalDismissed, setShiftModalDismissed] = useState(false)
-  const [lowStockCount, setLowStockCount] = useState(0)
 
-  useEffect(() => {
-    const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setShiftLoading(false)
-    })
-  }, [])
+  const { productsLoading, shiftsLoading, currentShift, lowStockCount } = useAppData()
 
-  useEffect(() => {
-    return onSnapshot(collection(db, 'products'), (snap) => {
-      const count = snap.docs
-        .map((d) => d.data())
-        .filter((p) => p.is_active && (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD).length
-      setLowStockCount(count)
-    })
-  }, [])
-
-  const currentShift = useMemo(() => shifts.find((s) => s.status === 'open') ?? null, [shifts])
+  const page = NAV_KEYS.find((key) => location.pathname === `/${key}`) ?? 'sales'
 
   const handleNavigate = (p) => {
     if (p === 'sales') setShiftModalDismissed(false)
-    setPage(p)
+    navigate(`/${p}`)
   }
 
   const showOpenShiftModal =
-    page === 'sales' && !shiftLoading && !currentShift && !shiftModalDismissed
-
-  const PageComponent = PAGES[page] ?? SalesPage
+    page === 'sales' && !shiftsLoading && !productsLoading && !currentShift && !shiftModalDismissed
 
   return (
     <div className="h-screen w-full flex overflow-hidden">
       <Sidebar current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
       <div className="flex-1 min-w-0 h-full flex flex-col">
         <div className="flex-1 min-h-0 overflow-hidden">
-          <PageComponent />
+          <Routes>
+            <Route path="/" element={<Navigate to="/sales" replace />} />
+            <Route path="/sales" element={<SalesPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/documents" element={<DocumentsPage />} />
+            <Route path="/inventory" element={<InventoryPage />} />
+            <Route path="/shift" element={<ShiftPage />} />
+            <Route path="/expenses" element={<ExpensesPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="*" element={<Navigate to="/sales" replace />} />
+          </Routes>
         </div>
         <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
       </div>
@@ -74,6 +55,14 @@ function App() {
         <OpenShiftModal onClose={() => setShiftModalDismissed(true)} />
       )}
     </div>
+  )
+}
+
+function App() {
+  return (
+    <AppDataProvider>
+      <AppShell />
+    </AppDataProvider>
   )
 }
 

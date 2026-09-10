@@ -1,18 +1,18 @@
-import { doc, onSnapshot } from 'firebase/firestore'
 import { ImageOff, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/AppDataContext'
 import ModalBackdrop from './ModalBackdrop'
 
 const PLATFORMS = ['GrabFood', 'LINE MAN', 'Shopee Food', 'Robinhood']
 
-function EditProductModal({ product, onClose, onSubmit, onDelete }) {
+function EditProductModal({ product, onClose, onSubmit, onDelete, onToggleActive }) {
+  const { storeSettings } = useAppData()
+  const shopPlatforms = storeSettings.enabled_delivery_platforms ?? PLATFORMS
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
   const [unit, setUnit] = useState(product.unit ?? 'ชิ้น')
-  const [shopPlatforms, setShopPlatforms] = useState(PLATFORMS)
   const [deliveryPrices, setDeliveryPrices] = useState(
     Object.fromEntries(PLATFORMS.map((p) => [p, String(product.delivery_prices?.[p] ?? '')]))
   )
@@ -24,9 +24,11 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
+  const [togglingActive, setTogglingActive] = useState(false)
 
   const isValid = name.trim() !== '' && Number(price) > 0
-  const canClose = !saving && !deleting
+  const canClose = !saving && !deleting && !togglingActive
+  const isActive = product.is_active !== false
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -39,11 +41,14 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
     }
   }
 
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) setShopPlatforms(snap.data().enabled_delivery_platforms ?? PLATFORMS)
-    })
-  }, [])
+  const handleToggleActive = async () => {
+    setTogglingActive(true)
+    try {
+      await onToggleActive()
+    } finally {
+      setTogglingActive(false)
+    }
+  }
 
   const handleFileChange = async (event) => {
     const file = event.target.files?.[0]
@@ -205,11 +210,31 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={!isValid || saving || processingImage || deleting}
+          disabled={!isValid || saving || processingImage || deleting || togglingActive}
           className="w-full min-h-[56px] rounded-xl bg-orange-600 disabled:bg-gray-300 text-white font-bold text-lg active:scale-95 transition-transform"
         >
           {saving ? 'กำลังบันทึก...' : 'บันทึก'}
         </button>
+
+        {/* ปิดการขายชั่วคราว / เปิดขายอีกครั้ง — ไม่ลบข้อมูล */}
+        <div className="mt-4 pt-4 border-t border-gray-100">
+          <button
+            type="button"
+            onClick={handleToggleActive}
+            disabled={saving || deleting || togglingActive}
+            className={`w-full py-2.5 rounded-xl border text-sm font-semibold active:scale-95 transition-all disabled:opacity-40 ${
+              isActive
+                ? 'border-amber-200 text-amber-700 active:bg-amber-50'
+                : 'border-green-200 text-green-700 active:bg-green-50'
+            }`}
+          >
+            {togglingActive
+              ? 'กำลังบันทึก...'
+              : isActive
+              ? '⏸ ปิดการขายชั่วคราว (ยังเก็บข้อมูลไว้)'
+              : '✓ เปิดขายอีกครั้ง'}
+          </button>
+        </div>
 
         {/* Danger zone: delete product */}
         <div className="mt-4 pt-4 border-t border-gray-100">

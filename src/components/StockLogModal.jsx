@@ -1,6 +1,7 @@
 import { collection, onSnapshot, orderBy, query, where } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 import { db } from '../lib/firebase'
+import { formatDateTime } from '../lib/format'
 
 const TYPE_CONFIG = {
   sale:       { label: 'ขายออก',    icon: '🛒', color: 'text-red-500',    bg: 'bg-red-50'    },
@@ -8,12 +9,6 @@ const TYPE_CONFIG = {
   adjustment: { label: 'ปรับสต็อก', icon: '✏️', color: 'text-blue-500',   bg: 'bg-blue-50'   },
   void:       { label: 'คืนสต็อก',  icon: '↩️', color: 'text-purple-500', bg: 'bg-purple-50' },
   damage:     { label: 'เสียหาย/เครม', icon: '💥', color: 'text-red-600', bg: 'bg-red-50' },
-}
-
-function formatDateTime(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleString('th-TH', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
 }
 
 function StockLogModal({ product, onClose }) {

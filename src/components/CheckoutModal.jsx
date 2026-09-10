@@ -1,13 +1,9 @@
-import { doc, onSnapshot } from 'firebase/firestore'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { calcCartTotal } from '../lib/cart'
-import { db } from '../lib/firebase'
+import { PAYMENT_METHOD_ICONS as METHOD_ICONS, PAYMENT_METHOD_SHORT_LABELS as METHOD_SHORT } from '../lib/format'
+import { useAppData } from '../lib/AppDataContext'
 import { createOrder, InsufficientStockError } from '../lib/orders'
 import ModalBackdrop from './ModalBackdrop'
-
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
-const METHOD_SHORT  = { cash: 'เงินสด', promptpay: 'โมบาย', delivery: 'เดลิ' }
-const METHOD_ICONS  = { cash: '💵', promptpay: '📱', delivery: '🛵' }
 
 const DELIVERY_PLATFORMS = [
   { key: 'GrabFood',    label: 'GrabFood',    bg: 'bg-green-500',  emoji: '🟢' },
@@ -29,7 +25,8 @@ function calcDeliveryTotal(cart, platform) {
 
 function CheckoutModal({ cart, onClose, onSuccess }) {
   const subtotal = calcCartTotal(cart)
-  const [shopPlatformKeys, setShopPlatformKeys] = useState(DELIVERY_PLATFORMS.map((p) => p.key))
+  const { storeSettings } = useAppData()
+  const shopPlatformKeys = storeSettings.enabled_delivery_platforms ?? DELIVERY_PLATFORMS.map((p) => p.key)
   const [method, setMethod]           = useState('cash')
   const [numpadValue, setNumpadValue] = useState('0')
   const [payments, setPayments]       = useState([])
@@ -47,14 +44,6 @@ function CheckoutModal({ cart, onClose, onSuccess }) {
   const canAdd = discountMode
     ? entered <= subtotal
     : (entered > 0 && remaining > 0 && (method === 'promptpay' ? entered <= remaining : true))
-
-  useEffect(() => {
-    return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
-      if (snap.exists()) {
-        setShopPlatformKeys(snap.data().enabled_delivery_platforms ?? DELIVERY_PLATFORMS.map((p) => p.key))
-      }
-    })
-  }, [])
 
   const finalizeOrder = async (finalPayments, overrideTotal = total, overrideSubtotal = subtotal) => {
     if (saving) return

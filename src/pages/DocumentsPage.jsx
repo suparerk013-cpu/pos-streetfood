@@ -1,23 +1,9 @@
-import { collection, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { Search, X } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import BillModal from '../components/BillModal'
-import { db } from '../lib/firebase'
 import { toDateString } from '../lib/expenses'
-
-const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
-
-function formatTime(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })
-}
-
-function formatDate(ts) {
-  if (!ts?.toDate) return ''
-  const d = ts.toDate()
-  return d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
-}
+import { formatDate, formatTime, PAYMENT_METHOD_LABELS as METHOD_LABELS } from '../lib/format'
+import { useOrders } from '../lib/hooks'
 
 function orderDateStr(order) {
   const ts = order.created_at
@@ -26,19 +12,10 @@ function orderDateStr(order) {
 }
 
 function DocumentsPage() {
-  const [orders, setOrders]           = useState([])
-  const [loading, setLoading]         = useState(true)
+  const { orders, loading }           = useOrders()
   const [search, setSearch]           = useState('')
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [showVoided, setShowVoided]   = useState(false)
-
-  useEffect(() => {
-    const q = query(collection(db, 'orders'), orderBy('created_at', 'desc'))
-    return onSnapshot(q, (snap) => {
-      setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
-      setLoading(false)
-    })
-  }, [])
 
   const activeOrders  = useMemo(() => orders.filter((o) => !o.is_voided), [orders])
   const voidedOrders  = useMemo(() => orders.filter((o) => o.is_voided), [orders])
