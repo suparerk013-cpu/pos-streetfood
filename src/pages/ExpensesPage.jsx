@@ -2,6 +2,7 @@ import { ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Trash2 } from '
 import { ShareBar } from '../components/Charts'
 import { useMemo, useState } from 'react'
 import ExpenseModal from '../components/ExpenseModal'
+import IngredientModal from '../components/IngredientModal'
 import PurchaseModal from '../components/PurchaseModal'
 import { useAppData } from '../lib/appDataContext'
 import {
@@ -36,7 +37,7 @@ const RANGE_PRESETS = [
   { key: 'month', label: 'รายเดือน' },
 ]
 
-function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase }) {
+function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase, ingredient, onEdit }) {
   return (
     <div className="border-b border-gray-50 last:border-0">
       <button
@@ -54,6 +55,11 @@ function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase 
               {entry.times} ครั้ง · {entry.qty.toLocaleString()} {entry.unit} · เฉลี่ย{' '}
               {entry.avgPrice.toFixed(2)} ฿/{entry.unit}
             </p>
+            {ingredient && (
+              <p className="text-[11px] text-orange-600 font-bold mt-0.5">
+                เหลือ {Number(Number(ingredient.stock_qty ?? 0).toFixed(3)).toLocaleString()} {ingredient.unit}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -66,6 +72,13 @@ function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase 
           />
         </div>
       </button>
+
+      {ingredient && (
+        <button type="button" onClick={() => onEdit(ingredient)}
+          className="mx-4 mb-2 -mt-1 text-[11px] font-bold text-gray-400 underline underline-offset-2">
+          แก้ชื่อ / หน่วยนับ / สต็อก
+        </button>
+      )}
 
       {expanded && (
         <div className="px-4 pb-3 -mt-1">
@@ -119,7 +132,7 @@ function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase 
 }
 
 function ExpensesPage() {
-  const { activeIngredients, ingredientsLoading, shopName, online } = useAppData()
+  const { activeIngredients, ingredientById, ingredientsLoading, shopName, online } = useAppData()
 
   const [tab, setTab] = useState('ingredients')
   const [rangePreset, setRangePreset] = useState('month')
@@ -129,6 +142,7 @@ function ExpensesPage() {
   })
   const [expandedId, setExpandedId] = useState(null)
   const [purchaseModalOpen, setPurchaseModalOpen] = useState(false)
+  const [editIngredient, setEditIngredient] = useState(null)
   const [expenseModalOpen, setExpenseModalOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [seeding, setSeeding] = useState(false)
@@ -378,6 +392,8 @@ function ExpensesPage() {
                     expanded={expandedId === entry.key}
                     onToggle={() => setExpandedId(expandedId === entry.key ? null : entry.key)}
                     onDeletePurchase={(id) => deletePurchase(id)}
+                    ingredient={ingredientById.get(entry.key) ?? null}
+                    onEdit={setEditIngredient}
                   />
                 ))}
               </div>
@@ -464,6 +480,10 @@ function ExpensesPage() {
         <Plus size={20} />
         {tab === 'ingredients' ? 'บันทึกการซื้อ' : 'เพิ่มค่าใช้จ่าย'}
       </button>
+
+      {editIngredient && (
+        <IngredientModal ingredient={editIngredient} onClose={() => setEditIngredient(null)} />
+      )}
 
       {purchaseModalOpen && (
         <PurchaseModal

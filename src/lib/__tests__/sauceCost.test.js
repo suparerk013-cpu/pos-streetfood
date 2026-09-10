@@ -3,7 +3,9 @@ import {
   batchTotals,
   cleanRecipe,
   lineAmount,
+  lineStockUse,
   linesMissingPrice,
+  linesOverStock,
   sauceCostFor,
   saucePerServe,
 } from '../sauceCost'
@@ -139,5 +141,48 @@ describe('cleanRecipe', () => {
       { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: 0.2, per_batch: null },
       { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 1, per_batch: 10 },
     ])
+  })
+})
+
+describe('lineStockUse', () => {
+  it('ของธรรมดาตัดสต็อกเท่าที่ใส่', () => {
+    expect(lineStockUse({ ingredient_id: 'chili', qty: 0.2 })).toBeCloseTo(0.2)
+  })
+
+  it('ของขวดที่ใช้ได้หลายหม้อ ตัดแค่เศษของขวด ไม่ใช่ทั้งขวด', () => {
+    expect(lineStockUse({ ingredient_id: 'fish', qty: 1, per_batch: 10 })).toBeCloseTo(0.1)
+  })
+
+  it('จำนวนติดลบไม่ทำให้สต็อกงอกขึ้นมา', () => {
+    expect(lineStockUse({ ingredient_id: 'chili', qty: -5 })).toBe(0)
+  })
+})
+
+describe('linesOverStock', () => {
+  const stocked = new Map([
+    ['chili', { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, stock_qty: 0.1 }],
+    ['fish', { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, stock_qty: 2 }],
+    ['none', { id: 'none', name: 'ของที่ยังไม่ได้นับ', unit: 'กก.', last_price: 20 }],
+  ])
+
+  it('บอกเฉพาะตัวที่ใช้เกินกว่าที่มี', () => {
+    const over = linesOverStock(
+      [
+        { ingredient_id: 'chili', ingredient_name: 'พริก', qty: 0.2 },
+        { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', qty: 1, per_batch: 10 },
+      ],
+      stocked,
+    )
+    expect(over).toHaveLength(1)
+    expect(over[0]).toMatchObject({ ingredient_name: 'พริก', need: 0.2, have: 0.1, unit: 'กก.' })
+  })
+
+  it('ใช้พอดีกับที่มี ไม่นับว่าเกิน', () => {
+    expect(linesOverStock([{ ingredient_id: 'chili', qty: 0.1 }], stocked)).toHaveLength(0)
+  })
+
+  it('วัตถุดิบที่ยังไม่เคยตั้งสต็อก ถือว่ามี 0 จึงเตือน', () => {
+    const over = linesOverStock([{ ingredient_id: 'none', ingredient_name: 'ของที่ยังไม่ได้นับ', qty: 1 }], stocked)
+    expect(over[0].have).toBe(0)
   })
 })

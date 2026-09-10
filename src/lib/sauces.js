@@ -14,6 +14,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  increment,
   query,
   serverTimestamp,
   updateDoc,
@@ -21,9 +22,19 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { SAUCE_ICONS, batchTotals, cleanRecipe } from './sauceCost'
+import { SAUCE_ICONS, batchTotals, cleanRecipe, lineStockUse } from './sauceCost'
 
-export { SAUCE_ICONS, batchTotals, cleanRecipe, lineAmount, linesMissingPrice, sauceCostFor, saucePerServe } from './sauceCost'
+export {
+  SAUCE_ICONS,
+  batchTotals,
+  cleanRecipe,
+  lineAmount,
+  lineStockUse,
+  linesMissingPrice,
+  linesOverStock,
+  sauceCostFor,
+  saucePerServe,
+} from './sauceCost'
 
 /** Firestore รับได้ 500 คำสั่งต่อชุด เผื่อไว้ให้ต่ำกว่านั้น */
 const BATCH_LIMIT = 400
@@ -85,6 +96,19 @@ export async function recordSauceBatch({ sauceId, sauceName, lines, yieldQty, se
   batch.update(doc(db, 'sauces', sauceId), {
     recipe: cleanRecipe(lines),
     last_batch: { ...summary, batch_id: batchRef.id, at: Date.now() },
+  })
+
+  // ตัดของออกจากสต็อกวัตถุดิบไปในชุดเดียวกับที่บันทึกหม้อ
+  // ถ้าแยกเป็นสองคำสั่งแล้วเน็ตหลุดคั่นกลาง จะได้หม้อที่ไม่ได้ตัดของ หรือของหายโดยไม่มีหม้อ
+  // รวมบรรทัดที่ใช้วัตถุดิบตัวเดียวกันก่อน เพราะ Firestore ห้ามแตะเอกสารเดิมซ้ำในชุดเดียว
+  const usedByIngredient = new Map()
+  totals.lines.forEach((line) => {
+    const use = lineStockUse(line)
+    if (use <= 0) return
+    usedByIngredient.set(line.ingredient_id, (usedByIngredient.get(line.ingredient_id) ?? 0) + use)
+  })
+  usedByIngredient.forEach((used, ingredientId) => {
+    batch.update(doc(db, 'ingredients', ingredientId), { stock_qty: increment(-used) })
   })
 
   await batch.commit()

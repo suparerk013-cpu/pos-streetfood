@@ -23,6 +23,41 @@ export function lineAmount(line, ingredientById) {
   return perBatch > 0 ? (price / perBatch) * qty : price * qty
 }
 
+/**
+ * ปริมาณที่ถูกตัดออกจากสต็อกจริงของบรรทัดนี้ นับเป็นหน่วยที่ซื้อมา
+ *
+ * ของขวดที่ใช้ได้หลายหม้อ ตัดแค่เศษส่วนของขวด — เปิดน้ำปลาขวดหนึ่งใช้ได้ 10 หม้อ
+ * ทำน้ำจิ้มหนึ่งหม้อจึงหายไป 0.1 ขวด ไม่ใช่ทั้งขวด ไม่งั้นสต็อกจะร่วงเร็วกว่าของจริง 10 เท่า
+ */
+export function lineStockUse(line) {
+  const qty = Math.max(0, Number(line?.qty) || 0)
+  const perBatch = Math.max(0, Math.floor(Number(line?.per_batch) || 0))
+  return perBatch > 0 ? qty / perBatch : qty
+}
+
+/**
+ * วัตถุดิบที่สูตรนี้ใช้เกินกว่าที่มีในสต็อก
+ *
+ * ไม่ได้เอาไว้ห้ามบันทึก เพราะกว่าจะมากรอกคือกวนหม้อเสร็จไปแล้ว ห้ามไปก็ไม่ช่วยอะไร
+ * แต่เอาไว้เตือนว่าสต็อกที่จำไว้ไม่ตรงกับของจริง ควรไปนับใหม่
+ */
+export function linesOverStock(lines = [], ingredientById) {
+  return lines
+    .filter((line) => line?.ingredient_id && Number(line?.qty) > 0)
+    .map((line) => {
+      const ingredient = ingredientById?.get(line.ingredient_id)
+      const have = Number(ingredient?.stock_qty) || 0
+      return {
+        ingredient_id: line.ingredient_id,
+        ingredient_name: line.ingredient_name ?? ingredient?.name ?? '',
+        unit: ingredient?.unit ?? 'ชิ้น',
+        need: lineStockUse(line),
+        have,
+      }
+    })
+    .filter((row) => row.need > row.have + 1e-9)
+}
+
 /** วัตถุดิบที่ยังไม่เคยบันทึกราคาซื้อ คิดต้นทุนไม่ได้ ต้องเตือนให้ไปบันทึกซื้อก่อน */
 export function linesMissingPrice(lines = [], ingredientById) {
   return lines.filter((line) => {

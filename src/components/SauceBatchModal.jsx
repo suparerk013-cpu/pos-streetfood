@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
-import { batchTotals, lineAmount, linesMissingPrice } from '../lib/sauceCost'
+import { batchTotals, lineAmount, lineStockUse, linesMissingPrice, linesOverStock } from '../lib/sauceCost'
+import IngredientModal from './IngredientModal'
 import ModalBackdrop from './ModalBackdrop'
 
 /**
@@ -32,6 +33,7 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
   const [yieldQty, setYieldQty] = useState(String(sauce?.last_batch?.yield_qty ?? ''))
   const [serves, setServes] = useState(String(sauce?.last_batch?.serves ?? ''))
   const [note, setNote] = useState('')
+  const [editIngredient, setEditIngredient] = useState(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -55,6 +57,7 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
     [lines, yieldQty, serves, ingredientById],
   )
   const missing = useMemo(() => linesMissingPrice(lines, ingredientById), [lines, ingredientById])
+  const overStock = useMemo(() => linesOverStock(lines, ingredientById), [lines, ingredientById])
 
   const addRow = () => setRows((prev) => [...prev, newRow()])
   const removeRow = (id) => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev))
@@ -121,7 +124,12 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
                     placeholder="0"
                     className="w-20 shrink-0 min-h-[44px] rounded-lg border-2 border-orange-300 bg-orange-50 px-2 text-sm text-right font-bold focus:outline-none focus:border-orange-500"
                   />
-                  <span className="w-10 shrink-0 text-xs text-gray-500 truncate">{ingredient?.unit ?? ''}</span>
+                  <button type="button" onClick={() => ingredient && setEditIngredient(ingredient)}
+                    disabled={!ingredient}
+                    title={ingredient ? 'กดเพื่อแก้หน่วยนับ' : ''}
+                    className="w-11 shrink-0 text-xs text-gray-500 truncate underline decoration-dotted underline-offset-2 disabled:no-underline">
+                    {ingredient?.unit ?? ''}
+                  </button>
                   <button type="button" onClick={() => removeRow(row.id)}
                     className="w-9 h-9 shrink-0 rounded-full bg-gray-100 text-gray-400 text-lg flex items-center justify-center"
                     aria-label="ลบบรรทัด">×</button>
@@ -151,6 +159,13 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
                     {noPrice ? 'ยังไม่มีราคาซื้อ' : `${amount.toFixed(2)} ฿`}
                   </span>
                 </div>
+
+                {ingredient && Number(row.qty) > 0 && (
+                  <p className="text-[11px] text-gray-400 pl-1 -mt-1">
+                    ตัดสต็อก {trim(lineStockUse(lines[index]))} {ingredient.unit}
+                    {' · '}เหลือ {trim(Math.max(0, (Number(ingredient.stock_qty) || 0) - lineStockUse(lines[index])))} {ingredient.unit}
+                  </p>
+                )}
               </div>
             )
           })}
@@ -160,6 +175,15 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
           className="min-h-[44px] rounded-xl border-2 border-dashed border-orange-300 text-orange-600 text-sm font-bold">
           + เพิ่มวัตถุดิบ
         </button>
+
+        {overStock.length > 0 && (
+          <p className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800 leading-relaxed">
+            สูตรนี้ใช้ {overStock.map((r) => `${r.ingredient_name} ${trim(r.need)} ${r.unit} (มี ${trim(r.have)})`).join(', ')}
+            <span className="block mt-0.5">
+              มากกว่าที่ระบบจำไว้ — บันทึกได้ปกติ แต่ควรไปแก้สต็อกให้ตรงของจริง (กดที่หน่วยของบรรทัดนั้น)
+            </span>
+          </p>
+        )}
 
         {missing.length > 0 && (
           <p className="rounded-xl bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-600">
@@ -212,11 +236,20 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
         </button>
         <button type="button" onClick={handleSubmit} disabled={!isValid || saving}
           className="flex-[2] min-h-[52px] rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold disabled:opacity-40">
-          {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+          {saving ? 'กำลังบันทึก...' : 'บันทึก + ตัดสต็อก'}
         </button>
       </div>
+
+      {editIngredient && (
+        <IngredientModal ingredient={editIngredient} onClose={() => setEditIngredient(null)} />
+      )}
     </ModalBackdrop>
   )
+}
+
+/** ตัดศูนย์ท้ายทศนิยมทิ้ง — 0.10 ขวดอ่านยากกว่า 0.1 ขวด และ 2.00 กก. ก็ควรเป็น 2 กก. */
+function trim(value) {
+  return Number(Number(value).toFixed(3)).toString()
 }
 
 export default SauceBatchModal

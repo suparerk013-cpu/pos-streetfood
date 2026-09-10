@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  increment,
   serverTimestamp,
   updateDoc,
   writeBatch,
@@ -23,9 +24,22 @@ export async function addIngredient({ name, unit, category }) {
     category: category || 'other',
     is_active: true,
     last_price: null,
+    stock_qty: 0,
     created_at: serverTimestamp(),
   })
   return ref.id
+}
+
+/**
+ * ปรับสต็อกวัตถุดิบด้วยมือ — ใช้ตอนนับของจริงแล้วไม่ตรงกับที่ระบบจำไว้
+ *
+ * ตั้งเป็นตัวเลขตรง ๆ ไม่ใช่บวกลบ เพราะคนนับของถือของอยู่ในมือแล้วรู้ว่าเหลือเท่าไหร่
+ * ให้มานั่งคิดว่าต้องบวกลบเท่าไหร่จะผิดง่ายกว่า
+ */
+export function setIngredientStock(ingredientId, qty) {
+  return updateDoc(doc(db, 'ingredients', ingredientId), {
+    stock_qty: Math.max(0, Number(qty) || 0),
+  })
 }
 
 export function updateIngredient(ingredientId, updates) {
@@ -69,9 +83,12 @@ export async function recordPurchase({
     created_at: serverTimestamp(),
   })
 
+  // เพิ่มสต็อกด้วย increment ไม่ใช่อ่านมาบวกแล้วเขียนกลับ เพราะถ้าเปิดสองเครื่อง
+  // บันทึกซื้อพร้อมกัน การอ่าน-บวก-เขียนจะทับกันแล้วของหายไปหนึ่งรอบ
   batch.update(doc(db, 'ingredients', ingredientId), {
     last_price: unitPrice,
     last_purchased_at: date,
+    stock_qty: increment(Number(qty) || 0),
   })
 
   await batch.commit()
@@ -115,6 +132,7 @@ export async function seedStarterIngredients() {
       ...item,
       is_active: true,
       last_price: null,
+      stock_qty: 0,
       created_at: serverTimestamp(),
     })
   })
