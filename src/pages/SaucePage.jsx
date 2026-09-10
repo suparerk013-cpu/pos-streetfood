@@ -35,7 +35,7 @@ const TABS = [
   { key: 'report', label: 'รายงาน', icon: BarChart3 },
 ]
 
-function SaucePage({ initialTab }) {
+function SaucePage({ initialTab, onNavigate }) {
   const { sauces, activeProducts, ingredientById } = useAppData()
   const [tab, setTab] = useState(() => (TABS.some((t) => t.key === initialTab) ? initialTab : 'recipes'))
   const [batchModal, setBatchModal] = useState(null)
@@ -246,7 +246,7 @@ function SaucePage({ initialTab }) {
           </>
         )}
 
-        {tab === 'shopping' && <SauceShopping onEditIngredient={openIngredient} />}
+        {tab === 'shopping' && <SauceShopping onEditIngredient={openIngredient} onNavigate={onNavigate} />}
 
         {tab === 'history' && (
           <SauceHistory

@@ -8,6 +8,8 @@ import {
 import { addIngredient, recordPurchase } from '../lib/ingredients'
 import { toDateString } from '../lib/dates'
 import ModalBackdrop from './ModalBackdrop'
+import { toReorderPayload } from '../lib/reorder'
+import ReorderField from './ReorderField'
 
 /**
  * บันทึกการซื้อวัตถุดิบ 1 ครั้ง
@@ -31,6 +33,7 @@ function PurchaseModal({ ingredients, recentByIngredient, defaultDate, onClose, 
   const [creatingName, setCreatingName] = useState(null)
   const [newUnit, setNewUnit] = useState('กก.')
   const [newCategory, setNewCategory] = useState('fresh')
+  const [newReorder, setNewReorder] = useState({ qty: '', unit: '' })
 
   const frequent = useMemo(() => {
     return [...ingredients]
@@ -83,9 +86,16 @@ function PurchaseModal({ ingredients, recentByIngredient, defaultDate, onClose, 
     if (!name) return
     setSaving(true)
     try {
-      const id = await addIngredient({ name, unit: newUnit, category: newCategory })
+      // ตั้งจุดสั่งซื้อได้ตั้งแต่ตอนสร้าง จะได้ไม่ต้องจำว่าต้องกลับมาตั้งอีกที
+      const id = await addIngredient({
+        name,
+        unit: newUnit,
+        category: newCategory,
+        ...toReorderPayload({ unit: newUnit }, newReorder.qty, newReorder.unit),
+      })
       setSelected({ id, name, unit: newUnit, category: newCategory, last_price: null })
       setCreatingName(null)
+      setNewReorder({ qty: '', unit: '' })
       setSearch('')
     } catch {
       setError('เพิ่มวัตถุดิบไม่สำเร็จ ลองใหม่')
@@ -231,6 +241,15 @@ function PurchaseModal({ ingredients, recentByIngredient, defaultDate, onClose, 
                       ))}
                     </div>
                   </div>
+                  <div className="rounded-xl bg-white border border-orange-100 p-3">
+                    <ReorderField
+                      ingredient={{ unit: newUnit }}
+                      qty={newReorder.qty}
+                      unit={newReorder.unit}
+                      onChange={(qty, u) => setNewReorder({ qty, unit: u })}
+                    />
+                  </div>
+
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setCreatingName(null)}
                       className="flex-1 min-h-[48px] rounded-2xl bg-white border border-gray-200 text-gray-500 font-bold text-sm">

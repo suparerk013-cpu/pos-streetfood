@@ -32,6 +32,7 @@ const freshSauce = { id: 's2', name: 'น้ำจิ้มซีฟู้ด', 
 
 const ingredients = [
   { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, is_active: true, stock_qty: 0.3 },
+  { id: 'cori', name: 'ผักชี', unit: 'กำ', last_price: 10, is_active: true, stock_qty: 0.8, reorder_qty: 1, reorder_unit: 'กำ' },
   { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, is_active: true, stock_qty: 2, content_qty: 700, content_unit: 'มล.' },
 ]
 
@@ -145,6 +146,12 @@ describe('แท็บย่อยในหน้าน้ำจิ้ม', () =
     expect(text).toContain('ซื้อ 0.75 กก.')
     // ไม่มีขั้นตอนหลายจอแล้ว
     expect(text).not.toContain('ตรวจแล้วบันทึก')
+  })
+
+  it('ของที่ตั้งจุดเตือนเองก็เข้ารายการ พร้อมบอกว่าเตือนเพราะเลขที่ตั้งไว้', () => {
+    const text = plain(render(<SaucePage initialTab="shopping" />)).replace(/<[^>]+>/g, '')
+    expect(text).toContain('ผักชี')
+    expect(text).toContain('ต่ำกว่าที่ตั้งไว้ 1 กำ')
   })
 
   it('บอกของที่เหลือกับราคาครั้งก่อนในแถวเดียว ตัดสินใจได้ตอนยืนหน้าแผง', () => {

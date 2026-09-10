@@ -58,6 +58,11 @@ function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase,
             {ingredient && (
               <p className="text-[11px] text-orange-600 font-bold mt-0.5">
                 เหลือ {Number(Number(ingredient.stock_qty ?? 0).toFixed(3)).toLocaleString()} {ingredient.unit}
+                {ingredient.reorder_qty > 0 && (
+                  <span className="text-gray-400 font-medium">
+                    {' '}· เตือนที่ {Number(Number(ingredient.reorder_qty).toFixed(3))} {ingredient.unit}
+                  </span>
+                )}
               </p>
             )}
           </div>
@@ -384,7 +389,7 @@ function ExpensesPage({ onNavigate }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-800">จะไปตลาด?</p>
                   <p className="text-[11px] text-gray-400">
-                    ดูรายการที่ต้องซื้อจากสูตรน้ำจิ้ม แล้วบันทึกเข้าคลังทีเดียวตอนกลับ
+                    ดูของที่ใกล้หมดทั้งจากสูตรน้ำจิ้มและจุดเตือนที่ตั้งเอง แตะแล้วบันทึกเข้าคลังได้เลย
                   </p>
                 </div>
                 <span className="text-gray-300 shrink-0">›</span>

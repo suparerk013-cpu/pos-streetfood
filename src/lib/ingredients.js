@@ -18,7 +18,7 @@ export {
   INGREDIENT_CATEGORY_ICONS,
 } from './ingredientCategories'
 
-export async function addIngredient({ name, unit, category }) {
+export async function addIngredient({ name, unit, category, reorder_qty = null, reorder_unit = null }) {
   const ref = await addDoc(collection(db, 'ingredients'), {
     name: name.trim(),
     unit: unit || 'ชิ้น',
@@ -26,6 +26,8 @@ export async function addIngredient({ name, unit, category }) {
     is_active: true,
     last_price: null,
     stock_qty: 0,
+    reorder_qty,
+    reorder_unit,
     created_at: serverTimestamp(),
   })
   return ref.id

@@ -19,7 +19,11 @@ const TONE = {
 function headline(stock) {
   if (!stock.hasRecipe) return 'ยังไม่มีสูตร — บันทึกหม้อแรกก่อน ระบบถึงจะรู้ว่าใช้อะไรเท่าไหร่'
   if (stock.blocking.length > 0) {
-    return `ทำหม้อถัดไปไม่ได้ — ${stock.blocking.map((l) => l.name).join(', ')}ไม่พอ`
+    const names = stock.blocking.map((l) => l.name).join(', ')
+    // แยกให้ชัดว่าเตือนเพราะเลขที่ตั้งเอง หรือเพราะสูตรกินเยอะกว่าที่มี
+    return stock.blocking.every((l) => l.reason === 'reorder')
+      ? `${names} ต่ำกว่าจุดที่ตั้งเตือนไว้`
+      : `ทำหม้อถัดไปไม่ได้ — ${names}ไม่พอ`
   }
   if (stock.pots == null) return 'ยังไม่ได้นับสต็อกวัตถุดิบของสูตรนี้'
   if (stock.low.length > 0) return `ทำได้อีก ${stock.pots} หม้อ — ${stock.low[0].name}จะหมดก่อน`
@@ -70,7 +74,11 @@ function SauceStockAlert({ stock, onEditIngredient }) {
                       {line.tracked ? `${trim(line.have)} ${line.unit}` : '—'}
                     </td>
                     <td className={`text-right tabular-nums font-bold ${lineTone.text}`}>
-                      {line.tracked ? `${lineTone.label} ${line.pots} หม้อ` : '⚪ ยังไม่นับ'}
+                      {!line.tracked
+                        ? '⚪ ยังไม่นับ'
+                        : line.reason === 'reorder'
+                          ? `${lineTone.label} ต่ำกว่า ${trim(line.reorder)}`
+                          : `${lineTone.label} ${line.pots} หม้อ`}
                     </td>
                   </tr>
                 )

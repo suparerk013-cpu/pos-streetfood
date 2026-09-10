@@ -8,6 +8,8 @@ import {
   updateIngredient,
 } from '../lib/ingredients'
 import ModalBackdrop from './ModalBackdrop'
+import { fromReorderValue, toReorderPayload } from '../lib/reorder'
+import ReorderField from './ReorderField'
 
 /**
  * แก้ทะเบียนวัตถุดิบ 1 รายการ
@@ -28,6 +30,7 @@ function IngredientModal({ ingredient, onClose }) {
     ingredient?.content_qty != null ? String(ingredient.content_qty) : '',
   )
   const [contentUnit, setContentUnit] = useState(ingredient?.content_unit ?? '')
+  const [reorder, setReorder] = useState(() => fromReorderValue(ingredient))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -45,12 +48,19 @@ function IngredientModal({ ingredient, onClose }) {
     try {
       const qty = Number(contentQty) || 0
       const hasContent = qty > 0 && contentUnit.trim() !== ''
+      const draft = {
+        ...ingredient,
+        unit: unit.trim(),
+        content_qty: hasContent ? qty : null,
+        content_unit: hasContent ? contentUnit.trim() : null,
+      }
       await updateIngredient(ingredient.id, {
         name: name.trim(),
         unit: unit.trim(),
         category,
         content_qty: hasContent ? qty : null,
         content_unit: hasContent ? contentUnit.trim() : null,
+        ...toReorderPayload(draft, reorder.qty, reorder.unit),
       })
       await setIngredientStock(ingredient.id, Number(stock) || 0)
       onClose()
@@ -178,6 +188,17 @@ function IngredientModal({ ingredient, onClose }) {
             ใส่จำนวนที่นับได้จริง ไม่ใช่จำนวนที่ต้องบวกลบ — ซื้อเพิ่มกับทำน้ำจิ้มระบบขยับให้เอง
           </span>
         </label>
+
+        <ReorderField
+          ingredient={{
+            unit: unit.trim(),
+            content_qty: Number(contentQty) || 0,
+            content_unit: contentUnit.trim(),
+          }}
+          qty={reorder.qty}
+          unit={reorder.unit}
+          onChange={(qty, u) => setReorder({ qty, unit: u })}
+        />
 
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>

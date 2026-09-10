@@ -16,7 +16,7 @@ import ModalBackdrop from './ModalBackdrop'
  * บันทึกทีละรายการทันทีแทนที่จะเก็บรวมไว้ตอนท้าย เพราะยืนอยู่หน้าแผงตอนนั้น
  * จำได้แน่ว่าจ่ายไปเท่าไหร่ ถ้ารอไปกรอกทีเดียวตอนกลับถึงร้านจะเริ่มจำสลับกัน
  */
-function SauceShopping({ onEditIngredient }) {
+function SauceShopping({ onEditIngredient, onNavigate }) {
   const { sauces, ingredientById, activeIngredients, online } = useAppData()
   const [target, setTarget] = useState(null)
   const [done, setDone] = useState([])
@@ -89,7 +89,8 @@ function SauceShopping({ onEditIngredient }) {
 
         {suggestions.length === 0 && (
           <p className="px-4 pb-3 text-xs text-gray-400">
-            ยังไม่มีสูตรน้ำจิ้มที่บันทึกไว้ — ทำน้ำจิ้มสักหม้อก่อน ระบบถึงจะรู้ว่าต้องซื้ออะไร
+            ยังไม่มีอะไรให้เตือน — บันทึกทำน้ำจิ้มสักหม้อ หรือตั้ง &ldquo;เตือนเมื่อเหลือน้อยกว่า&rdquo;
+            ให้วัตถุดิบที่อยากให้เตือน (แตะของด้านล่าง หรือทำตอนเพิ่มวัตถุดิบในหน้าค่าใช้จ่าย)
           </p>
         )}
 
@@ -103,12 +104,7 @@ function SauceShopping({ onEditIngredient }) {
             <span className={`w-2 h-2 rounded-full shrink-0 ${DOT[row.level] ?? 'bg-gray-300'}`} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-bold text-gray-800 truncate">{row.name}</p>
-              <p className="text-[11px] text-gray-400 truncate">
-                {row.tracked
-                  ? `เหลือ ${trim(row.have)} ${row.unit} · ทำได้อีก ${row.pots} หม้อ`
-                  : 'ยังไม่ได้นับสต็อก'}
-                {row.lastPrice > 0 && ` · ครั้งก่อน ${row.lastPrice.toFixed(2)} ฿/${row.unit}`}
-              </p>
+              <p className="text-[11px] text-gray-400 truncate">{whyBuy(row)}</p>
             </div>
             <span className={`shrink-0 text-xs font-bold px-2.5 py-1.5 rounded-xl ${
               row.suggestQty > 0 ? 'bg-orange-50 text-orange-600' : 'bg-gray-50 text-gray-400'
@@ -138,6 +134,20 @@ function SauceShopping({ onEditIngredient }) {
         )}
       </div>
 
+      {onNavigate && (
+        <button type="button" onClick={() => onNavigate('expenses')}
+          className="rounded-2xl bg-white border border-gray-200 px-4 py-3 flex items-center gap-3 text-left">
+          <span className="text-xl shrink-0">🧾</span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-bold text-gray-800">ไปหน้าค่าใช้จ่าย</p>
+            <p className="text-[11px] text-gray-400">
+              ดูประวัติการซื้อย้อนหลัง เพิ่มวัตถุดิบใหม่ หรือตั้งจุดเตือนของหมด
+            </p>
+          </div>
+          <span className="text-gray-300 shrink-0">›</span>
+        </button>
+      )}
+
       {target && (
         <BuyModal
           target={target}
@@ -152,6 +162,32 @@ function SauceShopping({ onEditIngredient }) {
 }
 
 const DOT = { out: 'bg-red-500', low: 'bg-amber-500', ok: 'bg-green-500', unknown: 'bg-gray-300' }
+
+/**
+ * บอกว่าทำไมของตัวนี้ถึงอยู่ในรายการ
+ *
+ * มีสองเหตุผลที่เตือนได้ ต้องบอกให้ชัดว่าอันไหน ไม่งั้นคนตั้งจุดเตือนไว้แล้วเห็นของขึ้นแดง
+ * จะไม่รู้ว่าเป็นเพราะเลขที่ตั้งเอง หรือเพราะสูตรน้ำจิ้มกินเยอะกว่าที่คิด
+ */
+function whyBuy(row) {
+  if (!row.tracked) return 'ยังไม่ได้นับสต็อก — แตะเพื่อบันทึกซื้อ'
+
+  const have = `เหลือ ${trim(row.have)} ${row.unit}`
+  const price = row.lastPrice > 0 ? ` · ครั้งก่อน ${row.lastPrice.toFixed(2)} ฿/${row.unit}` : ''
+
+  if (row.reason === 'reorder') {
+    const shown = row.reorderUnit && row.reorderUnit !== row.unit && row.contentQty > 0
+      ? `${trim(row.reorder * row.contentQty)} ${row.reorderUnit}`
+      : `${trim(row.reorder)} ${row.unit}`
+    return `${have} — ต่ำกว่าที่ตั้งไว้ ${shown}${price}`
+  }
+  if (row.reason === 'recipe') {
+    return row.pots <= 0
+      ? `${have} — ไม่พอทำหม้อถัดไป (ใช้ ${trim(row.need)} ${row.unit})${price}`
+      : `${have} · ทำได้อีก ${row.pots} หม้อ${price}`
+  }
+  return `${have}${row.inRecipe && row.pots != null ? ` · ทำได้อีก ${row.pots} หม้อ` : ''}${price}`
+}
 
 /**
  * กรอกของที่เพิ่งซื้อ
