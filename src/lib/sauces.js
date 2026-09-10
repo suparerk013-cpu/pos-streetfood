@@ -22,13 +22,15 @@ import {
   writeBatch,
 } from 'firebase/firestore'
 import { db } from './firebase'
-import { SAUCE_ICONS, batchTotals, cleanRecipe, lineStockUse } from './sauceCost'
+import { SAUCE_ICONS, batchTotals, cleanRecipe } from './sauceCost'
 
 export {
   SAUCE_ICONS,
   batchTotals,
   cleanRecipe,
+  entryUnitsFor,
   lineAmount,
+  lineBaseQty,
   lineStockUse,
   linesMissingPrice,
   linesOverStock,
@@ -103,7 +105,8 @@ export async function recordSauceBatch({ sauceId, sauceName, lines, yieldQty, se
   // รวมบรรทัดที่ใช้วัตถุดิบตัวเดียวกันก่อน เพราะ Firestore ห้ามแตะเอกสารเดิมซ้ำในชุดเดียว
   const usedByIngredient = new Map()
   totals.lines.forEach((line) => {
-    const use = lineStockUse(line)
+    // base_qty คิดไว้แล้วตอนสรุปหม้อ ใช้ค่าเดียวกับที่คิดเงิน สต็อกกับต้นทุนจึงตรงกันเสมอ
+    const use = Number(line.base_qty) || 0
     if (use <= 0) return
     usedByIngredient.set(line.ingredient_id, (usedByIngredient.get(line.ingredient_id) ?? 0) + use)
   })

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import {
   COMMON_UNITS,
+  CONTENT_UNITS,
   INGREDIENT_CATEGORIES,
   INGREDIENT_CATEGORY_ICONS,
   setIngredientStock,
@@ -23,6 +24,10 @@ function IngredientModal({ ingredient, onClose }) {
   const [unit, setUnit] = useState(ingredient?.unit ?? 'ชิ้น')
   const [category, setCategory] = useState(ingredient?.category ?? 'other')
   const [stock, setStock] = useState(String(ingredient?.stock_qty ?? 0))
+  const [contentQty, setContentQty] = useState(
+    ingredient?.content_qty != null ? String(ingredient.content_qty) : '',
+  )
+  const [contentUnit, setContentUnit] = useState(ingredient?.content_unit ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
 
@@ -38,10 +43,14 @@ function IngredientModal({ ingredient, onClose }) {
     setSaving(true)
     setError(null)
     try {
+      const qty = Number(contentQty) || 0
+      const hasContent = qty > 0 && contentUnit.trim() !== ''
       await updateIngredient(ingredient.id, {
         name: name.trim(),
         unit: unit.trim(),
         category,
+        content_qty: hasContent ? qty : null,
+        content_unit: hasContent ? contentUnit.trim() : null,
       })
       await setIngredientStock(ingredient.id, Number(stock) || 0)
       onClose()
@@ -110,6 +119,51 @@ function IngredientModal({ ingredient, onClose }) {
                 {label}
               </button>
             ))}
+          </div>
+        </div>
+
+        <div className="rounded-xl border-2 border-gray-200 p-3">
+          <p className="text-xs font-medium text-gray-500">
+            1 {unit.trim() || 'หน่วย'} มีปริมาณเท่าไหร่ <span className="text-gray-300">(ไม่ใส่ก็ได้)</span>
+          </p>
+          <p className="text-[11px] text-gray-400 mt-0.5 mb-2 leading-relaxed">
+            ใส่ไว้แล้วตอนทำน้ำจิ้มจะกรอกเป็นหน่วยย่อยได้เลย เช่นน้ำปลาขวดละ 700 มล.
+            ตวงไป 70 มล. ระบบตัดสต็อกให้ 0.1 ขวด และคิดเงินตามนั้น
+          </p>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500 shrink-0">1 {unit.trim() || 'หน่วย'} =</span>
+            <input
+              type="number" inputMode="decimal" step="any" min="0"
+              value={contentQty}
+              onChange={(e) => setContentQty(e.target.value)}
+              placeholder="700"
+              aria-label="ปริมาณต่อหน่วย"
+              className="w-24 min-h-[48px] rounded-xl border-2 border-gray-200 px-3 text-sm text-right font-bold focus:outline-none focus:border-orange-500"
+            />
+            <input
+              type="text"
+              value={contentUnit}
+              onChange={(e) => setContentUnit(e.target.value)}
+              placeholder="มล."
+              aria-label="หน่วยย่อย"
+              className="flex-1 min-w-0 min-h-[48px] rounded-xl border-2 border-gray-200 px-3 text-sm focus:outline-none focus:border-orange-500"
+            />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {CONTENT_UNITS.map((u) => (
+              <button key={u} type="button" onClick={() => setContentUnit(u)}
+                className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-colors ${
+                  contentUnit === u ? 'bg-orange-500 text-white' : 'bg-gray-100 text-gray-500'
+                }`}>
+                {u}
+              </button>
+            ))}
+            {contentUnit !== '' && (
+              <button type="button" onClick={() => { setContentUnit(''); setContentQty('') }}
+                className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-gray-100 text-gray-400">
+                ไม่ใช้
+              </button>
+            )}
           </div>
         </div>
 

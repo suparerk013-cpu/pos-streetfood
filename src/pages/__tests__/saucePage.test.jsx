@@ -22,15 +22,15 @@ const sauceWithBatch = {
   id: 's1', name: 'น้ำจิ้มหมึกย่าง', icon: '🦑', unit: 'กก.',
   recipe: [
     { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: 0.2, per_batch: null },
-    { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 1, per_batch: 10 },
+    { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 70, entry_unit: 'มล.', content_qty: 700 },
   ],
   last_batch: { total_cost: 71.9, yield_qty: 2, serves: 300, cost_per_yield: 35.95, cost_per_serve: 0.2397 },
 }
 const freshSauce = { id: 's2', name: 'น้ำจิ้มซีฟู้ด', icon: '🌶️', unit: 'กก.', recipe: [], last_batch: null }
 
 const ingredients = [
-  { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, is_active: true },
-  { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, is_active: true },
+  { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, is_active: true, stock_qty: 1 },
+  { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, is_active: true, stock_qty: 2, content_qty: 700, content_unit: 'มล.' },
 ]
 
 const ctx = {
@@ -99,9 +99,20 @@ describe('หน้าต่างบันทึกทำน้ำจิ้ม'
     expect(html).toContain('น้ำปลา')
   })
 
-  it('คิดต้นทุนหม้อให้เห็นทันที — พริก 30 + น้ำปลาเศษขวด 3.50', () => {
+  it('คิดต้นทุนหม้อให้เห็นทันที — พริก 30 + น้ำปลา 70 มล. จากขวด 700 = 3.50', () => {
     const html = plain(render(<SauceBatchModal sauce={sauceWithBatch} onClose={() => {}} onSubmit={() => {}} />))
     expect(html).toContain('33.50 ฿ / หม้อ')
+  })
+
+  it('วัตถุดิบที่ตั้งขนาดบรรจุไว้ เลือกหน่วยตวงได้ และบอกว่าตัดสต็อกเท่าไหร่', () => {
+    const html = plain(render(<SauceBatchModal sauce={sauceWithBatch} onClose={() => {}} onSubmit={() => {}} />))
+    expect(html).toContain('1 ขวด = 700 มล.')
+    expect(html.replace(/<[^>]+>/g, '')).toContain('ตัดสต็อก 0.1 ขวด')
+  })
+
+  it('วัตถุดิบที่ยังไม่ได้ตั้งขนาดบรรจุ ชวนให้ไปตั้ง', () => {
+    const html = render(<SauceBatchModal sauce={sauceWithBatch} onClose={() => {}} onSubmit={() => {}} />)
+    expect(html).toContain('ตั้งว่า 1 กก. มีกี่')
   })
 
   it('สูตรใหม่ที่ยังไม่มีอะไร เปิดมาพร้อมแถวว่างให้กรอก 1 แถว', () => {

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   batchTotals,
   cleanRecipe,
+  entryUnitsFor,
   lineAmount,
+  lineBaseQty,
   lineStockUse,
   linesMissingPrice,
   linesOverStock,
@@ -14,7 +16,7 @@ const ingredients = new Map([
   ['chili', { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150 }],
   ['garlic', { id: 'garlic', name: 'กระเทียม', unit: 'กก.', last_price: 150 }],
   ['sugar', { id: 'sugar', name: 'น้ำตาล', unit: 'กก.', last_price: 28 }],
-  ['fish', { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35 }],
+  ['fish', { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, content_qty: 700, content_unit: 'มล.' }],
   ['cori', { id: 'cori', name: 'ผักชี', unit: 'มัด', last_price: 10 }],
   ['nopay', { id: 'nopay', name: 'ของที่ยังไม่เคยซื้อ', unit: 'กก.', last_price: null }],
 ])
@@ -24,7 +26,15 @@ describe('lineAmount', () => {
     expect(lineAmount({ ingredient_id: 'chili', qty: 0.2 }, ingredients)).toBeCloseTo(30)
   })
 
-  it('ของขวดที่ใช้ได้หลายหม้อ หารด้วยจำนวนหม้อก่อน', () => {
+  it('ตวงเป็นหน่วยย่อย คิดเงินตามเศษของขวด — 70 มล. จากขวด 700 มล. ราคา 35 คือ 3.50', () => {
+    expect(lineAmount({ ingredient_id: 'fish', qty: 70, entry_unit: 'มล.' }, ingredients)).toBeCloseTo(3.5)
+  })
+
+  it('กรอกเป็นหน่วยที่ซื้อมา คิดเต็มหน่วย ไม่ไปหารกับขนาดบรรจุ', () => {
+    expect(lineAmount({ ingredient_id: 'fish', qty: 1, entry_unit: 'ขวด' }, ingredients)).toBeCloseTo(35)
+  })
+
+  it('ข้อมูลเก่าแบบ "1 ขวดใช้ได้กี่หม้อ" ยังคิดได้เหมือนเดิม', () => {
     expect(lineAmount({ ingredient_id: 'fish', qty: 1, per_batch: 10 }, ingredients)).toBeCloseTo(3.5)
   })
 
@@ -44,7 +54,7 @@ describe('batchTotals', () => {
     { ingredient_id: 'chili', qty: 0.2 },
     { ingredient_id: 'garlic', qty: 0.15 },
     { ingredient_id: 'sugar', qty: 0.3 },
-    { ingredient_id: 'fish', qty: 1, per_batch: 10 },
+    { ingredient_id: 'fish', qty: 70, entry_unit: 'มล.' },
   ]
 
   it('รวมทุกบรรทัดแล้วหารเป็นต้นทุนต่อกิโลและต่อชิ้น', () => {
@@ -132,14 +142,14 @@ describe('sauceCostFor', () => {
 describe('cleanRecipe', () => {
   it('เก็บเฉพาะบรรทัดที่ครบ และแปลง per_batch ว่างเป็น null', () => {
     const cleaned = cleanRecipe([
-      { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: '0.2', per_batch: '' },
-      { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 1, per_batch: '10' },
+      { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: '0.2', entry_unit: 'กก.', per_batch: '' },
+      { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 70, entry_unit: 'มล.', content_qty: 700 },
       { ingredient_id: '', qty: 3 },
       { ingredient_id: 'chili', qty: 0 },
     ])
     expect(cleaned).toEqual([
-      { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: 0.2, per_batch: null },
-      { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 1, per_batch: 10 },
+      { ingredient_id: 'chili', ingredient_name: 'พริก', unit: 'กก.', qty: 0.2, entry_unit: 'กก.', content_qty: null, per_batch: null },
+      { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', unit: 'ขวด', qty: 70, entry_unit: 'มล.', content_qty: 700, per_batch: null },
     ])
   })
 })
@@ -149,19 +159,46 @@ describe('lineStockUse', () => {
     expect(lineStockUse({ ingredient_id: 'chili', qty: 0.2 })).toBeCloseTo(0.2)
   })
 
-  it('ของขวดที่ใช้ได้หลายหม้อ ตัดแค่เศษของขวด ไม่ใช่ทั้งขวด', () => {
-    expect(lineStockUse({ ingredient_id: 'fish', qty: 1, per_batch: 10 })).toBeCloseTo(0.1)
+  it('ตวง 70 มล. จากขวด 700 มล. ตัดสต็อก 0.1 ขวด ไม่ใช่ทั้งขวด', () => {
+    expect(lineStockUse({ ingredient_id: 'fish', qty: 70, entry_unit: 'มล.' }, ingredients)).toBeCloseTo(0.1)
+  })
+
+  it('สต็อกที่ตัดเท่ากับปริมาณที่คิดเงินเสมอ', () => {
+    const line = { ingredient_id: 'fish', qty: 350, entry_unit: 'มล.' }
+    expect(lineStockUse(line, ingredients)).toBeCloseTo(lineAmount(line, ingredients) / 35)
   })
 
   it('จำนวนติดลบไม่ทำให้สต็อกงอกขึ้นมา', () => {
-    expect(lineStockUse({ ingredient_id: 'chili', qty: -5 })).toBe(0)
+    expect(lineStockUse({ ingredient_id: 'chili', qty: -5 }, ingredients)).toBe(0)
+  })
+})
+
+describe('lineBaseQty', () => {
+  it('ขนาดบรรจุที่ติดมากับบรรทัดชนะค่าปัจจุบันของวัตถุดิบ ประวัติหม้อเก่าจึงไม่ขยับ', () => {
+    // ตอนทำหม้อนั้นขวดยังเป็น 500 มล. ถึงตอนนี้ทะเบียนจะเปลี่ยนเป็น 700 แล้วก็ตาม
+    expect(lineBaseQty({ ingredient_id: 'fish', qty: 50, entry_unit: 'มล.', content_qty: 500 }, ingredients))
+      .toBeCloseTo(0.1)
+  })
+
+  it('เลือกหน่วยย่อยไว้แต่วัตถุดิบยังไม่ได้ตั้งขนาดบรรจุ ใช้ตัวเลขตรง ๆ แทนที่จะหารด้วยศูนย์', () => {
+    expect(lineBaseQty({ ingredient_id: 'chili', qty: 3, entry_unit: 'กรัม' }, ingredients)).toBe(3)
+  })
+})
+
+describe('entryUnitsFor', () => {
+  it('ตั้งขนาดบรรจุไว้ เลือกได้ทั้งหน่วยที่ซื้อและหน่วยย่อย', () => {
+    expect(entryUnitsFor(ingredients.get('fish'))).toEqual(['ขวด', 'มล.'])
+  })
+
+  it('ไม่ได้ตั้งขนาดบรรจุ มีแค่หน่วยที่ซื้อมา', () => {
+    expect(entryUnitsFor(ingredients.get('chili'))).toEqual(['กก.'])
   })
 })
 
 describe('linesOverStock', () => {
   const stocked = new Map([
     ['chili', { id: 'chili', name: 'พริก', unit: 'กก.', last_price: 150, stock_qty: 0.1 }],
-    ['fish', { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, stock_qty: 2 }],
+    ['fish', { id: 'fish', name: 'น้ำปลา', unit: 'ขวด', last_price: 35, stock_qty: 2, content_qty: 700, content_unit: 'มล.' }],
     ['none', { id: 'none', name: 'ของที่ยังไม่ได้นับ', unit: 'กก.', last_price: 20 }],
   ])
 
@@ -169,7 +206,7 @@ describe('linesOverStock', () => {
     const over = linesOverStock(
       [
         { ingredient_id: 'chili', ingredient_name: 'พริก', qty: 0.2 },
-        { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', qty: 1, per_batch: 10 },
+        { ingredient_id: 'fish', ingredient_name: 'น้ำปลา', qty: 70, entry_unit: 'มล.' },
       ],
       stocked,
     )

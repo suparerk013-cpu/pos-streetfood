@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
-import { batchTotals, lineAmount, lineStockUse, linesMissingPrice, linesOverStock } from '../lib/sauceCost'
+import {
+  batchTotals,
+  entryUnitsFor,
+  lineAmount,
+  lineBaseQty,
+  linesMissingPrice,
+  linesOverStock,
+} from '../lib/sauceCost'
 import IngredientModal from './IngredientModal'
 import ModalBackdrop from './ModalBackdrop'
 
@@ -20,6 +27,7 @@ const newRow = (line = {}) => {
     id: rowSeq,
     ingredient_id: line.ingredient_id ?? '',
     qty: line.qty != null ? String(line.qty) : '',
+    entry_unit: line.entry_unit ?? '',
     per_batch: line.per_batch != null ? String(line.per_batch) : '',
   }
 }
@@ -46,6 +54,9 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
           ingredient_name: ingredient?.name ?? '',
           unit: ingredient?.unit ?? 'ชิ้น',
           qty: Number(row.qty) || 0,
+          // ยังไม่ได้เลือกหน่วยก็ถือว่ากรอกเป็นหน่วยที่ซื้อมา ซึ่งเป็นตัวเลือกแรกเสมอ
+          entry_unit: row.entry_unit || ingredient?.unit || 'ชิ้น',
+          content_qty: Number(ingredient?.content_qty) || null,
           per_batch: Number(row.per_batch) || 0,
         }
       }),
@@ -63,6 +74,12 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
   const removeRow = (id) => setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev))
   const updateRow = (id, field, value) =>
     setRows((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)))
+
+  /** สลับวัตถุดิบแล้วต้องล้างหน่วยที่เลือกไว้ ไม่งั้นค้างหน่วยของตัวเก่าที่ตัวใหม่ไม่มี */
+  const changeIngredient = (id, ingredientId) =>
+    setRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ingredient_id: ingredientId, entry_unit: '', per_batch: '' } : r)),
+    )
 
   const isValid = totals.lines.length > 0 && Number(yieldQty) > 0 && Math.floor(Number(serves)) > 0
   const canClose = !saving
@@ -100,13 +117,15 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
             const ingredient = ingredientById.get(row.ingredient_id)
             // คิดจากบรรทัดตรง ๆ ไม่ไปหยิบจากยอดรวม เผื่อใส่วัตถุดิบตัวเดียวกันสองบรรทัด
             const amount = lineAmount(lines[index], ingredientById)
+            const used = lineBaseQty(lines[index], ingredientById)
+            const units = entryUnitsFor(ingredient)
             const noPrice = row.ingredient_id && !(Number(ingredient?.last_price) > 0)
             return (
               <div key={row.id} className="rounded-xl border-2 border-gray-200 p-2 flex flex-col gap-2">
                 <div className="flex items-center gap-2">
                   <select
                     value={row.ingredient_id}
-                    onChange={(e) => updateRow(row.id, 'ingredient_id', e.target.value)}
+                    onChange={(e) => changeIngredient(row.id, e.target.value)}
                     className="flex-1 min-w-0 min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-2 text-sm focus:outline-none focus:border-orange-500"
                   >
                     <option value="">— เลือกวัตถุดิบ —</option>
@@ -124,46 +143,42 @@ function SauceBatchModal({ sauce, onClose, onSubmit }) {
                     placeholder="0"
                     className="w-20 shrink-0 min-h-[44px] rounded-lg border-2 border-orange-300 bg-orange-50 px-2 text-sm text-right font-bold focus:outline-none focus:border-orange-500"
                   />
-                  <button type="button" onClick={() => ingredient && setEditIngredient(ingredient)}
-                    disabled={!ingredient}
-                    title={ingredient ? 'กดเพื่อแก้หน่วยนับ' : ''}
-                    className="w-11 shrink-0 text-xs text-gray-500 truncate underline decoration-dotted underline-offset-2 disabled:no-underline">
-                    {ingredient?.unit ?? ''}
-                  </button>
+                  {units.length > 1 ? (
+                    <select
+                      value={lines[index].entry_unit}
+                      onChange={(e) => updateRow(row.id, 'entry_unit', e.target.value)}
+                      aria-label="หน่วยที่ตวง"
+                      className="w-20 shrink-0 min-h-[44px] rounded-lg border-2 border-gray-200 bg-white px-1 text-xs focus:outline-none focus:border-orange-500"
+                    >
+                      {units.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  ) : (
+                    <span className="w-14 shrink-0 text-xs text-gray-500 truncate">{ingredient?.unit ?? ''}</span>
+                  )}
                   <button type="button" onClick={() => removeRow(row.id)}
                     className="w-9 h-9 shrink-0 rounded-full bg-gray-100 text-gray-400 text-lg flex items-center justify-center"
                     aria-label="ลบบรรทัด">×</button>
                 </div>
 
                 <div className="flex items-center justify-between gap-2 pl-1">
-                  <label className="flex items-center gap-1.5 text-[11px] text-gray-500">
-                    <input
-                      type="checkbox"
-                      checked={row.per_batch !== ''}
-                      onChange={(e) => updateRow(row.id, 'per_batch', e.target.checked ? '10' : '')}
-                      className="w-4 h-4 accent-orange-500"
-                    />
-                    1 {ingredient?.unit ?? 'หน่วย'} ใช้ได้หลายหม้อ
-                  </label>
-                  {row.per_batch !== '' && (
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min="1"
-                      value={row.per_batch}
-                      onChange={(e) => updateRow(row.id, 'per_batch', e.target.value)}
-                      className="w-16 min-h-[32px] rounded-lg border-2 border-gray-200 px-2 text-xs text-right focus:outline-none focus:border-orange-500"
-                    />
-                  )}
-                  <span className={`text-xs font-bold ml-auto ${noPrice ? 'text-red-500' : 'text-gray-700'}`}>
+                  <button type="button" onClick={() => ingredient && setEditIngredient(ingredient)}
+                    disabled={!ingredient}
+                    className="text-[11px] text-gray-400 underline decoration-dotted underline-offset-2 disabled:no-underline text-left">
+                    {ingredient
+                      ? ingredient.content_qty > 0 && ingredient.content_unit
+                        ? `1 ${ingredient.unit} = ${trim(ingredient.content_qty)} ${ingredient.content_unit} · แก้`
+                        : `ตั้งว่า 1 ${ingredient.unit} มีกี่ มล./กรัม`
+                      : ''}
+                  </button>
+                  <span className={`text-xs font-bold ml-auto shrink-0 ${noPrice ? 'text-red-500' : 'text-gray-700'}`}>
                     {noPrice ? 'ยังไม่มีราคาซื้อ' : `${amount.toFixed(2)} ฿`}
                   </span>
                 </div>
 
-                {ingredient && Number(row.qty) > 0 && (
+                {ingredient && used > 0 && (
                   <p className="text-[11px] text-gray-400 pl-1 -mt-1">
-                    ตัดสต็อก {trim(lineStockUse(lines[index]))} {ingredient.unit}
-                    {' · '}เหลือ {trim(Math.max(0, (Number(ingredient.stock_qty) || 0) - lineStockUse(lines[index])))} {ingredient.unit}
+                    ตัดสต็อก {trim(used)} {ingredient.unit}
+                    {' · '}เหลือ {trim(Math.max(0, (Number(ingredient.stock_qty) || 0) - used))} {ingredient.unit}
                   </p>
                 )}
               </div>
