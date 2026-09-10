@@ -21,6 +21,7 @@ export function AppDataProvider({ children }) {
   const [productsLoading, setProductsLoading] = useState(true)
   const [ingredients, setIngredients] = useState([])
   const [ingredientsLoading, setIngredientsLoading] = useState(true)
+  const [sauces, setSauces] = useState([])
   const [shifts, setShifts] = useState([])
   const [shiftsLoading, setShiftsLoading] = useState(true)
   const [store, setStore] = useState(null)
@@ -51,6 +52,16 @@ export function AppDataProvider({ children }) {
   }, [])
 
   useEffect(() => {
+    return onSnapshot(collection(db, 'sauces'), (snap) => {
+      setSauces(
+        snap.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+      )
+    }, logSnapshotError('น้ำจิ้ม', setDataError))
+  }, [])
+
+  useEffect(() => {
     const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
     return onSnapshot(q, (snap) => {
       setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
@@ -75,6 +86,8 @@ export function AppDataProvider({ children }) {
     }
   }, [])
 
+  const sauceEnabled = store?.sauce_enabled !== false
+
   const value = useMemo(() => ({
     products,
     activeProducts: products.filter((p) => p.is_active),
@@ -97,9 +110,14 @@ export function AppDataProvider({ children }) {
     packagingCost: store?.packaging_cost ?? DEFAULT_PACKAGING_COST,
     consumableCost: store?.consumable_cost ?? DEFAULT_CONSUMABLE_COST,
     ingredientById: new Map(ingredients.map((i) => [i.id, i])),
+    // ปิดสวิตช์นี้แล้วแท็บน้ำจิ้มหายและต้นทุนกลับไปเป็นสูตรก่อนติดตั้งระบบ
+    // ส่ง sauceById เป็น null ไปเลยเมื่อปิด จะได้ไม่มีทางที่ต้นทุนน้ำจิ้มหลุดเข้าไปคิด
+    sauceEnabled,
+    sauces,
+    sauceById: sauceEnabled ? new Map(sauces.map((s) => [s.id, s])) : null,
     online,
     dataError,
-  }), [products, productsLoading, ingredients, ingredientsLoading, shifts, shiftsLoading, store, online, dataError])
+  }), [products, productsLoading, ingredients, ingredientsLoading, sauces, sauceEnabled, shifts, shiftsLoading, store, online, dataError])
 
   return <AppDataContext.Provider value={value}>{children}</AppDataContext.Provider>
 }

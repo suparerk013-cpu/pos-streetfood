@@ -1,4 +1,4 @@
-import { BarChart3, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
+import { BarChart3, CookingPot, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
 
 const TABS = [
   { key: 'sales', label: 'หน้าขาย', icon: ShoppingCart },
@@ -7,13 +7,16 @@ const TABS = [
   { key: 'inventory', label: 'คลัง', icon: Package },
   { key: 'shift', label: 'ปิดกะ', icon: RefreshCw },
   { key: 'expenses', label: 'รายจ่าย', icon: Receipt },
+  { key: 'sauce', label: 'น้ำจิ้ม', icon: CookingPot, needsSauce: true },
   { key: 'settings', label: 'ตั้งค่า', icon: Settings },
 ]
 
-function BottomNav({ current, onNavigate, lowStockCount = 0 }) {
+function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true }) {
+  const tabs = TABS.filter((tab) => !tab.needsSauce || sauceEnabled)
+
   return (
     <nav className="sm:hidden shrink-0 bg-gradient-to-r from-orange-600 to-red-600 flex border-t border-orange-700/30">
-      {TABS.map(({ key, label, icon: Icon }) => {
+      {tabs.map(({ key, label, icon: Icon }) => {
         const isActive = current === key
         return (
           <button

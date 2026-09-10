@@ -23,7 +23,11 @@ const appData = {
   productById: new Map([[squid.id, squid]]),
   ingredientById: new Map([['i1', { id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }]]),
   ingredients: [{ id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }],
+  activeIngredients: [{ id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }],
   consumableCost: 1,
+  sauceEnabled: true,
+  sauces: [{ id: 's1', name: 'น้ำจิ้มหมึกย่าง', icon: '🦑', last_batch: { cost_per_serve: 0.24 } }],
+  sauceById: new Map([['s1', { id: 's1', name: 'น้ำจิ้มหมึกย่าง', icon: '🦑', last_batch: { cost_per_serve: 0.24 } }]]),
   enabledPlatforms: ['GrabFood', 'LINE MAN'],
   gpRateFor: () => 0.3,
   settings: {},
@@ -59,6 +63,26 @@ describe('เรนเดอร์หน้าต่างในคลังส�
     const html = render(<EditProductModal product={squid} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
     expect(html).not.toContain('ช่องทางขาย')
     expect(html).toContain('เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต')
+  })
+
+  it('หน้าต่างแก้ไขสินค้าโชว์ต้นทุนแตกเป็นก้อน วัตถุดิบ น้ำจิ้ม ของประกอบ', () => {
+    const sauced = { ...squid, sauce_id: 's1' }
+    const html = render(<EditProductModal product={sauced} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
+    expect(html).toContain('วัตถุดิบหลัก')
+    expect(html).toContain('สูตรน้ำจิ้ม')
+    // หมึก 3 + น้ำจิ้ม 0.24 + ของประกอบ 1
+    expect(html.replace(/<!-- -->/g, '')).toContain('4.24 ฿')
+  })
+
+  it('ปิดระบบน้ำจิ้มแล้ว ช่องเลือกสูตรหายไปจากหน้าต่างแก้ไขสินค้า', () => {
+    const off = { ...appData, sauceEnabled: false, sauceById: null }
+    const html = renderToString(
+      <AppDataContext.Provider value={off}>
+        <EditProductModal product={{ ...squid, sauce_id: 's1' }} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />
+      </AppDataContext.Provider>,
+    )
+    expect(html).not.toContain('สูตรน้ำจิ้ม')
+    expect(html.replace(/<!-- -->/g, '')).toContain('4.00 ฿')
   })
 
   it('หน้าต่างเพิ่มสินค้าเรนเดอร์ได้ และไม่มีช่องตั้งตัวเลือกสินค้าแล้ว', () => {

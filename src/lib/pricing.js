@@ -1,13 +1,20 @@
 import { DEFAULT_GP_RATE, DEFAULT_PACKAGING_COST, TARGET_MARGIN } from './constants'
+import { sauceCostFor } from './sauceCost'
 
 /**
  * ต้นทุนต่อหน่วยของสินค้า 1 ชิ้น
  *
- * ถ้าสินค้าผูกกับวัตถุดิบไว้ (ingredient_id + yield_per_unit) จะคิดจากราคาวัตถุดิบล่าสุด
- * เช่น หมึกสด 60 ฿/กก. เสียบได้ 20 ไม้ → 3 ฿/ไม้ แล้วบวกของประกอบ (ไม้เสียบ น้ำจิ้ม ถ่าน)
- * ราคาวัตถุดิบขึ้นลงเมื่อไหร่ ต้นทุนก็ขยับตามเอง ไม่ต้องมาแก้มือ
+ * ประกอบด้วยสามก้อน — วัตถุดิบหลัก น้ำจิ้มที่ทำเอง และของประกอบ
+ *
+ * วัตถุดิบหลักคิดจากราคาที่ซื้อมาล่าสุดหารด้วยจำนวนที่ทำได้ต่อหน่วย
+ * เช่น หมึกสด 60 ฿/กก. เสียบได้ 20 ไม้ → 3 ฿/ไม้ ราคาหมึกขึ้นลงเมื่อไหร่ต้นทุนขยับตามเอง
+ *
+ * น้ำจิ้มคิดจากหม้อล่าสุดที่บันทึกไว้ในแท็บน้ำจิ้ม จะถูกบวกก็ต่อเมื่อส่ง sauceById เข้ามา
+ * ถ้าปิดระบบน้ำจิ้มในหน้าตั้งค่า จะไม่มีใครส่งเข้ามา ต้นทุนกลับไปเท่าเดิมทุกบาท
+ *
+ * ของประกอบเป็นเลขเหมาที่ตั้งเองในหน้าตั้งค่า สำหรับไม้เสียบ ถ่าน ถุง
  */
-export function unitCost(product, { ingredientById, consumableCost = 0 } = {}) {
+export function unitCost(product, { ingredientById, consumableCost = 0, sauceById = null } = {}) {
   if (!product) return 0
   if (product.cost_override != null) return product.cost_override
 
@@ -17,15 +24,39 @@ export function unitCost(product, { ingredientById, consumableCost = 0 } = {}) {
   const materialCost =
     yieldPerUnit > 0 && rawPrice > 0 ? rawPrice / yieldPerUnit : 0
 
-  return materialCost + consumableCost
+  return materialCost + sauceCostFor(product, sauceById) + consumableCost
+}
+
+/** แยกต้นทุนออกเป็นก้อน ๆ ให้เห็นว่าเงินหายไปกับอะไร ใช้ตอนตั้งราคาสินค้า */
+export function costBreakdown(product, { ingredientById, consumableCost = 0, sauceById = null } = {}) {
+  if (product?.cost_override != null) {
+    return { material: 0, sauce: 0, consumable: 0, override: product.cost_override, total: product.cost_override }
+  }
+
+  const ingredient = product?.ingredient_id ? ingredientById?.get(product.ingredient_id) : null
+  const rawPrice = Number(ingredient?.last_price) || 0
+  const yieldPerUnit = Number(product?.yield_per_unit) || 0
+  const material = yieldPerUnit > 0 && rawPrice > 0 ? rawPrice / yieldPerUnit : 0
+  const sauce = sauceCostFor(product, sauceById)
+
+  return {
+    material,
+    sauce,
+    consumable: consumableCost,
+    override: null,
+    total: material + sauce + consumableCost,
+    ingredientName: ingredient?.name ?? null,
+    ingredientUnit: ingredient?.unit ?? null,
+    ingredientPrice: rawPrice,
+  }
 }
 
 /** ต้นทุนของเซ็ต = ผลรวมต้นทุนส่วนประกอบ + ค่าบรรจุภัณฑ์ 1 ชุด */
-export function bundleCost(bundle, { productById, ingredientById, consumableCost = 0, packagingCost = DEFAULT_PACKAGING_COST } = {}) {
+export function bundleCost(bundle, { productById, ingredientById, consumableCost = 0, sauceById = null, packagingCost = DEFAULT_PACKAGING_COST } = {}) {
   const components = bundle?.components ?? []
   const parts = components.reduce((sum, c) => {
     const product = productById?.get(c.product_id)
-    return sum + unitCost(product, { ingredientById, consumableCost }) * (c.qty ?? 0)
+    return sum + unitCost(product, { ingredientById, consumableCost, sauceById }) * (c.qty ?? 0)
   }, 0)
   return parts + packagingCost
 }

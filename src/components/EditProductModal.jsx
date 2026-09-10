@@ -1,7 +1,7 @@
 import { ImageOff, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
-import { unitCost } from '../lib/pricing'
+import { costBreakdown } from '../lib/pricing'
 import { freeQtyFor, promoTiers } from '../lib/promo'
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import ModalBackdrop from './ModalBackdrop'
@@ -17,7 +17,7 @@ const newPromoRow = (buy = '', free = '') => {
 }
 
 function EditProductModal({ product, onClose, onSubmit, onDelete }) {
-  const { ingredientById, consumableCost } = useAppData()
+  const { ingredientById, activeIngredients, consumableCost, sauceEnabled, sauces, sauceById } = useAppData()
   const [name, setName] = useState(product.name)
   const [price, setPrice] = useState(String(product.price))
   const [stockQty, setStockQty] = useState(String(product.stock_qty ?? 0))
@@ -32,6 +32,11 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
           .map((tier) => newPromoRow(String(tier.buy), String(tier.free)))
       : [newPromoRow('10', '1')],
   )
+  const [ingredientId, setIngredientId] = useState(product.ingredient_id ?? '')
+  const [yieldPerUnit, setYieldPerUnit] = useState(
+    product.yield_per_unit != null ? String(product.yield_per_unit) : '',
+  )
+  const [sauceId, setSauceId] = useState(product.sauce_id ?? '')
   const [imagePreview, setImagePreview] = useState(product.image_base64 ?? null)
   const [newImageBase64, setNewImageBase64] = useState(null)
   const [processingImage, setProcessingImage] = useState(false)
@@ -41,7 +46,15 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState(null)
 
-  const cost = unitCost(product, { ingredientById, consumableCost })
+  // คิดจากค่าที่กำลังกรอกอยู่ ไม่ใช่ค่าที่บันทึกไว้ จะได้เห็นต้นทุนขยับทันทีตอนแก้
+  const draft = {
+    ...product,
+    ingredient_id: ingredientId || null,
+    yield_per_unit: Number(yieldPerUnit) || null,
+    sauce_id: sauceEnabled && sauceId ? sauceId : null,
+  }
+  const breakdown = costBreakdown(draft, { ingredientById, consumableCost, sauceById })
+  const cost = breakdown.total
 
   /** โปรที่กรอกครบแล้วเท่านั้น ใช้ทั้งตอนบันทึกและตอนแสดงตัวอย่าง */
   const validPromos = promoOn
@@ -110,7 +123,11 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
       // ล้างข้อมูลรูปแบบเก่าทิ้ง ไม่งั้นจะมีโปรสองชุดในเอกสารเดียวกัน
       promo_buy_qty: null,
       promo_free_qty: null,
+      ingredient_id: ingredientId || null,
+      yield_per_unit: Number(yieldPerUnit) || null,
     }
+    // ไม่แตะฟิลด์น้ำจิ้มตอนปิดระบบไว้ ถ้าเปิดกลับมาสูตรที่เคยผูกจะยังอยู่ครบ
+    if (sauceEnabled) updates.sauce_id = sauceId || null
     if (newImageBase64) updates.image_base64 = newImageBase64
 
     try {
@@ -207,6 +224,96 @@ function EditProductModal({ product, onClose, onSubmit, onDelete }) {
           🏠 สินค้าชิ้นนี้ขายหน้าร้าน — หน้าเดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต
           ถ้าอยากขายตัวนี้ทางแอป ให้สร้างเซ็ตที่แท็บ &ldquo;เซ็ต&rdquo; แล้วตั้งราคาเผื่อ GP
         </p>
+
+        {/* ต้นทุนต่อชิ้น */}
+        <div className="mb-4 rounded-2xl border border-gray-200 p-3.5 flex flex-col gap-3">
+          <p className="text-xs font-bold text-gray-500 uppercase tracking-wider">ต้นทุนต่อ{unit || 'ชิ้น'}</p>
+
+          <label className="block">
+            <span className="text-xs text-gray-500">วัตถุดิบหลัก</span>
+            <select
+              value={ingredientId}
+              onChange={(e) => setIngredientId(e.target.value)}
+              className="mt-1 w-full min-h-[48px] rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:border-orange-400"
+            >
+              <option value="">— ไม่ผูกวัตถุดิบ —</option>
+              {activeIngredients.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name}
+                  {i.last_price > 0 ? ` (${i.last_price.toFixed(2)} ฿/${i.unit ?? 'หน่วย'})` : ' (ยังไม่มีราคา)'}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          {ingredientId && (
+            <label className="block">
+              <span className="text-xs text-gray-500">
+                1 {breakdown.ingredientUnit ?? 'หน่วย'} ทำได้กี่{unit || 'ชิ้น'}
+              </span>
+              <input
+                type="number" inputMode="decimal" step="any" min="0"
+                value={yieldPerUnit}
+                onChange={(e) => setYieldPerUnit(e.target.value)}
+                placeholder="เช่น หมึก 1 กก. เสียบได้ 20 ไม้"
+                className="mt-1 w-full min-h-[48px] rounded-xl border border-gray-200 px-3 text-sm focus:outline-none focus:border-orange-400"
+              />
+            </label>
+          )}
+
+          {sauceEnabled && sauces.length > 0 && (
+            <label className="block">
+              <span className="text-xs text-gray-500">สูตรน้ำจิ้ม</span>
+              <select
+                value={sauceId}
+                onChange={(e) => setSauceId(e.target.value)}
+                className="mt-1 w-full min-h-[48px] rounded-xl border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:border-orange-400"
+              >
+                <option value="">— ไม่ใช้น้ำจิ้ม —</option>
+                {sauces.map((sauce) => (
+                  <option key={sauce.id} value={sauce.id}>
+                    {sauce.icon ?? '🍲'} {sauce.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+
+          <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-600 flex flex-col gap-0.5">
+            {breakdown.override != null ? (
+              <span>ตั้งต้นทุนไว้ตายตัว {breakdown.override.toFixed(2)} ฿</span>
+            ) : (
+              <>
+                <span className="flex justify-between">
+                  <span>วัตถุดิบหลัก{breakdown.ingredientName ? ` (${breakdown.ingredientName})` : ''}</span>
+                  <b>{breakdown.material.toFixed(2)} ฿</b>
+                </span>
+                {sauceEnabled && (
+                  <span className="flex justify-between">
+                    <span>น้ำจิ้ม</span>
+                    <b>{breakdown.sauce.toFixed(2)} ฿</b>
+                  </span>
+                )}
+                <span className="flex justify-between">
+                  <span>ของประกอบ (ไม้ ถ่าน ถุง)</span>
+                  <b>{breakdown.consumable.toFixed(2)} ฿</b>
+                </span>
+              </>
+            )}
+            <span className="flex justify-between border-t border-gray-200 mt-1 pt-1 text-sm text-gray-800">
+              <span className="font-bold">รวมต้นทุน</span>
+              <b className="text-orange-600">{cost.toFixed(2)} ฿</b>
+            </span>
+            {Number(price) > 0 && (
+              <span className="flex justify-between text-[11px] text-gray-500">
+                <span>ขาย {Number(price).toFixed(2)} ฿ → กำไร</span>
+                <b className={Number(price) - cost > 0 ? 'text-green-600' : 'text-red-500'}>
+                  {(Number(price) - cost).toFixed(2)} ฿
+                </b>
+              </span>
+            )}
+          </div>
+        </div>
 
         {/* โปรโมชั่นหน้าร้าน */}
         <div className="mb-4 rounded-2xl border border-gray-200 p-3.5 flex flex-col gap-3">

@@ -10,7 +10,7 @@ import ModalBackdrop from './ModalBackdrop'
  * ระบบดึงต้นทุนจากทะเบียนวัตถุดิบมาคำนวณราคาแนะนำและกำไรให้ทันทีขณะพิมพ์
  */
 function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
-  const { products, ingredientById, consumableCost, packagingCost, gpRateFor, enabledPlatforms } =
+  const { products, ingredientById, consumableCost, sauceById, packagingCost, gpRateFor, enabledPlatforms } =
     useAppData()
 
   const [name, setName] = useState(bundle?.name ?? '')
@@ -29,7 +29,7 @@ function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
 
   const draft = { components, is_bundle: true }
-  const cost = bundleCost(draft, { productById, ingredientById, consumableCost, packagingCost })
+  const cost = bundleCost(draft, { productById, ingredientById, consumableCost, sauceById, packagingCost })
   const stock = bundleStock(draft, productById)
 
   // เซ็ตที่ขายเฉพาะหน้าร้านไม่โดนหัก GP จึงคิดกำไรคนละแบบ

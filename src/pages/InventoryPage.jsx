@@ -19,6 +19,7 @@ function InventoryPage() {
     productById,
     ingredientById,
     consumableCost,
+    sauceById,
     packagingCost,
     gpRateFor,
     enabledPlatforms,
@@ -283,7 +284,7 @@ function InventoryPage() {
 
           <div className="space-y-3">
             {bundles.map((bundle) => {
-              const cost = bundleCost(bundle, { productById, ingredientById, consumableCost, packagingCost })
+              const cost = bundleCost(bundle, { productById, ingredientById, consumableCost, sauceById, packagingCost })
               const stock = bundleStock(bundle, productById)
               const isDelivery = (bundle.channel ?? 'delivery') !== 'store'
               const gpRate = isDelivery ? gpRateFor(enabledPlatforms[0]) : 0

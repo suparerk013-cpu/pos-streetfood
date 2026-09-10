@@ -17,6 +17,8 @@ export const RESET_COLLECTIONS = [
   { name: 'payouts', label: 'รอบจ่ายเงินจากแอป' },
   { name: 'shifts', label: 'กะที่เปิด–ปิด' },
   { name: 'expenses', label: 'ค่าใช้จ่าย' },
+  { name: 'sauce_batches', label: 'ประวัติการทำน้ำจิ้ม' },
+  { name: 'sauces', label: 'สูตรน้ำจิ้ม' },
   { name: 'purchases', label: 'การซื้อวัตถุดิบ' },
   { name: 'ingredients', label: 'วัตถุดิบ' },
   { name: 'products', label: 'สินค้าและเซ็ต' },

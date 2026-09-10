@@ -18,6 +18,7 @@ const DocumentsPage = lazy(() => import('./pages/DocumentsPage'))
 const InventoryPage = lazy(() => import('./pages/InventoryPage'))
 const ShiftPage = lazy(() => import('./pages/ShiftPage'))
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
+const SaucePage = lazy(() => import('./pages/SaucePage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
 
 const PAGES = {
@@ -27,6 +28,7 @@ const PAGES = {
   inventory: InventoryPage,
   shift: ShiftPage,
   expenses: ExpensesPage,
+  sauce: SaucePage,
   settings: SettingsPage,
 }
 
@@ -39,7 +41,7 @@ function PageFallback() {
 }
 
 function Shell() {
-  const { activeProducts, shiftsLoading, currentShift } = useAppData()
+  const { activeProducts, shiftsLoading, currentShift, sauceEnabled } = useAppData()
   const [page, setPage] = useState('sales')
   const [shiftModalDismissed, setShiftModalDismissed] = useState(false)
 
@@ -56,6 +58,12 @@ function Shell() {
   const showOpenShiftModal =
     page === 'sales' && !shiftsLoading && !currentShift && !shiftModalDismissed
 
+  // ปิดระบบน้ำจิ้มขณะยืนอยู่บนแท็บนั้นพอดี ต้องเด้งกลับหน้าขาย
+  // ไม่งั้นจะค้างอยู่หน้าที่ปุ่มเข้าหายไปแล้ว กดกลับไม่ได้จนกว่าจะรีโหลด
+  useEffect(() => {
+    if (!sauceEnabled && page === 'sauce') setPage('sales')
+  }, [sauceEnabled, page])
+
   const PageComponent = PAGES[page] ?? SalesPage
 
   return (
@@ -71,7 +79,7 @@ function Shell() {
             </Suspense>
           </ErrorBoundary>
         </div>
-        <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} />
+        <BottomNav current={page} onNavigate={handleNavigate} lowStockCount={lowStockCount} sauceEnabled={sauceEnabled} />
       </div>
 
       {showOpenShiftModal && <OpenShiftModal onClose={() => setShiftModalDismissed(true)} />}

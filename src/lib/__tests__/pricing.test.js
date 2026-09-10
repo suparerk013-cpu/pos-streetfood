@@ -3,6 +3,7 @@ import {
   breakEvenPrice,
   bundleCost,
   bundleStock,
+  costBreakdown,
   netAfterGp,
   profitOf,
   roundUpToFive,
@@ -142,5 +143,58 @@ describe('breakEvenPrice', () => {
 
   it('ขายไม้เดี่ยวบนเดลิเวอรีต้องตั้ง 13.6 ขึ้นไป (ทุน 9.5 รวมแพ็ค)', () => {
     expect(breakEvenPrice(9.5, 0.3)).toBeCloseTo(13.571, 2)
+  })
+})
+
+// ─── ต้นทุนน้ำจิ้ม ─────────────────────────────────────────────
+const sauceById = new Map([
+  ['s-squid', { id: 's-squid', name: 'น้ำจิ้มหมึกย่าง', last_batch: { cost_per_serve: 0.24 } }],
+])
+const saucedSquid = { ...squid, sauce_id: 's-squid' }
+
+describe('ต้นทุนน้ำจิ้มในต้นทุนสินค้า', () => {
+  it('บวกต้นทุนน้ำจิ้มต่อชิ้นจากหม้อล่าสุดเข้าไป', () => {
+    expect(unitCost(saucedSquid, { ingredientById, consumableCost: 1.5, sauceById })).toBeCloseTo(4.74)
+  })
+
+  it('ปิดระบบน้ำจิ้มแล้ว ต้นทุนเท่ากับก่อนติดตั้งระบบเป๊ะ ๆ', () => {
+    const before = unitCost(squid, { ingredientById, consumableCost: 1.5 })
+    expect(unitCost(saucedSquid, { ingredientById, consumableCost: 1.5, sauceById: null })).toBe(before)
+  })
+
+  it('ต้นทุนเซ็ตก็รวมน้ำจิ้มของส่วนประกอบด้วย', () => {
+    const bundle = { components: [{ product_id: 'p1', qty: 8 }] }
+    const withSauce = bundleCost(bundle, {
+      productById: new Map([['p1', saucedSquid]]),
+      ingredientById, consumableCost: 1.5, packagingCost: 5, sauceById,
+    })
+    const without = bundleCost(bundle, {
+      productById: new Map([['p1', saucedSquid]]),
+      ingredientById, consumableCost: 1.5, packagingCost: 5,
+    })
+    expect(withSauce - without).toBeCloseTo(0.24 * 8)
+  })
+})
+
+describe('costBreakdown', () => {
+  it('แยกให้เห็นว่าเงินไปอยู่ที่วัตถุดิบ น้ำจิ้ม หรือของประกอบ', () => {
+    const b = costBreakdown(saucedSquid, { ingredientById, consumableCost: 1.5, sauceById })
+    expect(b.material).toBe(3)
+    expect(b.sauce).toBe(0.24)
+    expect(b.consumable).toBe(1.5)
+    expect(b.total).toBeCloseTo(4.74)
+    expect(b.ingredientName).toBe('ปลาหมึกสด')
+  })
+
+  it('สินค้าที่ตั้งต้นทุนตายตัวไว้ ใช้ตัวเลขนั้นตรง ๆ ไม่แตกก้อน', () => {
+    const b = costBreakdown({ ...saucedSquid, cost_override: 7 }, { ingredientById, consumableCost: 1.5, sauceById })
+    expect(b.override).toBe(7)
+    expect(b.total).toBe(7)
+  })
+
+  it('สินค้าที่ยังไม่ผูกวัตถุดิบ ต้นทุนวัตถุดิบเป็น 0 ไม่ใช่ NaN', () => {
+    const b = costBreakdown({ name: 'ยังไม่ผูก' }, { ingredientById, consumableCost: 1.5, sauceById })
+    expect(b.material).toBe(0)
+    expect(b.total).toBe(1.5)
   })
 })

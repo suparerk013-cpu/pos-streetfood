@@ -13,6 +13,7 @@ import {
 import { compressImageToBase64, ImageTooLargeError, InvalidImageError } from '../lib/imageUtils'
 import { db } from '../lib/firebase'
 import { RESET_COLLECTIONS, resetAllData } from '../lib/resetData'
+import { purgeSauceSystem } from '../lib/sauces'
 
 function Field({ label, value, onChange, placeholder, type = 'text' }) {
   return (
@@ -31,6 +32,116 @@ function Field({ label, value, onChange, placeholder, type = 'text' }) {
 
 /** ต้องพิมพ์ให้ตรงคำนี้ถึงจะกดล้างได้ กันกดพลาดตอนยืนขายของ */
 const RESET_PHRASE = 'ล้างข้อมูล'
+
+/**
+ * เปิด–ปิด และถอนระบบน้ำจิ้มออก
+ *
+ * ระบบนี้เพิ่มเข้ามาทีหลัง ถ้าลองแล้วไม่เข้ากับวิธีทำงานของร้านต้องถอยกลับได้จริง
+ * ไม่ใช่ต้องทนใช้ต่อ — ปิดสวิตช์แท็บก็หายและต้นทุนกลับไปเป็นสูตรก่อนติดตั้งทันที
+ * ส่วนปุ่มลบมีไว้ตอนตัดสินใจแล้วว่าไม่เอาแน่ ๆ จะได้ไม่มีข้อมูลค้างในฐานข้อมูล
+ */
+function SauceSection({ online, enabled, sauceCount }) {
+  const [saving, setSaving] = useState(false)
+  const [purging, setPurging] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [progress, setProgress] = useState(null)
+  const [result, setResult] = useState(null)
+  const [error, setError] = useState(null)
+
+  const setEnabled = async (next) => {
+    setSaving(true)
+    setError(null)
+    try {
+      await setDoc(doc(db, 'settings', 'store'), { sauce_enabled: next }, { merge: true })
+    } catch {
+      setError('เปลี่ยนไม่สำเร็จ ตรวจสัญญาณอินเทอร์เน็ตแล้วลองใหม่')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handlePurge = async () => {
+    setPurging(true)
+    setError(null)
+    setResult(null)
+    try {
+      const removed = await purgeSauceSystem(setProgress)
+      await setDoc(doc(db, 'settings', 'store'), { sauce_enabled: false }, { merge: true })
+      setResult(removed)
+      setConfirming(false)
+    } catch {
+      setError('ลบไม่สำเร็จ อาจเป็นเพราะเน็ตหลุดกลางคัน กดใหม่ได้')
+    } finally {
+      setPurging(false)
+      setProgress(null)
+    }
+  }
+
+  return (
+    <div className="bg-white rounded-2xl p-4 shadow-sm flex flex-col gap-3">
+      <p className="text-xs font-bold text-gray-400 uppercase tracking-wider">ระบบน้ำจิ้มที่ทำเอง</p>
+
+      <div className="flex items-start justify-between gap-3">
+        <p className="text-sm text-gray-600 leading-relaxed">
+          บันทึกว่ากวนน้ำจิ้มไปหม้อละเท่าไหร่ แล้วเอาไปคิดเป็นต้นทุนต่อไม้ให้อัตโนมัติ
+          <span className="block text-xs text-gray-400 mt-0.5">
+            ปิดแล้วแท็บน้ำจิ้มจะหาย และต้นทุนสินค้ากลับไปเป็นสูตรเดิม ข้อมูลที่บันทึกไว้ยังอยู่ครบ
+          </span>
+        </p>
+        <button
+          type="button"
+          onClick={() => setEnabled(!enabled)}
+          disabled={saving || !online}
+          aria-label={enabled ? 'ปิดระบบน้ำจิ้ม' : 'เปิดระบบน้ำจิ้ม'}
+          className={`shrink-0 w-14 h-8 rounded-full transition-colors relative disabled:opacity-40 ${
+            enabled ? 'bg-orange-500' : 'bg-gray-200'
+          }`}
+        >
+          <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-all ${
+            enabled ? 'left-7' : 'left-1'
+          }`} />
+        </button>
+      </div>
+
+      {!confirming ? (
+        <button
+          type="button"
+          onClick={() => setConfirming(true)}
+          disabled={purging || !online}
+          className="self-start text-xs font-bold text-red-500 underline underline-offset-2 disabled:opacity-40"
+        >
+          ลบระบบน้ำจิ้มออกทั้งหมด
+        </button>
+      ) : (
+        <div className="rounded-xl bg-red-50 border border-red-200 p-3 flex flex-col gap-2">
+          <p className="text-xs text-red-700 leading-relaxed">
+            ลบสูตรทั้งหมด{sauceCount > 0 ? ` (${sauceCount} สูตร)` : ''} พร้อมประวัติการทำ
+            และตัดสูตรออกจากสินค้าทุกตัว — <b>กู้คืนไม่ได้</b>
+            <span className="block mt-1">ยอดขาย บิล และสต็อกไม่ถูกแตะ</span>
+          </p>
+          <div className="flex gap-2">
+            <button type="button" onClick={() => setConfirming(false)} disabled={purging}
+              className="flex-1 min-h-[44px] rounded-xl bg-white border border-gray-200 text-gray-600 text-sm font-bold disabled:opacity-40">
+              ยกเลิก
+            </button>
+            <button type="button" onClick={handlePurge} disabled={purging}
+              className="flex-1 min-h-[44px] rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-40">
+              {purging ? (progress ?? 'กำลังลบ...') : 'ลบทั้งหมด'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="text-sm text-red-600">{error}</p>}
+      {result && (
+        <p className="rounded-xl bg-green-50 border border-green-200 px-3 py-2 text-xs text-green-800">
+          ✓ ลบแล้ว — สูตร {result.sauces} · ประวัติ {result.batches} หม้อ · ตัดออกจากสินค้า {result.products} รายการ
+          และปิดระบบให้เรียบร้อย
+        </p>
+      )}
+    </div>
+  )
+}
 
 function DangerZone({ online }) {
   const [confirmText, setConfirmText] = useState('')
@@ -136,7 +247,7 @@ function DangerZone({ online }) {
 }
 
 function SettingsPage() {
-  const { store, storeLoading, online } = useAppData()
+  const { store, storeLoading, online, sauceEnabled, sauces } = useAppData()
   const [shopName, setShopName]     = useState('')
   const [phone, setPhone]           = useState('')
   const [address, setAddress]       = useState('')
@@ -358,7 +469,9 @@ function SettingsPage() {
                     />
                     <span className="text-sm text-gray-400 shrink-0">฿</span>
                   </div>
-                  <p className="text-[11px] text-gray-400 mt-1">ไม้เสียบ น้ำจิ้ม ถ่าน</p>
+                  <p className="text-[11px] text-gray-400 mt-1">
+                    {sauceEnabled ? 'ไม้เสียบ ถ่าน ถุง — น้ำจิ้มคิดแยกในแท็บน้ำจิ้ม' : 'ไม้เสียบ น้ำจิ้ม ถ่าน'}
+                  </p>
                 </div>
               </div>
 
@@ -443,6 +556,8 @@ function SettingsPage() {
                 ออกจากระบบ
               </button>
             </div>
+
+            <SauceSection online={online} enabled={sauceEnabled} sauceCount={sauces.length} />
 
             <DangerZone online={online} />
           </>

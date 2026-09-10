@@ -94,6 +94,7 @@ function ReportsPage() {
     productById,
     ingredientById,
     consumableCost,
+    sauceById,
     packagingCost,
     gpRateFor,
   } = useAppData()
@@ -122,10 +123,10 @@ function ReportsPage() {
   const costByProduct = useMemo(() => {
     const map = new Map()
     productById.forEach((product, id) => {
-      map.set(id, unitCost(product, { ingredientById, consumableCost }))
+      map.set(id, unitCost(product, { ingredientById, consumableCost, sauceById }))
     })
     return map
-  }, [productById, ingredientById, consumableCost])
+  }, [productById, ingredientById, consumableCost, sauceById])
   const unitCostOf = useMemo(() => (id) => costByProduct.get(id) ?? 0, [costByProduct])
 
   const deliveryOrders = useMemo(() => orders.filter((o) => o.channel === 'delivery'), [orders])
