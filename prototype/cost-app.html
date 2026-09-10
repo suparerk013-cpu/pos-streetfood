@@ -143,19 +143,19 @@ const SEED = {
     { id:'chili',  name:'พริก',           unit:'กก.', price:150, stock:0.6, bottle:false },
     { id:'garlic', name:'กระเทียม',       unit:'กก.', price:150, stock:0.5, bottle:false },
     { id:'lime',   name:'มะนาว',          unit:'ลูก', price:5,   stock:30,  bottle:false },
-    { id:'cori',   name:'ผักชี',          unit:'กำ',  price:10,  stock:5,   bottle:false },
+    { id:'cori',   name:'ผักชี',          unit:'มัด', price:10,  stock:5,   bottle:false },
     { id:'fish',   name:'น้ำปลา',         unit:'ขวด', price:35,  stock:2, bottle:true, perBatch:10 },
     { id:'tam',    name:'น้ำมะขามเปียก',  unit:'ขวด', price:60,  stock:1, bottle:true, perBatch:8  },
-    { id:'sugar',  name:'น้ำตาล',         unit:'ถุง', price:25,  stock:2, bottle:true, perBatch:4  },
+    { id:'sugar',  name:'น้ำตาล',         unit:'กก.', price:28,  stock:2,   bottle:false },
   ],
 
   // น้ำจิ้มแยกออกมาต่างหาก มีได้หลายสูตร แต่ละสูตรมีวัตถุดิบของตัวเอง
   sauces: [
     { id:'s_squid', name:'น้ำจิ้มหมึกย่าง', icon:'🦑', unit:'กก.', stock:0,
-      recipe:[{ing:'chili',qty:0.2},{ing:'garlic',qty:0.15},{ing:'tam',qty:1},{ing:'sugar',qty:1},{ing:'fish',qty:1}],
+      recipe:[{ing:'chili',qty:0.2},{ing:'garlic',qty:0.15},{ing:'tam',qty:1},{ing:'sugar',qty:0.3},{ing:'fish',qty:1}],
       lastKg:2, lastServes:300, batch:null },
     { id:'s_sea',   name:'น้ำจิ้มซีฟู้ด',   icon:'🌶️', unit:'กก.', stock:0,
-      recipe:[{ing:'chili',qty:0.3},{ing:'garlic',qty:0.2},{ing:'lime',qty:10},{ing:'cori',qty:2},{ing:'fish',qty:1},{ing:'sugar',qty:1}],
+      recipe:[{ing:'chili',qty:0.3},{ing:'garlic',qty:0.2},{ing:'lime',qty:10},{ing:'cori',qty:2},{ing:'fish',qty:1},{ing:'sugar',qty:0.2}],
       lastKg:3, lastServes:400, batch:null },
   ],
 
@@ -169,7 +169,7 @@ const SEED = {
   misc: { charcoal:300, stick:120, bag:200, garnish:250, sold:1450 },
   logs: [],
 }
-const KEY = 'costlab-demo-v2'
+const KEY = 'costlab-demo-v3'
 let db = load()
 let tab = 'ing'
 
@@ -365,7 +365,7 @@ function openBuy() {
       <label class="f"><span>จำนวน</span><input type="number" id="bQty" value="1" min="0.01" step="0.1" oninput="buyCalc()"></label>
       <label class="f"><span>จ่ายไป (฿)</span><input type="number" id="bAmt" value="60" min="0" step="1" oninput="buyCalc()"></label></div>
     <div class="chk"><input type="checkbox" id="bBottle" onchange="buyCalc()">
-      <label for="bBottle">เป็นของขวด/กระปุก ใช้ได้หลายหม้อ</label></div>
+      <label for="bBottle">เป็นของขวด/กระปุก ใช้ได้หลายหม้อ (น้ำปลา มะขาม)</label></div>
     <label class="f" id="bPBwrap" style="display:none"><span>1 ขวดใช้ทำน้ำจิ้มได้กี่หม้อ</span>
       <input type="number" id="bPB" value="8" min="1" step="1" oninput="buyCalc()"></label>
     <div class="out"><div class="big" id="bOut">—</div><div class="cap" id="bCap"></div></div>
