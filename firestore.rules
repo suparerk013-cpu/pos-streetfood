@@ -1,0 +1,19 @@
+rules_version = '2';
+
+// This app has no login/auth flow (single-user by design), so these rules
+// stay open — the same effective behavior as Firebase's default "test mode",
+// just without the 30-day expiry that silently locks the whole app out.
+//
+// Trade-off: anyone who has the Firebase config (visible in any client
+// bundle) can read/write this database. Acceptable only because this is a
+// single-operator app with no sensitive personal data beyond the owner's
+// own sales figures. If that changes, add Firebase Auth and scope these
+// rules to request.auth.uid before relying on this database for anything
+// more sensitive.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}

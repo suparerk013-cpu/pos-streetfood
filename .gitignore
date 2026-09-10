@@ -8,3 +8,8 @@ dist/
 Thumbs.db
 
 .firebase/
+
+# Firebase admin service account keys — never commit these
+serviceAccountKey*.json
+*-firebase-adminsdk-*.json
+firebase-adminsdk*.json
