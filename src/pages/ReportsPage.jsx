@@ -12,23 +12,37 @@ import {
 } from '../lib/constants'
 import {
   docDateStr,
-  eachDateInRange,
   formatThaiDate,
   formatThaiMonth,
   getMonthRange,
   getPresetRange,
   getPreviousRange,
   rangeToTimestamps,
+  toDateString,
 } from '../lib/dates'
 import { db } from '../lib/firebase'
-import { orderCost, summarizeDelivery, summarizeFreebies } from '../lib/deliveryReport'
+import { summarizeDelivery, summarizeFreebies } from '../lib/deliveryReport'
 import { effectiveRates } from '../lib/payoutMath'
-import { unitCost } from '../lib/pricing'
+import {
+  groupByShift,
+  hourlyWithinShift,
+  netOfOrders,
+  orderWindow,
+  ordersInShiftRange,
+  shiftLabel,
+  shiftTimeRange,
+  toDate,
+  totalsFromSummaries,
+} from '../lib/shiftSales'
 import { useExpensesInRange, usePayouts, usePurchasesInRange } from '../lib/usePurchases'
-import { useOrdersInRange } from '../lib/useOrders'
+import { useOrdersBetween, useOrdersForShift, useShiftsInRange } from '../lib/useOrders'
 
+/**
+ * หน้าแดชบอร์ดดูเป็นกะ ไม่ใช่วันในปฏิทิน
+ * ร้านขายสี่โมงเย็นถึงตีหนึ่ง ถ้าแบ่งตามเที่ยงคืนรอบขายเดียวจะถูกผ่าเป็นสองวัน
+ */
 const RANGE_PRESETS = [
-  { key: 'today', label: 'วันนี้' },
+  { key: 'shift', label: 'กะนี้' },
   { key: '7days', label: '7 วัน' },
   { key: '30days', label: '30 วัน' },
   { key: 'month', label: 'เดือน' },
@@ -92,14 +106,14 @@ function ReportsPage() {
   const {
     activeProducts,
     productById,
-    ingredientById,
-    consumableCost,
-    sauceById,
-    packagingCost,
     gpRateFor,
+    currentShift,
+    shifts: recentShifts,
   } = useAppData()
   const [payoutOpen, setPayoutOpen] = useState(false)
-  const [preset, setPreset] = useState('today')
+  const [preset, setPreset] = useState('shift')
+  // กะที่กดเข้าไปดูจากกราฟหรือปุ่มกะก่อน/ถัดไป — null คือกะนี้ (หรือกะล่าสุดถ้าไม่ได้เปิด)
+  const [focusShift, setFocusShift] = useState(null)
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
@@ -107,11 +121,69 @@ function ReportsPage() {
   const [selectedBar, setSelectedBar] = useState(null)
   const [exportOpen, setExportOpen] = useState(false)
 
-  const { from, to } = preset === 'month' ? getMonthRange(monthCursor) : getPresetRange(preset)
-  const prevRange = getPreviousRange(from, to)
+  const isShiftView = preset === 'shift'
+  const latestShift = currentShift ?? recentShifts.find((s) => s.status === 'closed') ?? null
+  // กะที่ยังเปิดอยู่ต้องใช้ตัวที่ฟังสดจาก context เสมอ ตัวที่เก็บไว้ใน state จะไม่รู้ว่าปิดไปแล้ว
+  const viewShift = isShiftView
+    ? (focusShift && focusShift.id !== currentShift?.id ? focusShift : latestShift)
+    : null
 
-  const { orders } = useOrdersInRange(from, to)
-  const { orders: prevOrders } = useOrdersInRange(prevRange.from, prevRange.to)
+  const viewShiftDate = toDate(viewShift?.opened_at)
+  const { from, to } = isShiftView
+    ? (() => {
+        const day = toDateString(viewShiftDate ?? new Date())
+        return { from: day, to: day }
+      })()
+    : preset === 'month' ? getMonthRange(monthCursor) : getPresetRange(preset)
+
+  // ── กะในช่วงที่เลือก ──
+  const { shifts: rangeShifts, loading: shiftsLoading } = useShiftsInRange(
+    isShiftView ? null : from,
+    isShiftView ? null : to,
+  )
+  const openInRange = useMemo(
+    () => rangeShifts.find((s) => s.status === 'open') ?? null,
+    [rangeShifts],
+  )
+
+  // ── บิล ──
+  // กะเดียว: ฟังสดตลอด  /  หลายกะ: ดึงย้อนหลังทีเดียวให้ครบ แล้วเอาบิลสดของกะที่ยังเปิดมาเติม
+  const { orders: liveShiftOrders, loading: liveLoading } = useOrdersForShift(
+    isShiftView ? viewShift?.id : openInRange?.id,
+  )
+  // ช่วงเวลาไม่นับกะที่ยังเปิด เพราะบิลกะนั้นมาจากตัวฟังสดอยู่แล้ว
+  // ถ้าเอาเวลาตอนนี้มาเป็นขอบ ขอบจะเลื่อนทุกครั้งที่วาดจอแล้วดึงบิลย้อนหลังใหม่ไม่หยุด
+  const window = useMemo(
+    () => (isShiftView ? null : orderWindow(from, to, rangeShifts.filter((s) => s.status === 'closed'))),
+    [isShiftView, from, to, rangeShifts],
+  )
+  const { orders: pastOrders, loading: pastLoading, truncated } = useOrdersBetween(window?.start, window?.end)
+
+  const orders = useMemo(() => {
+    if (isShiftView) return liveShiftOrders
+    const past = openInRange ? pastOrders.filter((o) => o.shift_id !== openInRange.id) : pastOrders
+    const merged = openInRange ? [...past, ...liveShiftOrders] : past
+    return ordersInShiftRange(merged, rangeShifts, from, to)
+  }, [isShiftView, liveShiftOrders, pastOrders, openInRange, rangeShifts, from, to])
+
+  const loading = isShiftView ? (Boolean(viewShift) && liveLoading) : (shiftsLoading || pastLoading)
+
+  // ── เทียบช่วงก่อน — อ่านจากสรุปที่เก็บไว้ตอนปิดกะ ถูกกว่านับบิลใหม่หลายสิบเท่า ──
+  const prevRange = isShiftView ? null : getPreviousRange(from, to)
+  const { shifts: prevShifts } = useShiftsInRange(prevRange?.from, prevRange?.to)
+  const shiftIndex = recentShifts.findIndex((s) => s.id === viewShift?.id)
+  const olderShift = shiftIndex >= 0 ? recentShifts[shiftIndex + 1] ?? null : null
+  const newerShift = shiftIndex > 0 ? recentShifts[shiftIndex - 1] : null
+  const prevTotals = useMemo(() => {
+    if (isShiftView) {
+      // กะที่ยังขายอยู่ห้ามเทียบกับกะที่ปิดแล้ว ยอดครึ่งกะเทียบยอดเต็มกะจะขึ้นลูกศรแดงลงตลอด
+      // จนกว่าจะปิดร้าน ทำให้ตกใจทั้งที่ขายปกติ
+      if (viewShift?.status === 'open') return null
+      return olderShift ? totalsFromSummaries([olderShift]) : null
+    }
+    return totalsFromSummaries(prevShifts)
+  }, [isShiftView, viewShift, olderShift, prevShifts])
+
   const payouts = usePayouts()
   const { purchases } = usePurchasesInRange(from, to)
   const { expenses } = useExpensesInRange(from, to)
@@ -119,15 +191,6 @@ function ReportsPage() {
 
   /** อัตราที่ถูกหักจริง — ใช้จากรอบจ่ายเงินล่าสุดถ้ามี ไม่มีก็ใช้ค่าที่ตั้งไว้ */
   const rateFor = useMemo(() => effectiveRates(payouts, gpRateFor), [payouts, gpRateFor])
-
-  const costByProduct = useMemo(() => {
-    const map = new Map()
-    productById.forEach((product, id) => {
-      map.set(id, unitCost(product, { ingredientById, consumableCost, sauceById }))
-    })
-    return map
-  }, [productById, ingredientById, consumableCost, sauceById])
-  const unitCostOf = useMemo(() => (id) => costByProduct.get(id) ?? 0, [costByProduct])
 
   const deliveryOrders = useMemo(() => orders.filter((o) => o.channel === 'delivery'), [orders])
   const storeOrders = useMemo(() => orders.filter((o) => o.channel !== 'delivery'), [orders])
@@ -141,90 +204,79 @@ function ReportsPage() {
     [deliveryOrders],
   )
   const totalSales = storeSales + deliveryTotal
+  /** เงินที่เข้ากระเป๋าจริง หลังแอปเดลิเวอรีหัก GP */
+  const totalNet = useMemo(() => netOfOrders(orders, rateFor), [orders, rateFor])
 
-  /** ค่า GP ที่แพลตฟอร์มหักไป — เป็นต้นทุนจริงที่เดิมไม่เคยถูกนับ */
-  const deliveryRows = useMemo(
-    () =>
-      summarizeDelivery(orders, {
-        rateFor,
-        costOfOrder: (o) => orderCost(o, { unitCostOf, packagingCost }),
-      }),
-    [orders, rateFor, unitCostOf, packagingCost],
-  )
+  const deliveryRows = useMemo(() => summarizeDelivery(orders, { rateFor }), [orders, rateFor])
   const gpFeeTotal = useMemo(() => deliveryRows.reduce((s, r) => s + r.fee, 0), [deliveryRows])
 
+  // นับแค่จำนวนชิ้นที่แจกไป ไม่คิดเป็นเงิน — ระบบเลิกคิดต้นทุนต่อชิ้นแล้วเพราะตัวเลขไม่ตรงของจริง
   const freebies = useMemo(
-    () => summarizeFreebies(orders, { unitCostOf, nameOf: (id) => productById.get(id)?.name }),
-    [orders, unitCostOf, productById],
-  )
-  const freebieCost = useMemo(() => freebies.reduce((s, f) => s + f.cost, 0), [freebies])
-
-  const prevTotalSales = useMemo(
-    () => prevOrders.reduce((s, o) => s + (o.total_amount ?? 0), 0),
-    [prevOrders],
+    () => summarizeFreebies(orders, { unitCostOf: () => 0, nameOf: (id) => productById.get(id)?.name }),
+    [orders, productById],
   )
 
-  const ingredientCost = useMemo(
-    () => purchases.reduce((s, p) => s + (p.total_amount ?? 0), 0),
-    [purchases],
+  const prevTotalSales = prevTotals?.gross ?? null
+  const prevOrderCount = prevTotals?.count ?? null
+
+  // รายจ่ายคือเงินที่จดไว้จริงในหน้าค่าใช้จ่าย ไม่ใช่ต้นทุนที่ระบบเดาจากสูตร
+  // ของเก่าที่บันทึกแบบซื้อวัตถุดิบยังอยู่ในอีก collection หนึ่ง ต้องรวมด้วยไม่งั้นรายจ่ายย้อนหลังหาย
+  const recordedExpense = useMemo(
+    () =>
+      purchases.reduce((s, p) => s + (p.total_amount ?? 0), 0) +
+      expenses.reduce((s, e) => s + (e.amount ?? 0), 0),
+    [purchases, expenses],
   )
-  const otherCost = useMemo(() => expenses.reduce((s, e) => s + (e.amount ?? 0), 0), [expenses])
-  // กำไรต้องหักค่า GP ที่แพลตฟอร์มกินไปด้วย ไม่งั้นตัวเลขสูงเกินจริง
-  const totalCost = ingredientCost + otherCost + gpFeeTotal
+  // เงินเหลือต้องหักค่า GP ที่แพลตฟอร์มกินไปด้วย ไม่งั้นตัวเลขสูงเกินจริง
+  const totalCost = recordedExpense + gpFeeTotal
   const netProfit = totalSales - totalCost
   const profitMargin = totalSales > 0 ? Math.round((netProfit / totalSales) * 100) : 0
 
-  // จำนวนบิลนับเฉพาะบิลหน้าร้าน ยอดเดลิเวอรีเป็นยอดรวมทั้งวันไม่ใช่บิลเดียว
   const orderCount = orders.length
-  const prevOrderCount = prevOrders.length
   const avgOrder = orderCount > 0 ? Math.round(totalSales / orderCount) : 0
-  const prevAvgOrder = prevOrderCount > 0 ? Math.round(prevTotalSales / prevOrderCount) : 0
 
-  /** วันนี้ดูเป็นรายชั่วโมง ช่วงยาวกว่านั้นดูเป็นรายวัน */
-  const isSingleDay = from === to
+  const shiftRows = useMemo(
+    () => (isShiftView ? [] : groupByShift(orders, rangeShifts, { rateFor })),
+    [isShiftView, orders, rangeShifts, rateFor],
+  )
 
   const chartData = useMemo(() => {
-    if (isSingleDay) {
-      const byHour = new Array(24).fill(0)
-      orders.forEach((o) => {
-        const d = o.created_at?.toDate?.()
-        if (d) byHour[d.getHours()] += o.total_amount ?? 0
-      })
-      // ร้านริมทางไม่ได้ขายตอนตี 3 — ตัดชั่วโมงที่ไม่มียอดหัวท้ายทิ้ง
-      const active = byHour.map((v, h) => ({ v, h })).filter((x) => x.v > 0)
-      const startHour = active.length > 0 ? Math.max(0, Math.min(...active.map((x) => x.h)) - 1) : 8
-      const endHour = active.length > 0 ? Math.min(23, Math.max(...active.map((x) => x.h)) + 1) : 22
-      return byHour.slice(startHour, endHour + 1).map((value, i) => ({
-        key: String(startHour + i),
-        label: `${startHour + i}:00 น.`,
-        shortLabel: `${startHour + i}`,
-        value,
-      }))
-    }
-    const byDate = {}
-    orders.forEach((o) => {
-      const d = docDateStr(o)
-      if (d) byDate[d] = (byDate[d] ?? 0) + (o.total_amount ?? 0)
-    })
-    return eachDateInRange(from, to).map((date) => ({
-      key: date,
-      label: formatThaiDate(date),
-      shortLabel: String(Number(date.slice(8, 10))),
-      value: byDate[date] ?? 0,
+    if (isShiftView) return viewShift ? hourlyWithinShift(orders, viewShift) : []
+    return shiftRows.map((r) => ({
+      key: r.key,
+      label: `${r.label} ${r.timeRange}`,
+      shortLabel: r.label,
+      value: r.gross,
+      muted: r.isOutside,
     }))
-  }, [orders, from, to, isSingleDay])
+  }, [isShiftView, viewShift, orders, shiftRows])
 
   const sparklineValues = useMemo(() => chartData.map((d) => d.value), [chartData])
 
   const selectedDetail = useMemo(() => {
     if (!selectedBar) return null
-    const point = chartData.find((d) => d.key === selectedBar)
-    if (!point) return null
-    const count = isSingleDay
-      ? orders.filter((o) => String(o.created_at?.toDate?.().getHours()) === selectedBar).length
-      : orders.filter((o) => docDateStr(o) === selectedBar).length
-    return { ...point, count }
-  }, [selectedBar, chartData, orders, isSingleDay])
+    if (isShiftView) {
+      const point = chartData.find((d) => d.key === selectedBar)
+      return point ? { label: point.label, gross: point.value, count: point.count ?? null } : null
+    }
+    const row = shiftRows.find((r) => r.key === selectedBar)
+    if (!row) return null
+    return {
+      label: row.isOutside ? 'นอกกะ' : `กะ ${row.label} · ${row.timeRange}`,
+      gross: row.gross,
+      net: row.net,
+      count: row.count,
+      shift: row.shiftId ? rangeShifts.find((s) => s.id === row.shiftId) ?? null : null,
+      isOutside: row.isOutside,
+    }
+  }, [selectedBar, isShiftView, chartData, shiftRows, rangeShifts])
+
+  /** เปิดดูกะที่เลือกเต็ม ๆ — ตอบเรื่อง "ดูยอดของวันที่แล้วไม่ได้" */
+  const openShift = (shift) => {
+    setFocusShift(shift)
+    setPreset('shift')
+    setSelectedBar(null)
+  }
 
   const paymentBreakdown = useMemo(() => {
     const map = {}
@@ -281,9 +333,9 @@ function ReportsPage() {
   const totalDamageValue = damageSummary.reduce((s, d) => s + d.value, 0)
   const totalDamageQty = damageSummary.reduce((s, d) => s + d.qty, 0)
 
-  const periodLabel = preset === 'month'
-    ? formatThaiMonth(monthCursor)
-    : isSingleDay ? 'วันนี้' : `${formatThaiDate(from)} – ${formatThaiDate(to)}`
+  const periodLabel = isShiftView
+    ? (viewShift ? `กะ ${shiftLabel(viewShift)} · ${shiftTimeRange(viewShift)}` : 'ยังไม่เคยเปิดกะ')
+    : preset === 'month' ? formatThaiMonth(monthCursor) : `${formatThaiDate(from)} – ${formatThaiDate(to)}`
 
   const isCurrentMonth = (() => {
     const now = new Date()
@@ -324,16 +376,37 @@ function ReportsPage() {
             <div className="flex bg-gray-100 rounded-full p-0.5">
               {RANGE_PRESETS.map((r) => (
                 <button key={r.key} type="button"
-                  onClick={() => { setPreset(r.key); setSelectedBar(null) }}
+                  onClick={() => { setPreset(r.key); setSelectedBar(null); setFocusShift(null) }}
                   className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
                     preset === r.key ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-400'
                   }`}>
-                  {r.label}
+                  {r.key === 'shift' && !currentShift ? 'กะล่าสุด' : r.label}
                 </button>
               ))}
             </div>
           </div>
         </div>
+
+        {isShiftView && viewShift && (
+          <div className="flex items-center justify-between gap-2 mt-2">
+            <button type="button" disabled={!olderShift}
+              onClick={() => { setFocusShift(olderShift); setSelectedBar(null) }}
+              className="min-h-[40px] px-3 rounded-full bg-gray-100 disabled:opacity-30 flex items-center gap-1 text-xs font-bold text-gray-600"
+              aria-label="กะก่อนหน้า">
+              <ChevronLeft size={15} /> กะก่อน
+            </button>
+            <span className="text-xs font-bold text-gray-600 text-center min-w-0 truncate">
+              {viewShift.id === currentShift?.id && <span className="text-emerald-600">● เปิดอยู่ · </span>}
+              {shiftLabel(viewShift)} · {shiftTimeRange(viewShift)}
+            </span>
+            <button type="button" disabled={!newerShift}
+              onClick={() => { setFocusShift(newerShift); setSelectedBar(null) }}
+              className="min-h-[40px] px-3 rounded-full bg-gray-100 disabled:opacity-30 flex items-center gap-1 text-xs font-bold text-gray-600"
+              aria-label="กะถัดไป">
+              กะถัดไป <ChevronRight size={15} />
+            </button>
+          </div>
+        )}
 
         {preset === 'month' && (
           <div className="flex items-center justify-end gap-1 mt-2">
@@ -360,7 +433,7 @@ function ReportsPage() {
           <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 pt-4 pb-2">
               <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">
-                กำไรสุทธิ · {periodLabel}
+                เหลือหลังหักรายจ่าย · {periodLabel}
               </p>
               <div className="flex items-baseline gap-2">
                 <p className={`font-black tabular-nums leading-none ${
@@ -386,32 +459,34 @@ function ReportsPage() {
             <div className="grid grid-cols-3 border-t border-gray-100 divide-x divide-y divide-gray-100">
               <StatCell label="ยอดขายรวม" value={Math.round(totalSales).toLocaleString()}
                 current={totalSales} previous={prevTotalSales} />
+              <StatCell label="เงินเข้าจริง" value={Math.round(totalNet).toLocaleString()}
+                current={totalNet} previous={null} />
+              <StatCell label="รายจ่าย" value={Math.round(totalCost).toLocaleString()}
+                current={totalCost} previous={null} invert />
               <StatCell label="หน้าร้าน" value={Math.round(storeSales).toLocaleString()}
                 current={storeSales} previous={null} />
               <StatCell label="เดลิเวอรี" value={Math.round(deliveryTotal).toLocaleString()}
                 current={deliveryTotal} previous={null} />
-              <StatCell label="ต้นทุนรวม" value={Math.round(totalCost).toLocaleString()}
-                current={totalCost} previous={null} invert />
-              <StatCell label="บิล" value={orderCount.toLocaleString()}
+              <StatCell label={`บิล · เฉลี่ย ${avgOrder.toLocaleString()} ฿`} value={orderCount.toLocaleString()}
                 current={orderCount} previous={prevOrderCount} />
-              <StatCell label="เฉลี่ย/บิล" value={avgOrder.toLocaleString()}
-                current={avgOrder} previous={prevAvgOrder} />
             </div>
           </div>
 
-          {/* ── กราฟยอดขาย ── */}
+          {/* ── บิลไม่ครบ — เกินเพดานที่ดึงได้ ต้องบอก ไม่ใช่โชว์ยอดต่ำกว่าจริงเงียบ ๆ ── */}
+          {truncated && (
+            <p className="lg:col-span-2 rounded-2xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-xs text-amber-800">
+              ช่วงนี้มีบิลมากเกินกว่าที่ดึงมาได้ในครั้งเดียว ตัวเลขอาจต่ำกว่าความจริง — ลองเลือกช่วงที่สั้นลง
+            </p>
+          )}
+
+          {/* ── กราฟยอดขาย — หลายวันเป็นแท่งละกะ วันเดียวเป็นรายชั่วโมงในกะนั้น ── */}
           {hasData && (
             <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-                  {isSingleDay ? 'ยอดขายรายชั่วโมง' : 'ยอดขายรายวัน'}
+                  {isShiftView ? 'ยอดขายรายชั่วโมงในกะ' : 'ยอดขายรายกะ'}
                 </p>
-                {selectedDetail ? (
-                  <p className="text-[11px] font-bold text-orange-600">
-                    {selectedDetail.label} · {Math.round(selectedDetail.value).toLocaleString()} ฿
-                    {selectedDetail.count > 0 ? ` · ${selectedDetail.count} บิล` : ''}
-                  </p>
-                ) : (
+                {!selectedDetail && (
                   <p className="text-[10px] text-gray-300">แตะแท่งเพื่อดูรายละเอียด</p>
                 )}
               </div>
@@ -421,25 +496,85 @@ function ReportsPage() {
                 onSelect={setSelectedBar}
                 formatValue={(v) => `${Math.round(v).toLocaleString()} ฿`}
               />
+
+              {selectedDetail && (
+                <div className={`mt-3 rounded-xl px-3 py-2.5 ${
+                  selectedDetail.isOutside ? 'bg-gray-50 border border-gray-200' : 'bg-orange-50 border border-orange-100'
+                }`}>
+                  <p className="text-xs font-bold text-gray-700">{selectedDetail.label}</p>
+                  <p className="text-lg font-black text-gray-800 tabular-nums">
+                    {Math.round(selectedDetail.gross).toLocaleString()} ฿
+                    {selectedDetail.count != null && (
+                      <span className="text-xs font-semibold text-gray-400 ml-1.5">{selectedDetail.count} บิล</span>
+                    )}
+                  </p>
+                  {selectedDetail.net != null && Math.round(selectedDetail.net) !== Math.round(selectedDetail.gross) && (
+                    <p className="text-[11px] text-gray-500">
+                      เงินเข้าจริงหลังหัก GP {Math.round(selectedDetail.net).toLocaleString()} ฿
+                    </p>
+                  )}
+                  {selectedDetail.isOutside && (
+                    <p className="text-[11px] text-gray-500 mt-1">
+                      บิลที่ขายตอนไม่ได้เปิดกะ — เปิดกะก่อนขายทุกครั้ง ยอดจะได้เข้าวันที่ถูกต้อง
+                    </p>
+                  )}
+                  {selectedDetail.shift && (
+                    <button type="button" onClick={() => openShift(selectedDetail.shift)}
+                      className="mt-2 w-full min-h-[44px] rounded-xl bg-white border border-orange-200 text-sm font-bold text-orange-600 active:bg-orange-100">
+                      ดูกะนี้ทั้งหมด ›
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* รายการกะ — ยอดขายคู่กับเงินเข้าจริง แตะแถวเพื่อเปิดดูกะนั้น */}
+              {!isShiftView && shiftRows.length > 0 && (
+                <div className="mt-3 border-t border-gray-100 divide-y divide-gray-50">
+                  {[...shiftRows].reverse().map((row) => {
+                    const shift = row.shiftId ? rangeShifts.find((x) => x.id === row.shiftId) : null
+                    return (
+                      <button key={row.key} type="button" disabled={!shift}
+                        onClick={() => shift && openShift(shift)}
+                        className="w-full flex items-center gap-2 py-2 text-left disabled:cursor-default">
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-bold ${row.isOutside ? 'text-gray-500' : 'text-gray-800'}`}>
+                            {row.isOpen && <span className="text-emerald-600">● </span>}
+                            {row.isOutside ? 'นอกกะ' : `กะ ${row.label}`}
+                            <span className="text-[11px] font-medium text-gray-400 ml-1.5">{row.timeRange}</span>
+                          </p>
+                          {Math.round(row.net) !== Math.round(row.gross) && (
+                            <p className="text-[11px] text-gray-400">
+                              เงินเข้าจริง {Math.round(row.net).toLocaleString()} ฿
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-sm font-extrabold text-gray-800 tabular-nums shrink-0">
+                          {Math.round(row.gross).toLocaleString()} ฿
+                        </span>
+                        {shift && <ChevronRight size={14} className="text-gray-300 shrink-0" />}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          {/* ── ต้นทุนแยกส่วน ── */}
+          {/* ── รายจ่ายแยกส่วน — เงินที่จดไว้จริง กับค่า GP ที่แอปหัก ── */}
           {totalCost > 0 && (
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">ต้นทุนแยกส่วน</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">รายจ่ายแยกส่วน</p>
               <ShareBar
                 total={totalCost}
                 segments={[
-                  { key: 'ingredient', label: 'วัตถุดิบ', value: ingredientCost, color: 'bg-orange-400' },
+                  { key: 'recorded', label: 'รายจ่ายที่จดไว้', value: recordedExpense, color: 'bg-orange-400' },
                   { key: 'gp', label: 'ค่า GP เดลิเวอรี', value: gpFeeTotal, color: 'bg-red-400' },
-                  { key: 'other', label: 'ค่าใช้จ่ายอื่น', value: otherCost, color: 'bg-slate-400' },
                 ]}
               />
               <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
                 <span className="text-gray-500">
                   <span className="inline-block w-2 h-2 rounded-sm bg-orange-400 mr-1 align-middle" />
-                  วัตถุดิบ {Math.round(ingredientCost).toLocaleString()} ฿
+                  รายจ่ายที่จดไว้ {Math.round(recordedExpense).toLocaleString()} ฿
                 </span>
                 {gpFeeTotal > 0 && (
                   <span className="text-gray-500">
@@ -447,17 +582,13 @@ function ReportsPage() {
                     ค่า GP {Math.round(gpFeeTotal).toLocaleString()} ฿
                   </span>
                 )}
-                <span className="text-gray-500">
-                  <span className="inline-block w-2 h-2 rounded-sm bg-slate-400 mr-1 align-middle" />
-                  อื่น ๆ {Math.round(otherCost).toLocaleString()} ฿
-                </span>
               </div>
-              {ingredientCost === 0 && (
-                <p className="text-[11px] text-amber-600 bg-amber-50 rounded-xl px-3 py-2 mt-2">
-                  ยังไม่ได้บันทึกค่าวัตถุดิบในช่วงนี้ — กำไรที่แสดงจึงสูงกว่าความจริง
-                </p>
-              )}
             </div>
+          )}
+          {totalSales > 0 && recordedExpense === 0 && (
+            <p className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-[11px] text-amber-700">
+              ยังไม่ได้จดรายจ่ายในช่วงนี้ — ตัวเลขเหลือหลังหักรายจ่ายจึงสูงกว่าความจริง
+            </p>
           )}
 
           {/* ── เดลิเวอรีแยกแอป ── */}
@@ -471,14 +602,13 @@ function ReportsPage() {
                 </button>
               </div>
               <div className="overflow-x-auto -mx-4 px-4">
-                <table className="w-full min-w-[26rem] text-sm">
+                <table className="w-full min-w-[20rem] text-sm">
                   <thead>
                     <tr className="text-[10px] uppercase tracking-wider text-gray-400">
                       <th className="text-left font-medium pb-1.5">แอป</th>
                       <th className="text-right font-medium pb-1.5">ยอดขาย</th>
                       <th className="text-right font-medium pb-1.5">หัก GP</th>
                       <th className="text-right font-medium pb-1.5">เงินเข้า</th>
-                      <th className="text-right font-medium pb-1.5">กำไร</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -496,22 +626,14 @@ function ReportsPage() {
                         <td className="py-1.5 text-right tabular-nums text-red-500">
                           −{Math.round(row.fee).toLocaleString()}
                         </td>
-                        <td className="py-1.5 text-right tabular-nums text-gray-700">
+                        <td className="py-1.5 text-right tabular-nums font-bold text-gray-800">
                           {Math.round(row.net).toLocaleString()}
-                        </td>
-                        <td className={`py-1.5 text-right tabular-nums font-bold ${
-                          row.profit >= 0 ? 'text-emerald-600' : 'text-red-500'
-                        }`}>
-                          {Math.round(row.profit).toLocaleString()}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               </div>
-              <p className="text-[11px] text-gray-400 mt-2">
-                กำไรหักทั้งค่า GP ค่าบรรจุภัณฑ์ และต้นทุนวัตถุดิบแล้ว
-              </p>
             </div>
           )}
 
@@ -520,16 +642,13 @@ function ReportsPage() {
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">ของแถมที่ให้ไป</p>
-                <p className="text-xs font-bold text-amber-600 tabular-nums">
-                  ต้นทุน {Math.round(freebieCost).toLocaleString()} ฿
-                </p>
               </div>
               <div className="flex flex-col gap-1">
                 {freebies.map((f) => (
                   <div key={f.productId} className="flex items-center justify-between text-sm">
                     <span className="text-gray-600 truncate">🎁 {f.name}</span>
                     <span className="font-semibold text-gray-700 tabular-nums shrink-0">
-                      {f.qty} ชิ้น · {Math.round(f.cost).toLocaleString()} ฿
+                      {f.qty} ชิ้น
                     </span>
                   </div>
                 ))}
@@ -641,7 +760,9 @@ function ReportsPage() {
           {!hasData && (
             <div className="lg:col-span-2 flex flex-col items-center justify-center py-20 gap-3">
               <div className="w-16 h-16 rounded-2xl bg-gray-100 border border-gray-200 flex items-center justify-center text-3xl">📊</div>
-              <p className="text-gray-400 text-sm font-medium">ไม่มีข้อมูลในช่วงนี้</p>
+              <p className="text-gray-400 text-sm font-medium">
+                {loading ? 'กำลังโหลด...' : isShiftView && !viewShift ? 'ยังไม่เคยเปิดกะ' : 'ไม่มีข้อมูลในช่วงนี้'}
+              </p>
             </div>
           )}
 

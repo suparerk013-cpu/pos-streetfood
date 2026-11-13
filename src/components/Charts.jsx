@@ -43,9 +43,9 @@ export function BarChart({ data, selectedKey, onSelect, height = 128, formatValu
                 <span
                   className={`w-full rounded-t-[3px] transition-all ${
                     isSelected
-                      ? 'bg-gradient-to-t from-red-500 to-orange-400'
+                      ? d.muted ? 'bg-gray-500' : 'bg-gradient-to-t from-red-500 to-orange-400'
                       : d.value > 0
-                      ? 'bg-orange-300 group-hover:bg-orange-400'
+                      ? d.muted ? 'bg-gray-300 group-hover:bg-gray-400' : 'bg-orange-300 group-hover:bg-orange-400'
                       : 'bg-gray-100'
                   }`}
                   style={{ height: `${Math.max(pct, d.value > 0 ? 2 : 1)}%` }}

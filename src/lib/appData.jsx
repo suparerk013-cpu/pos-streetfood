@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { AppDataContext } from './appDataContext'
 import {
@@ -16,6 +16,8 @@ import { logSnapshotError } from './snapshotError'
  * เดิมแต่ละหน้าเปิด onSnapshot ของตัวเอง — สินค้าถูกฟังซ้ำ 3 ที่ ตั้งค่าร้านซ้ำ 4 ที่
  * รวมมาไว้ที่เดียวทำให้จำนวน listener ลดลงและข้อมูลตรงกันทุกหน้า
  */
+const RECENT_SHIFTS = 60
+
 export function AppDataProvider({ children }) {
   const [products, setProducts] = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
@@ -62,7 +64,10 @@ export function AppDataProvider({ children }) {
   }, [])
 
   useEffect(() => {
-    const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'))
+    // ฟังแค่กะล่าสุดพอสำหรับหาว่ากะไหนเปิดอยู่และโชว์ประวัติในหน้าปิดกะ
+    // เดิมโหลดทุกกะที่เคยมีทุกครั้งที่เปิดแอป ปีนึงก็ 365 เอกสาร โตไปเรื่อย ๆ ไม่มีเพดาน
+    // รายงานย้อนหลังไกลกว่านี้ดึงเองตามช่วงที่เลือก (useShiftsInRange)
+    const q = query(collection(db, 'shifts'), orderBy('opened_at', 'desc'), limit(RECENT_SHIFTS))
     return onSnapshot(q, (snap) => {
       setShifts(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
       setShiftsLoading(false)
