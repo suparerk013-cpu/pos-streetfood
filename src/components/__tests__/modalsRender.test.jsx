@@ -5,29 +5,25 @@
  * เทสต์ยูนิตของ lib ไม่จับ เพราะไม่เคยเรนเดอร์คอมโพเนนต์เลย
  */
 import { renderToString } from 'react-dom/server'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../lib/firebase', () => ({ db: {}, auth: {} }))
 import { AppDataContext } from '../../lib/appDataContext'
 import AddProductModal from '../AddProductModal'
 import EditProductModal from '../EditProductModal'
 import BundleModal from '../BundleModal'
 import CartItemRow from '../CartItemRow'
+import ExpenseModal from '../ExpenseModal'
 
 const squid = {
   id: 'p1', name: 'ปลาหมึกย่าง', price: 10, unit: 'ไม้', stock_qty: 20,
-  is_active: true, category: 'squid', ingredient_id: 'i1', yield_per_unit: 20,
+  is_active: true, category: 'squid',
 }
 
 const appData = {
   products: [squid],
   activeProducts: [squid],
   productById: new Map([[squid.id, squid]]),
-  ingredientById: new Map([['i1', { id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }]]),
-  ingredients: [{ id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }],
-  activeIngredients: [{ id: 'i1', name: 'ปลาหมึกสด', last_price: 60, unit: 'กก.' }],
-  consumableCost: 1,
-  sauceEnabled: true,
-  sauces: [{ id: 's1', name: 'น้ำจิ้มหมึกย่าง', icon: '🦑', last_batch: { cost_per_serve: 0.24 } }],
-  sauceById: new Map([['s1', { id: 's1', name: 'น้ำจิ้มหมึกย่าง', icon: '🦑', last_batch: { cost_per_serve: 0.24 } }]]),
   enabledPlatforms: ['GrabFood', 'LINE MAN'],
   gpRateFor: () => 0.3,
   settings: {},
@@ -65,24 +61,10 @@ describe('เรนเดอร์หน้าต่างในคลังส�
     expect(html).toContain('เดลิเวอรีขายเฉพาะสินค้าจัดเซ็ต')
   })
 
-  it('หน้าต่างแก้ไขสินค้าโชว์ต้นทุนแตกเป็นก้อน วัตถุดิบ น้ำจิ้ม ของประกอบ', () => {
-    const sauced = { ...squid, sauce_id: 's1' }
-    const html = render(<EditProductModal product={sauced} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
-    expect(html).toContain('วัตถุดิบหลัก')
-    expect(html).toContain('สูตรน้ำจิ้ม')
-    // หมึก 3 + น้ำจิ้ม 0.24 + ของประกอบ 1
-    expect(html.replace(/<!-- -->/g, '')).toContain('4.24 ฿')
-  })
-
-  it('ปิดระบบน้ำจิ้มแล้ว ช่องเลือกสูตรหายไปจากหน้าต่างแก้ไขสินค้า', () => {
-    const off = { ...appData, sauceEnabled: false, sauceById: null }
-    const html = renderToString(
-      <AppDataContext.Provider value={off}>
-        <EditProductModal product={{ ...squid, sauce_id: 's1' }} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />
-      </AppDataContext.Provider>,
-    )
+  it('หน้าต่างแก้ไขสินค้าไม่คิดต้นทุนแล้ว ไม่มีช่องต้นทุนหรือสูตรน้ำจิ้ม', () => {
+    const html = render(<EditProductModal product={squid} onClose={() => {}} onSubmit={() => {}} onDelete={() => {}} />)
+    expect(html).not.toContain('ต้นทุน')
     expect(html).not.toContain('สูตรน้ำจิ้ม')
-    expect(html.replace(/<!-- -->/g, '')).toContain('4.00 ฿')
   })
 
   it('หน้าต่างเพิ่มสินค้าเรนเดอร์ได้ และไม่มีช่องตั้งตัวเลือกสินค้าแล้ว', () => {
@@ -113,5 +95,35 @@ describe('เรนเดอร์หน้าต่างในคลังส�
     }
     expect(render(<BundleModal bundle={bundle} onClose={() => {}} onSubmit={() => {}} />)).toContain('ปลาหมึก 8 ไม้')
   })
-})
 
+  it('หน้าต่างจดรายจ่ายขึ้นชื่อที่เคยจดให้กดเลือก พร้อมราคาครั้งก่อน', () => {
+    const recent = [
+      { id: 'e1', source: 'expenses', name: 'น้ำแข็ง', amount: 40, qty: 2, unit: 'ถุง', date: '2026-11-12' },
+      { id: 'e2', source: 'expenses', name: 'น้ำแข็ง', amount: 40, qty: 2, unit: 'ถุง', date: '2026-11-11' },
+      { id: 'e3', source: 'expenses', name: 'ถ่าน', amount: 120, qty: null, unit: 'ถุง', date: '2026-11-10' },
+    ]
+    const t = render(<ExpenseModal recentEntries={recent} onClose={() => {}} onSubmit={() => {}} />)
+      .replace(/<!-- -->/g, '')
+    expect(t).toContain('จดบ่อย')
+    expect(t).toContain('น้ำแข็ง')
+    expect(t).toContain('ครั้งก่อน 40 ฿ · 2 ถุง')
+    // ซื้อบ่อยกว่าขึ้นก่อน
+    expect(t.indexOf('น้ำแข็ง')).toBeLessThan(t.indexOf('ถ่าน'))
+    expect(t).toContain('กิโล')
+    expect(t).toContain('มัด')
+  })
+
+  it('แก้รายการเดิม เติมค่าเดิมให้ครบ ไม่ขึ้นปุ่มชื่อให้เลือกซ้ำ', () => {
+    const entry = { id: 'e1', source: 'expenses', name: 'น้ำแข็ง', amount: 40, qty: 2, unit: 'ถุง', date: '2026-11-12' }
+    const html = render(<ExpenseModal entry={entry} recentEntries={[entry]} onClose={() => {}} onSubmit={() => {}} />)
+    expect(html).toContain('แก้รายจ่าย')
+    expect(html).toContain('value="40"')
+    expect(html).not.toContain('จดบ่อย')
+  })
+
+  it('ช่องราคากับจำนวนเป็นช่องข้อความ เลื่อนเมาส์ผ่านแล้วตัวเลขไม่เปลี่ยนเอง', () => {
+    const html = render(<ExpenseModal onClose={() => {}} onSubmit={() => {}} />)
+    expect(html).not.toContain('type="number"')
+    expect(html).toContain('inputMode="decimal"')
+  })
+})

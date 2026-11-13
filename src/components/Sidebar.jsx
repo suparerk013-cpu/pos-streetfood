@@ -1,4 +1,4 @@
-import { BarChart3, CookingPot, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
+import { BarChart3, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
 import { useAppData } from '../lib/appDataContext'
 
 const NAV_ITEMS = [
@@ -7,13 +7,12 @@ const NAV_ITEMS = [
   { key: 'documents', label: 'เอกสาร',     icon: FileText },
   { key: 'inventory', label: 'คลังสินค้า', icon: Package },
   { key: 'shift',     label: 'ปิดกะ/เปิดกะ', icon: RefreshCw },
-  { key: 'expenses',  label: 'ค่าใช้จ่าย', icon: Receipt },
-  { key: 'sauce',     label: 'น้ำจิ้ม',     icon: CookingPot, needsSauce: true },
+  { key: 'expenses',  label: 'รายจ่าย', icon: Receipt },
   { key: 'settings',  label: 'ตั้งค่า',    icon: Settings },
 ]
 
-function Sidebar({ current, onNavigate, lowStockCount = 0, sauceAlerts = 0 }) {
-  const { shopName, store, sauceEnabled } = useAppData()
+function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
+  const { shopName, store } = useAppData()
   const logoBase64 = store.logo_base64 ?? null
 
   const displayName = shopName || 'ร้านของฉัน'
@@ -38,7 +37,7 @@ function Sidebar({ current, onNavigate, lowStockCount = 0, sauceAlerts = 0 }) {
       </div>
 
       <ul className="flex flex-col gap-1 px-2 flex-1">
-        {NAV_ITEMS.filter((item) => !item.needsSauce || sauceEnabled).map(({ key, label, icon: Icon }) => {
+        {NAV_ITEMS.map(({ key, label, icon: Icon }) => {
           const isActive = current === key
           return (
             <li key={key}>
@@ -55,11 +54,6 @@ function Sidebar({ current, onNavigate, lowStockCount = 0, sauceAlerts = 0 }) {
                   {key === 'inventory' && lowStockCount > 0 && (
                     <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
                       {lowStockCount > 9 ? '9+' : lowStockCount}
-                    </span>
-                  )}
-                  {key === 'sauce' && sauceAlerts > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
-                      {sauceAlerts > 9 ? '9+' : sauceAlerts}
                     </span>
                   )}
                 </span>

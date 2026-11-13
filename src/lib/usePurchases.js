@@ -63,3 +63,34 @@ export function usePayouts() {
 
   return payouts
 }
+
+const RECENT_FOR_NAMES = 300
+
+/**
+ * รายจ่ายล่าสุดไม่จำกัดช่วงวันที่ เอาไว้จำชื่อที่เคยจดให้กดเลือก
+ *
+ * ช่วงวันที่ที่กำลังดูอยู่ไม่พอ — ต้นเดือนรายการว่าง ชื่อที่จดมาทั้งเดือนก่อนจะหายหมด
+ * ฟังเฉพาะตอนเปิดหน้าต่างบันทึก และจำกัด 300 รายการ (ราวเดือนครึ่งของร้านที่จดวันละ 5–6 อย่าง)
+ */
+export function useRecentEntries(enabled = true) {
+  const [expenses, setExpenses] = useState([])
+  const [purchases, setPurchases] = useState([])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    const q = query(collection(db, 'expenses'), orderBy('date', 'desc'), limit(RECENT_FOR_NAMES))
+    return onSnapshot(q, (snap) => {
+      setExpenses(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    }, logSnapshotError('รายจ่ายล่าสุด'))
+  }, [enabled])
+
+  useEffect(() => {
+    if (!enabled) return undefined
+    const q = query(collection(db, 'purchases'), orderBy('date', 'desc'), limit(RECENT_FOR_NAMES))
+    return onSnapshot(q, (snap) => {
+      setPurchases(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    }, logSnapshotError('รายการซื้อเก่า'))
+  }, [enabled])
+
+  return { expenses, purchases }
+}

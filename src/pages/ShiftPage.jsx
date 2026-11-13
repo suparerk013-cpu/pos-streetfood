@@ -98,7 +98,6 @@ function ShiftPage() {
     shiftsLoading,
     enabledPlatforms,
     activeProducts,
-    ingredientById,
     online,
   } = useAppData()
 
@@ -179,8 +178,8 @@ function ShiftPage() {
 
   /** แถวนับของเหลือ — สินค้าจริงเท่านั้น เซ็ตไม่มีสต็อกของตัวเอง */
   const countRows = useMemo(
-    () => buildCountRows(activeProducts, stockCounts, { ingredientById }),
-    [activeProducts, stockCounts, ingredientById],
+    () => buildCountRows(activeProducts, stockCounts),
+    [activeProducts, stockCounts],
   )
   const countSummary = useMemo(() => summarizeCount(countRows), [countRows])
 
@@ -230,9 +229,9 @@ function ShiftPage() {
         stock_count: countedRows.length > 0
           ? {
               waste_qty: countSummary.wasteQty,
-              waste_cost: Number(countSummary.wasteCost.toFixed(2)),
+              waste_value: Number(countSummary.wasteValue.toFixed(2)),
               missing_qty: countSummary.missingQty,
-              missing_cost: Number(countSummary.missingCost.toFixed(2)),
+              missing_value: Number(countSummary.missingValue.toFixed(2)),
               extra_qty: countSummary.extraQty,
               rows: countRowsForSave(countRows),
             }
@@ -482,7 +481,7 @@ function ShiftPage() {
                       <div className="rounded-xl bg-red-50 border border-red-100 px-3 py-2">
                         <p className="text-sm font-bold text-red-600">
                           ⚠️ หายไป {countSummary.missingQty} ชิ้น โดยไม่มีบิล
-                          <span className="font-semibold"> (ต้นทุน {countSummary.missingCost.toFixed(2)} ฿)</span>
+                          <span className="font-semibold"> (ราคาขาย {countSummary.missingValue.toLocaleString()} ฿)</span>
                         </p>
                         <p className="text-[11px] text-red-500 mt-0.5">
                           อาจลืมกดคิดเงิน แถมแล้วไม่ได้บันทึก หรือของหาย — เขียนสาเหตุไว้ในหมายเหตุด้านล่าง
@@ -492,10 +491,10 @@ function ShiftPage() {
                     {countSummary.wasteQty > 0 && (
                       <div className="rounded-xl bg-amber-50 border border-amber-100 px-3 py-2">
                         <p className="text-sm font-bold text-amber-700">
-                          🗑️ ของเหลือทิ้งคืนนี้ {countSummary.wasteQty} ชิ้น = ต้นทุน {countSummary.wasteCost.toFixed(2)} ฿
+                          🗑️ ของเหลือทิ้งคืนนี้ {countSummary.wasteQty} ชิ้น = ราคาขาย {countSummary.wasteValue.toLocaleString()} ฿
                         </p>
                         <p className="text-[11px] text-amber-600 mt-0.5">
-                          บันทึกเข้ารายงานให้แล้ว กำไรที่เห็นจะได้ตรงกับความจริง
+                          บันทึกไว้ในสรุปกะแล้ว ย้อนดูได้ว่าแต่ละคืนทิ้งไปเท่าไหร่
                         </p>
                       </div>
                     )}

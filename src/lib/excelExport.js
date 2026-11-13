@@ -1,4 +1,4 @@
-import { INGREDIENT_CATEGORIES } from './ingredientCategories'
+import { summarizeByName, totalOf } from './expenses'
 
 const ORANGE = 'FFEA580C'
 const ORANGE_SOFT = 'FFFFF7ED'
@@ -26,47 +26,6 @@ function zebra(sheet, startRow) {
   }
 }
 
-/**
- * รวมการซื้อของวัตถุดิบเดียวกันทุกครั้งในช่วงให้เหลือบรรทัดเดียว
- * ผักชีซื้อ 18 ครั้งในเดือน จะสรุปเป็นแถวเดียวพร้อมราคาต่ำสุด/สูงสุด/เฉลี่ย
- */
-export function summarizePurchases(purchases) {
-  const map = new Map()
-  purchases.forEach((row) => {
-    const key = row.ingredient_id ?? row.ingredient_name
-    if (!map.has(key)) {
-      map.set(key, {
-        key,
-        name: row.ingredient_name,
-        category: row.category ?? 'other',
-        unit: row.unit ?? '',
-        times: 0,
-        qty: 0,
-        total: 0,
-        minPrice: Infinity,
-        maxPrice: 0,
-      })
-    }
-    const entry = map.get(key)
-    entry.times += 1
-    entry.qty += row.qty ?? 0
-    entry.total += row.total_amount ?? 0
-    const unitPrice = row.unit_price ?? 0
-    if (unitPrice > 0) {
-      entry.minPrice = Math.min(entry.minPrice, unitPrice)
-      entry.maxPrice = Math.max(entry.maxPrice, unitPrice)
-    }
-  })
-
-  return [...map.values()]
-    .map((e) => ({
-      ...e,
-      minPrice: e.minPrice === Infinity ? 0 : e.minPrice,
-      avgPrice: e.qty > 0 ? e.total / e.qty : 0,
-    }))
-    .sort((a, b) => b.total - a.total)
-}
-
 function triggerDownload(buffer, filename) {
   const blob = new Blob([buffer], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -80,13 +39,14 @@ function triggerDownload(buffer, filename) {
 }
 
 /**
- * ไฟล์ Excel สรุปวัตถุดิบ 3 ชีต
+ * ไฟล์ Excel รายจ่าย 3 ชีต: สรุปตามรายการ · รายการทั้งหมด · รับ-จ่าย
  * โหลด exceljs แบบ dynamic เฉพาะตอนกดปุ่ม เพื่อไม่ให้บันเดิลหน้าขายหนักขึ้น
+ *
+ * `entries` คือรายจ่ายที่รวมแล้ว (mergeEntries) ทั้งแบบใหม่และรายการซื้อวัตถุดิบเก่า
  */
-export async function exportIngredientWorkbook({
-  purchases,
-  expenses = [],
-  totalSales = 0,
+export async function exportExpenseWorkbook({
+  entries = [],
+  sales = { gross: 0, net: 0, gpFee: 0 },
   periodLabel,
   filename,
   shopName = '',
@@ -96,54 +56,38 @@ export async function exportIngredientWorkbook({
   workbook.creator = shopName || 'POS Street Food'
   workbook.created = new Date()
 
-  const summary = summarizePurchases(purchases)
-  const grandTotal = summary.reduce((s, r) => s + r.total, 0)
+  const summary = summarizeByName(entries)
+  const grandTotal = totalOf(entries)
 
-  /* ───── ชีต 1: สรุปรายเดือน ───── */
-  const s1 = workbook.addWorksheet('สรุปรายเดือน', {
-    views: [{ state: 'frozen', ySplit: 3 }],
-  })
-  s1.mergeCells('A1:J1')
-  s1.getCell('A1').value = `สรุปวัตถุดิบ ${periodLabel}${shopName ? ` — ${shopName}` : ''}`
+  /* ───── ชีต 1: สรุปตามรายการ ───── */
+  const s1 = workbook.addWorksheet('สรุปตามรายการ', { views: [{ state: 'frozen', ySplit: 3 }] })
+  s1.mergeCells('A1:F1')
+  s1.getCell('A1').value = `รายจ่าย ${periodLabel}${shopName ? ` — ${shopName}` : ''}`
   s1.getCell('A1').font = { bold: true, size: 14 }
   s1.getRow(2).height = 6
-
   s1.columns = [
-    { key: 'name', width: 22 },
-    { key: 'category', width: 14 },
-    { key: 'times', width: 10 },
+    { key: 'name', width: 24 },
+    { key: 'times', width: 11 },
     { key: 'qty', width: 12 },
-    { key: 'unit', width: 8 },
-    { key: 'avg', width: 13 },
-    { key: 'min', width: 11 },
-    { key: 'max', width: 11 },
+    { key: 'unit', width: 9 },
     { key: 'total', width: 14 },
-    { key: 'share', width: 10 },
+    { key: 'share', width: 11 },
   ]
-  const head1 = s1.addRow({
-    name: 'วัตถุดิบ', category: 'หมวด', times: 'จำนวนครั้ง', qty: 'ปริมาณรวม', unit: 'หน่วย',
-    avg: 'ราคาเฉลี่ย/หน่วย', min: 'ต่ำสุด', max: 'สูงสุด', total: 'ยอดรวม (฿)', share: '% ของทั้งหมด',
-  })
-  styleHeader(head1)
+  styleHeader(s1.addRow({
+    name: 'รายการ', times: 'จดกี่ครั้ง', qty: 'จำนวนรวม', unit: 'หน่วย', total: 'ยอดรวม (฿)', share: '% ของทั้งหมด',
+  }))
   const firstDataRow = s1.rowCount + 1
-
   summary.forEach((row) => {
     s1.addRow({
       name: row.name,
-      category: INGREDIENT_CATEGORIES[row.category] ?? 'อื่นๆ',
       times: row.times,
-      qty: row.qty,
-      unit: row.unit,
-      avg: row.avgPrice,
-      min: row.minPrice,
-      max: row.maxPrice,
+      qty: row.qty > 0 ? row.qty : null,
+      unit: row.qty > 0 ? row.unit ?? '' : '',
       total: row.total,
       share: grandTotal > 0 ? row.total / grandTotal : 0,
     })
   })
-
   zebra(s1, firstDataRow)
-
   const totalRow = s1.addRow({
     name: 'รวมทั้งหมด',
     times: summary.reduce((s, r) => s + r.times, 0),
@@ -155,97 +99,51 @@ export async function exportIngredientWorkbook({
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ORANGE_SOFT } }
     cell.border = { top: { style: 'double', color: { argb: ORANGE } } }
   })
-
   s1.getColumn('qty').numFmt = QTY_FORMAT
-  ;['avg', 'min', 'max', 'total'].forEach((key) => { s1.getColumn(key).numFmt = BAHT_FORMAT })
+  s1.getColumn('total').numFmt = BAHT_FORMAT
   s1.getColumn('share').numFmt = '0.0%'
 
-  /* ───── ชีต 2: รายการซื้อทั้งหมด ───── */
-  const s2 = workbook.addWorksheet('รายการซื้อทั้งหมด', {
-    views: [{ state: 'frozen', ySplit: 1 }],
-  })
+  /* ───── ชีต 2: รายการทั้งหมด ───── */
+  const s2 = workbook.addWorksheet('รายการทั้งหมด', { views: [{ state: 'frozen', ySplit: 1 }] })
   s2.columns = [
     { key: 'date', width: 13 },
-    { key: 'name', width: 22 },
-    { key: 'category', width: 14 },
+    { key: 'name', width: 24 },
     { key: 'qty', width: 10 },
-    { key: 'unit', width: 8 },
-    { key: 'unitPrice', width: 13 },
-    { key: 'total', width: 13 },
-    { key: 'vendor', width: 20 },
-    { key: 'note', width: 26 },
+    { key: 'unit', width: 9 },
+    { key: 'amount', width: 13 },
+    { key: 'note', width: 28 },
   ]
-  const head2 = s2.addRow({
-    date: 'วันที่', name: 'วัตถุดิบ', category: 'หมวด', qty: 'จำนวน', unit: 'หน่วย',
-    unitPrice: 'ราคา/หน่วย', total: 'รวม (฿)', vendor: 'ร้านที่ซื้อ', note: 'หมายเหตุ',
-  })
-  styleHeader(head2)
-
-  ;[...purchases]
+  styleHeader(s2.addRow({ date: 'วันที่', name: 'รายการ', qty: 'จำนวน', unit: 'หน่วย', amount: 'จ่าย (฿)', note: 'โน้ต' }))
+  ;[...entries]
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-    .forEach((row) => {
-      s2.addRow({
-        date: row.date,
-        name: row.ingredient_name,
-        category: INGREDIENT_CATEGORIES[row.category] ?? 'อื่นๆ',
-        qty: row.qty,
-        unit: row.unit,
-        unitPrice: row.unit_price,
-        total: row.total_amount,
-        vendor: row.vendor ?? '',
-        note: row.note ?? '',
-      })
+    .forEach((e) => {
+      s2.addRow({ date: e.date, name: e.name, qty: e.qty, unit: e.unit ?? '', amount: e.amount, note: e.note ?? '' })
     })
   zebra(s2, 2)
   s2.getColumn('qty').numFmt = QTY_FORMAT
-  s2.getColumn('unitPrice').numFmt = BAHT_FORMAT
-  s2.getColumn('total').numFmt = BAHT_FORMAT
+  s2.getColumn('amount').numFmt = BAHT_FORMAT
 
-  /* ───── ชีต 3: ภาพรวม ───── */
-  const s3 = workbook.addWorksheet('ภาพรวม')
-  s3.columns = [{ key: 'label', width: 28 }, { key: 'value', width: 16 }]
+  /* ───── ชีต 3: รับ-จ่าย ───── */
+  const s3 = workbook.addWorksheet('รับ-จ่าย')
+  s3.columns = [{ key: 'label', width: 30 }, { key: 'value', width: 16 }]
   s3.mergeCells('A1:B1')
-  s3.getCell('A1').value = `ภาพรวม ${periodLabel}`
+  s3.getCell('A1').value = `รายรับเทียบรายจ่าย ${periodLabel}`
   s3.getCell('A1').font = { bold: true, size: 14 }
   s3.addRow({})
-
-  const otherExpenseTotal = expenses.reduce((s, e) => s + (e.amount ?? 0), 0)
-  const netProfit = totalSales - grandTotal - otherExpenseTotal
-
-  const rows = [
-    { label: 'ยอดขายรวม', value: totalSales },
-    { label: 'หัก ค่าวัตถุดิบ', value: -grandTotal },
-  ]
-  const byCategory = {}
-  expenses.forEach((e) => {
-    byCategory[e.category] = (byCategory[e.category] ?? 0) + (e.amount ?? 0)
-  })
-  const OTHER_LABELS = {
-    utility_water: 'หัก ค่าน้ำ',
-    utility_electric: 'หัก ค่าไฟ',
-    rent: 'หัก ค่าเช่า',
-    labor: 'หัก ค่าแรง',
-    other: 'หัก ค่าใช้จ่ายอื่น',
-    raw_material: 'หัก วัตถุดิบ (รายการเก่า)',
-  }
-  Object.entries(byCategory).forEach(([key, value]) => {
-    rows.push({ label: OTHER_LABELS[key] ?? 'หัก อื่นๆ', value: -value })
-  })
-
-  rows.forEach((r) => s3.addRow(r))
-  const profitRow = s3.addRow({ label: 'กำไรสุทธิ', value: netProfit })
-  profitRow.eachCell((cell) => {
+  const left = sales.net - grandTotal
+  ;[
+    { label: 'ยอดขายรวม (นับตามกะ)', value: sales.gross },
+    { label: 'หัก ค่า GP เดลิเวอรี', value: -sales.gpFee },
+    { label: 'เงินเข้าจริง', value: sales.net },
+    { label: 'หัก รายจ่ายที่จดไว้', value: -grandTotal },
+  ].forEach((r) => s3.addRow(r))
+  const leftRow = s3.addRow({ label: 'เหลือ', value: left })
+  leftRow.eachCell((cell) => {
     cell.font = { bold: true, size: 12 }
     cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ORANGE_SOFT } }
     cell.border = { top: { style: 'double', color: { argb: ORANGE } } }
   })
-  const marginRow = s3.addRow({
-    label: 'อัตรากำไร',
-    value: totalSales > 0 ? netProfit / totalSales : 0,
-  })
-  marginRow.getCell('value').numFmt = '0.0%'
   s3.getColumn('value').numFmt = BAHT_FORMAT
-  marginRow.getCell('value').numFmt = '0.0%'
 
   const buffer = await workbook.xlsx.writeBuffer()
   triggerDownload(buffer, filename)

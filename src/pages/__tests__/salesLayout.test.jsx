@@ -24,10 +24,10 @@ const mussel = { id: 'p2', name: 'หอยแมลงภู่นึ่ง', p
 const ctx = {
   products: [squid, mussel], activeProducts: [squid, mussel],
   productById: new Map([['p1', squid], ['p2', mussel]]),
-  productsLoading: false, ingredients: [], ingredientById: new Map(), consumableCost: 1,
+  productsLoading: false,
   enabledPlatforms: ['GrabFood', 'LINE MAN'], gpRateFor: () => 0.3, gpRates: {},
   store: {}, shopName: 'มหาทะเลซีฟูด', shifts: [], shiftsLoading: false, currentShift: null,
-  online: true, dataError: null, packagingCost: 5,
+  online: true, dataError: null,
 }
 
 let AppDataContext

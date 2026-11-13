@@ -1,4 +1,4 @@
-import { BarChart3, CookingPot, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
+import { BarChart3, FileText, Package, Receipt, RefreshCw, Settings, ShoppingCart } from 'lucide-react'
 
 const TABS = [
   { key: 'sales', label: 'หน้าขาย', icon: ShoppingCart },
@@ -7,16 +7,14 @@ const TABS = [
   { key: 'inventory', label: 'คลัง', icon: Package },
   { key: 'shift', label: 'ปิดกะ', icon: RefreshCw },
   { key: 'expenses', label: 'รายจ่าย', icon: Receipt },
-  { key: 'sauce', label: 'น้ำจิ้ม', icon: CookingPot, needsSauce: true },
   { key: 'settings', label: 'ตั้งค่า', icon: Settings },
 ]
 
-function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true, sauceAlerts = 0 }) {
-  const tabs = TABS.filter((tab) => !tab.needsSauce || sauceEnabled)
+function BottomNav({ current, onNavigate, lowStockCount = 0 }) {
 
   return (
     <nav className="sm:hidden shrink-0 bg-gradient-to-r from-orange-600 to-red-600 flex border-t border-orange-700/30">
-      {tabs.map(({ key, label, icon: Icon }) => {
+      {TABS.map(({ key, label, icon: Icon }) => {
         const isActive = current === key
         return (
           <button
@@ -32,11 +30,6 @@ function BottomNav({ current, onNavigate, lowStockCount = 0, sauceEnabled = true
               {key === 'inventory' && lowStockCount > 0 && (
                 <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center">
                   {lowStockCount > 9 ? '9+' : lowStockCount}
-                </span>
-              )}
-              {key === 'sauce' && sauceAlerts > 0 && (
-                <span className="absolute -top-1 -right-1 min-w-[14px] h-3.5 px-1 rounded-full bg-red-500 text-white text-[8px] font-bold flex items-center justify-center">
-                  {sauceAlerts > 9 ? '9+' : sauceAlerts}
                 </span>
               )}
             </div>

@@ -1,6 +1,18 @@
 import { useRef, useState } from 'react'
 import { PLATFORM_ICONS } from '../lib/constants'
 import { calcCashExpected } from '../lib/shifts'
+
+/**
+ * มูลค่าของที่ทิ้ง/หาย — กะใหม่เก็บเป็นราคาขาย กะเก่าเก็บเป็นต้นทุน
+ * ต้องบอกให้ชัดว่าตัวเลขเป็นแบบไหน ไม่งั้นย้อนดูประวัติแล้วเทียบกันผิด ๆ
+ */
+function stockValue(stockCount, kind) {
+  const value = stockCount?.[`${kind}_value`]
+  if (value != null) return `ราคาขาย ${Math.round(value).toLocaleString()}`
+  const cost = stockCount?.[`${kind}_cost`]
+  if (cost != null) return `ต้นทุน ${Math.round(cost).toLocaleString()}`
+  return null
+}
 import ModalBackdrop from './ModalBackdrop'
 
 function Row({ label, value, valueColor = 'text-gray-800', bold = false }) {
@@ -50,10 +62,10 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
       `🔢 นับได้จริง       ${fmt(summary.cash_counted)} ฿`,
       `${diffLabel}         ${diff >= 0 ? '+' : ''}${fmt(diff)} ฿`,
       summary.stock_count?.waste_qty > 0
-        ? `🗑️ ของเหลือทิ้ง    ${summary.stock_count.waste_qty} ชิ้น (${fmt(summary.stock_count.waste_cost)} ฿)`
+        ? `🗑️ ของเหลือทิ้ง    ${summary.stock_count.waste_qty} ชิ้น (${stockValue(summary.stock_count, 'waste') ?? '-'} ฿)`
         : '',
       summary.stock_count?.missing_qty > 0
-        ? `⚠️ ของหายไม่มีบิล  ${summary.stock_count.missing_qty} ชิ้น (${fmt(summary.stock_count.missing_cost)} ฿)`
+        ? `⚠️ ของหายไม่มีบิล  ${summary.stock_count.missing_qty} ชิ้น (${stockValue(summary.stock_count, 'missing') ?? '-'} ฿)`
         : '',
       summary.closing_note ? `📝 หมายเหตุ: ${summary.closing_note}` : '',
     ].filter(Boolean).join('\n')
@@ -107,10 +119,10 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
         <span class="value ${diff === 0 ? 'green' : diff > 0 ? 'blue' : 'red'}">${diff >= 0 ? '+' : ''}${fmt(diff)} ฿</span>
       </div>
       ${summary.stock_count?.waste_qty > 0
-        ? `<div class="row"><span class="label">🗑️ ของเหลือทิ้ง</span><span class="value">${summary.stock_count.waste_qty} ชิ้น · ${fmt(summary.stock_count.waste_cost)} ฿</span></div>`
+        ? `<div class="row"><span class="label">🗑️ ของเหลือทิ้ง</span><span class="value">${summary.stock_count.waste_qty} ชิ้น · ${stockValue(summary.stock_count, 'waste') ?? '-'} ฿</span></div>`
         : ''}
       ${summary.stock_count?.missing_qty > 0
-        ? `<div class="row"><span class="label">⚠️ ของหายไม่มีบิล</span><span class="value">${summary.stock_count.missing_qty} ชิ้น · ${fmt(summary.stock_count.missing_cost)} ฿</span></div>`
+        ? `<div class="row"><span class="label">⚠️ ของหายไม่มีบิล</span><span class="value">${summary.stock_count.missing_qty} ชิ้น · ${stockValue(summary.stock_count, 'missing') ?? '-'} ฿</span></div>`
         : ''}
       ${summary.closing_note ? `<div class="note">📝 ${summary.closing_note}</div>` : ''}
       </body></html>
@@ -170,12 +182,12 @@ function ShiftSummaryModal({ summary, openedAt, closedAt, shopName = 'หมึ�
               ))}
               {summary.stock_count.waste_qty > 0 && (
                 <Row label="🗑️ ของเหลือทิ้ง"
-                  value={`${summary.stock_count.waste_qty} ชิ้น · ${fmt(summary.stock_count.waste_cost)} ฿`}
+                  value={`${summary.stock_count.waste_qty} ชิ้น · ${stockValue(summary.stock_count, 'waste') ?? '-'} ฿`}
                   valueColor="text-amber-600" bold />
               )}
               {summary.stock_count.missing_qty > 0 && (
                 <Row label="⚠️ หายไปไม่มีบิล"
-                  value={`${summary.stock_count.missing_qty} ชิ้น · ${fmt(summary.stock_count.missing_cost)} ฿`}
+                  value={`${summary.stock_count.missing_qty} ชิ้น · ${stockValue(summary.stock_count, 'missing') ?? '-'} ฿`}
                   valueColor="text-red-500" bold />
               )}
             </div>

@@ -7,7 +7,7 @@ import StockLogModal from '../components/StockLogModal'
 import StockModal from '../components/StockModal'
 import { useAppData } from '../lib/appDataContext'
 import { LOW_STOCK_THRESHOLD, productCategoryLabel } from '../lib/constants'
-import { bundleCost, bundleStock, profitOf } from '../lib/pricing'
+import { bundleStock, netAfterGp, separatePriceOf } from '../lib/pricing'
 import { addBundle, addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { seedInitialProducts } from '../lib/seedProducts'
 import { adjustStock, restockProduct } from '../lib/stock'
@@ -17,10 +17,6 @@ function InventoryPage() {
     products: allProducts,
     productsLoading: loading,
     productById,
-    ingredientById,
-    consumableCost,
-    sauceById,
-    packagingCost,
     gpRateFor,
     enabledPlatforms,
   } = useAppData()
@@ -284,12 +280,12 @@ function InventoryPage() {
 
           <div className="space-y-3">
             {bundles.map((bundle) => {
-              const cost = bundleCost(bundle, { productById, ingredientById, consumableCost, sauceById, packagingCost })
               const stock = bundleStock(bundle, productById)
               const isDelivery = (bundle.channel ?? 'delivery') !== 'store'
               const gpRate = isDelivery ? gpRateFor(enabledPlatforms[0]) : 0
               const shownPrice = (isDelivery ? bundle.delivery_price : null) ?? bundle.price ?? 0
-              const result = profitOf({ price: shownPrice, cost, gpRate })
+              const separatePrice = separatePriceOf(bundle, productById)
+              const received = netAfterGp(shownPrice, gpRate)
               const isArchived = bundle.is_active === false
 
               return (
@@ -327,13 +323,13 @@ function InventoryPage() {
 
                   <div className="mt-2 pt-2 border-t border-gray-50 flex items-center justify-between text-xs">
                     <span className="text-gray-400 tabular-nums">
-                      ทุน {cost.toFixed(2)} ฿
-                      {gpRate > 0 ? ` · หัก GP ${Math.round(gpRate * 100)}%` : ''}
+                      ซื้อแยก {separatePrice.toLocaleString()} ฿
                     </span>
-                    <span className={`font-bold tabular-nums ${result.profit < 0 ? 'text-red-500' : 'text-green-600'}`}>
-                      {result.profit < 0 ? '⚠️ ขาดทุน ' : 'กำไร '}
-                      {result.profit.toFixed(2)} ฿ ({Math.round(result.margin * 100)}%)
-                    </span>
+                    {gpRate > 0 && (
+                      <span className={`font-bold tabular-nums ${received < separatePrice ? 'text-amber-600' : 'text-green-600'}`}>
+                        หัก GP {Math.round(gpRate * 100)}% เข้าจริง {received.toFixed(2)} ฿
+                      </span>
+                    )}
                   </div>
                 </button>
               )

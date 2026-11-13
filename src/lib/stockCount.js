@@ -4,29 +4,26 @@
  * หลักการเดียวกับนับเงินในลิ้นชัก — ระบบบอกว่า "ควรเหลือเท่าไหร่" คนนับบอกว่า
  * "เหลือจริงเท่าไหร่" แล้วดูส่วนต่าง ถ้าหายไปโดยไม่มีบิลแปลว่ามีอะไรผิดพลาด
  *
- * ของเหลือของสินค้าสต็อกรายวันถือว่าทิ้ง ต้องบันทึกเป็นต้นทุนที่เสียไป
- * ไม่งั้นกำไรในรายงานจะสูงกว่าความจริงทุกวันโดยไม่มีใครรู้
+ * ของเหลือของสินค้าสต็อกรายวันถือว่าทิ้ง
+ *
+ * คิดมูลค่าของที่หายหรือทิ้งตามราคาขาย ไม่ใช่ต้นทุน เพราะร้านเลิกคิดต้นทุนต่อชิ้นแล้ว
+ * (ตัวเลขไม่ตรงของจริง) และราคาขายตอบคำถามที่คนในร้านสนใจตรงกว่า —
+ * "ของหาย 5 ไม้ คือเงินขายที่ไม่ได้เข้า 50 บาท"
  */
-import { unitCost } from './pricing'
 
 /** สินค้าที่ต้องนับ — เซ็ตไม่ต้องนับเพราะไม่มีสต็อกของตัวเอง ตัดที่ส่วนประกอบ */
 export function countableProducts(products = []) {
   return products.filter((p) => p?.is_active !== false && !p?.is_bundle)
 }
 
-/**
- * แถวนับของเหลือ 1 สินค้า
- *
- * ต้นทุนใช้ราคาวัตถุดิบล้วน ไม่บวกของประกอบ เพราะของที่ขายไม่ออกยังไม่ได้ใช้
- * ถุง น้ำจิ้ม หรือไม้เสียบเพิ่ม การบวกเข้าไปจะทำให้ของเสียดูแพงกว่าที่เสียจริง
- */
-export function countRow(product, rawInput, { ingredientById } = {}) {
+/** แถวนับของเหลือ 1 สินค้า */
+export function countRow(product, rawInput) {
   const expected = Math.max(0, Math.floor(product?.stock_qty ?? 0))
   const text = String(rawInput ?? '').trim()
   const filled = text !== '' && Number.isFinite(Number(text))
   const counted = filled ? Math.max(0, Math.floor(Number(text))) : null
   const isDaily = product?.stock_type === 'daily'
-  const cost = unitCost(product, { ingredientById, consumableCost: 0 })
+  const price = Number(product?.price) || 0
 
   const diff = filled ? counted - expected : 0
   const missingQty = diff < 0 ? -diff : 0
@@ -41,18 +38,18 @@ export function countRow(product, rawInput, { ingredientById } = {}) {
     counted,
     filled,
     isDaily,
-    cost,
+    price,
     diff,
     missingQty,
     extraQty,
     wasteQty,
-    missingCost: missingQty * cost,
-    wasteCost: wasteQty * cost,
+    missingValue: missingQty * price,
+    wasteValue: wasteQty * price,
   }
 }
 
-export function buildCountRows(products, counts = {}, options = {}) {
-  return countableProducts(products).map((p) => countRow(p, counts[p.id], options))
+export function buildCountRows(products, counts = {}) {
+  return countableProducts(products).map((p) => countRow(p, counts[p.id]))
 }
 
 /** สรุปทั้งกะ — ใช้ทั้งบนหน้าจอและเก็บลงสรุปกะ */
@@ -66,10 +63,10 @@ export function summarizeCount(rows = []) {
     totalCount: rows.length,
     complete: rows.length > 0 && filled.length === rows.length,
     missingQty,
-    missingCost: sum('missingCost'),
+    missingValue: sum('missingValue'),
     extraQty: sum('extraQty'),
     wasteQty: sum('wasteQty'),
-    wasteCost: sum('wasteCost'),
+    wasteValue: sum('wasteValue'),
     hasIssue: missingQty > 0,
   }
 }
@@ -86,7 +83,9 @@ export function countRowsForSave(rows = []) {
       counted: r.counted,
       diff: r.diff,
       waste_qty: r.wasteQty,
-      waste_cost: Number(r.wasteCost.toFixed(2)),
-      missing_cost: Number(r.missingCost.toFixed(2)),
+      // ชื่อฟิลด์ใหม่ เพราะความหมายเปลี่ยนจากต้นทุนเป็นราคาขาย
+      // กะเก่าที่เก็บ waste_cost ไว้ยังอ่านได้ตามความหมายเดิม ไม่ปนกัน
+      waste_value: Number(r.wasteValue.toFixed(2)),
+      missing_value: Number(r.missingValue.toFixed(2)),
     }))
 }

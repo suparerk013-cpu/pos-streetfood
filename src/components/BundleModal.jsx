@@ -2,16 +2,17 @@ import { Plus, X } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useAppData } from '../lib/appDataContext'
 import { CHANNELS } from '../lib/constants'
-import { bundleCost, bundleStock, profitOf, suggestDeliveryPrice } from '../lib/pricing'
+import { bundleStock, netAfterGp, separatePriceOf } from '../lib/pricing'
 import ModalBackdrop from './ModalBackdrop'
 
 /**
  * สร้าง/แก้เซ็ต — เลือกว่าประกอบจากสินค้าอะไรกี่ชิ้น
- * ระบบดึงต้นทุนจากทะเบียนวัตถุดิบมาคำนวณราคาแนะนำและกำไรให้ทันทีขณะพิมพ์
+ *
+ * ไม่คิดต้นทุนแล้ว แต่เทียบให้เห็นสองอย่างที่รู้แน่นอนโดยไม่ต้องเดา
+ * ราคาถ้าซื้อแยกที่หน้าร้าน และเงินที่เข้าจริงหลังแอปหัก GP
  */
 function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
-  const { products, ingredientById, consumableCost, sauceById, packagingCost, gpRateFor, enabledPlatforms } =
-    useAppData()
+  const { products, gpRateFor, enabledPlatforms } = useAppData()
 
   const [name, setName] = useState(bundle?.name ?? '')
   const [channel, setChannel] = useState(bundle?.channel ?? 'delivery')
@@ -29,15 +30,15 @@ function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products])
 
   const draft = { components, is_bundle: true }
-  const cost = bundleCost(draft, { productById, ingredientById, consumableCost, sauceById, packagingCost })
   const stock = bundleStock(draft, productById)
+  const separatePrice = separatePriceOf(draft, productById)
 
-  // เซ็ตที่ขายเฉพาะหน้าร้านไม่โดนหัก GP จึงคิดกำไรคนละแบบ
+  // เซ็ตที่ขายเฉพาะหน้าร้านไม่โดนหัก GP
   const gpRate = channel === 'store' ? 0 : gpRateFor(enabledPlatforms[0])
-  const suggested = suggestDeliveryPrice(cost, gpRate)
   const entered = Number(price) || 0
-  const result = profitOf({ price: entered, cost, gpRate })
-  const belowBreakEven = entered > 0 && result.profit < 0
+  const received = netAfterGp(entered, gpRate)
+  // เงินที่เข้าจริงต่ำกว่าขายแยกที่หน้าร้าน แปลว่าขายผ่านแอปได้เงินน้อยกว่าขายเองหน้าร้าน
+  const receivesLess = entered > 0 && separatePrice > 0 && received < separatePrice
 
   const addComponent = (productId) => {
     if (components.some((c) => c.product_id === productId)) return
@@ -158,17 +159,14 @@ function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
             </div>
           </div>
 
-          {/* สรุปต้นทุน กำไร */}
+          {/* เทียบกับราคาซื้อแยก — รู้แน่นอนโดยไม่ต้องคิดต้นทุน */}
           <div className="rounded-2xl bg-gray-50 border border-gray-100 p-4 flex flex-col gap-2">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">ต้นทุนรวม</span>
-              <span className="font-bold text-gray-800 tabular-nums">{cost.toFixed(2)} ฿</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-gray-500">ราคาแนะนำ</span>
-              <button type="button" onClick={() => setPrice(String(suggested))}
-                className="font-bold text-orange-600 tabular-nums underline decoration-dotted">
-                {suggested.toLocaleString()} ฿ · ใช้ราคานี้
+              <span className="text-gray-500">ถ้าซื้อแยกที่หน้าร้าน</span>
+              <button type="button" onClick={() => separatePrice > 0 && setPrice(String(separatePrice))}
+                disabled={separatePrice <= 0}
+                className="font-bold text-orange-600 tabular-nums underline decoration-dotted disabled:no-underline disabled:text-gray-400">
+                {separatePrice.toLocaleString()} ฿{separatePrice > 0 ? ' · ใช้ราคานี้' : ''}
               </button>
             </div>
             {components.length > 0 && (
@@ -188,24 +186,30 @@ function BundleModal({ bundle, onClose, onSubmit, onDelete }) {
               type="number" inputMode="decimal" step="any"
               value={price}
               onChange={(e) => setPrice(e.target.value)}
-              placeholder={String(suggested || 0)}
+              placeholder={String(separatePrice || 0)}
               className={`w-full rounded-2xl border-2 px-4 py-3 text-2xl font-extrabold text-center focus:outline-none transition-all ${
-                belowBreakEven
-                  ? 'border-red-300 bg-red-50 text-red-600'
+                receivesLess
+                  ? 'border-amber-300 bg-amber-50 text-amber-700'
                   : 'border-gray-200 bg-gray-50 text-gray-800 focus:border-orange-400 focus:bg-white'
               }`}
             />
-            {entered > 0 && (
-              <p className={`mt-1.5 text-sm font-semibold text-center ${
-                belowBreakEven ? 'text-red-500' : 'text-green-600'
-              }`}>
-                {belowBreakEven ? '⚠️ ขาดทุน ' : '✓ กำไร '}
-                {result.profit.toFixed(2)} ฿ ({Math.round(result.margin * 100)}%)
-                {gpRate > 0 && (
-                  <span className="block text-[11px] font-normal text-gray-400 mt-0.5">
-                    หัก GP {Math.round(gpRate * 100)}% เหลือ {result.net.toFixed(2)} ฿ · ต้นทุน {cost.toFixed(2)} ฿
+            {entered > 0 && gpRate > 0 && (
+              <p className={`mt-1.5 text-sm font-semibold text-center ${receivesLess ? 'text-amber-600' : 'text-green-600'}`}>
+                หัก GP {Math.round(gpRate * 100)}% เข้าจริง {received.toFixed(2)} ฿
+                {separatePrice > 0 && (
+                  <span className="block text-[11px] font-normal text-gray-500 mt-0.5">
+                    {receivesLess
+                      ? `ได้น้อยกว่าขายแยกที่หน้าร้าน ${(separatePrice - received).toFixed(2)} ฿ — ลองตั้งราคาสูงขึ้น`
+                      : `ได้มากกว่าขายแยกที่หน้าร้าน ${(received - separatePrice).toFixed(2)} ฿`}
                   </span>
                 )}
+              </p>
+            )}
+            {entered > 0 && gpRate === 0 && separatePrice > 0 && entered !== separatePrice && (
+              <p className="mt-1.5 text-sm font-semibold text-center text-gray-500">
+                {entered < separatePrice
+                  ? `ถูกกว่าซื้อแยก ${(separatePrice - entered).toLocaleString()} ฿`
+                  : `แพงกว่าซื้อแยก ${(entered - separatePrice).toLocaleString()} ฿`}
               </p>
             )}
           </div>

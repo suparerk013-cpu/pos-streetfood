@@ -212,7 +212,7 @@ function ReportsPage() {
 
   // นับแค่จำนวนชิ้นที่แจกไป ไม่คิดเป็นเงิน — ระบบเลิกคิดต้นทุนต่อชิ้นแล้วเพราะตัวเลขไม่ตรงของจริง
   const freebies = useMemo(
-    () => summarizeFreebies(orders, { unitCostOf: () => 0, nameOf: (id) => productById.get(id)?.name }),
+    () => summarizeFreebies(orders, { nameOf: (id) => productById.get(id)?.name }),
     [orders, productById],
   )
 

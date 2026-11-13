@@ -1,34 +1,19 @@
-import { ChevronDown, ChevronLeft, ChevronRight, Download, Plus, Trash2 } from 'lucide-react'
-import { ShareBar } from '../components/Charts'
+import { ChevronLeft, ChevronRight, Download, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import ExpenseModal from '../components/ExpenseModal'
-import IngredientModal from '../components/IngredientModal'
-import PurchaseModal from '../components/PurchaseModal'
 import { useAppData } from '../lib/appDataContext'
-import {
-  formatThaiDate,
-  formatThaiMonth,
-  getMonthRange,
-  getPresetRange,
-  getPreviousRange,
-  toDateString,
-} from '../lib/dates'
+import { formatThaiDate, formatThaiMonth, getMonthRange, getPresetRange } from '../lib/dates'
 import {
   createExpense,
-  deleteExpense,
-  EXPENSE_CATEGORY_COLORS,
-  EXPENSE_CATEGORY_ICONS,
-  expenseCategoryLabel,
+  deleteEntry,
+  mergeEntries,
+  summarizeByName,
+  totalOf,
+  updateExpense,
 } from '../lib/expenses'
-import { exportIngredientWorkbook, summarizePurchases } from '../lib/excelExport'
-import {
-  INGREDIENT_CATEGORIES,
-  INGREDIENT_CATEGORY_BAR_COLORS as CATEGORY_BAR_COLORS,
-  INGREDIENT_CATEGORY_ICONS,
-} from '../lib/ingredientCategories'
-import { deletePurchase, seedStarterIngredients } from '../lib/ingredients'
-import { useExpensesInRange, usePurchasesInRange } from '../lib/usePurchases'
-import { useOrdersInRange } from '../lib/useOrders'
+import { exportExpenseWorkbook } from '../lib/excelExport'
+import { useShiftSales } from '../lib/useShiftSales'
+import { useExpensesInRange, usePurchasesInRange, useRecentEntries } from '../lib/usePurchases'
 
 const RANGE_PRESETS = [
   { key: 'today', label: 'วันนี้' },
@@ -37,262 +22,155 @@ const RANGE_PRESETS = [
   { key: 'month', label: 'รายเดือน' },
 ]
 
-function IngredientRow({ entry, purchases, expanded, onToggle, onDeletePurchase, ingredient, onEdit }) {
+const TABS = [
+  { key: 'list', label: '📝 รายการ' },
+  { key: 'compare', label: '⚖️ รับ-จ่าย' },
+]
+
+const baht = (n) => Math.round(n).toLocaleString()
+
+function EntryRow({ entry, onEdit, onDelete }) {
+  const legacy = entry.source === 'purchases'
+  const detail = [
+    entry.qty ? `${Number(entry.qty.toFixed(3)).toLocaleString()} ${entry.unit ?? ''}`.trim() : entry.unit,
+    entry.note,
+  ].filter(Boolean).join(' · ')
+
   return (
-    <div className="border-b border-gray-50 last:border-0">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 active:bg-gray-50 transition-colors text-left"
-      >
-        <div className="min-w-0 flex items-start gap-2.5">
-          <span className="text-lg leading-none mt-0.5 shrink-0">
-            {INGREDIENT_CATEGORY_ICONS[entry.category] ?? '📝'}
-          </span>
-          <div className="min-w-0">
-            <p className="font-bold text-gray-800 text-sm leading-tight truncate">{entry.name}</p>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              {entry.times} ครั้ง · {entry.qty.toLocaleString()} {entry.unit} · เฉลี่ย{' '}
-              {entry.avgPrice.toFixed(2)} ฿/{entry.unit}
+    <div className="flex items-center gap-2 px-4 py-2.5">
+      <button type="button" onClick={() => !legacy && onEdit(entry)} disabled={legacy}
+        className="flex-1 min-w-0 flex items-center justify-between gap-3 text-left min-h-[44px]">
+        <div className="min-w-0">
+          <p className="text-sm font-bold text-gray-800 truncate">{entry.name}</p>
+          {(detail || legacy) && (
+            <p className="text-[11px] text-gray-400 truncate">
+              {detail}
+              {legacy && <span className="ml-1 text-gray-300">{detail ? '· ' : ''}รายการแบบเก่า</span>}
             </p>
-            {ingredient && (
-              <p className="text-[11px] text-orange-600 font-bold mt-0.5">
-                เหลือ {Number(Number(ingredient.stock_qty ?? 0).toFixed(3)).toLocaleString()} {ingredient.unit}
-                {ingredient.reorder_qty > 0 && (
-                  <span className="text-gray-400 font-medium">
-                    {' '}· เตือนที่ {Number(Number(ingredient.reorder_qty).toFixed(3))} {ingredient.unit}
-                  </span>
-                )}
-              </p>
-            )}
-          </div>
+          )}
         </div>
-        <div className="flex items-center gap-1.5 shrink-0">
-          <span className="font-extrabold text-gray-800 tabular-nums text-sm">
-            {Math.round(entry.total).toLocaleString()} ฿
-          </span>
-          <ChevronDown
-            size={16}
-            className={`text-gray-300 transition-transform ${expanded ? 'rotate-180' : ''}`}
-          />
-        </div>
+        <span className="shrink-0 text-sm font-extrabold text-gray-800 tabular-nums">
+          {entry.amount.toLocaleString()} ฿
+        </span>
       </button>
-
-      {ingredient && (
-        <button type="button" onClick={() => onEdit(ingredient)}
-          className="mx-4 mb-2 -mt-1 text-[11px] font-bold text-gray-400 underline underline-offset-2">
-          แก้ชื่อ / หน่วยนับ / สต็อก
-        </button>
-      )}
-
-      {expanded && (
-        <div className="px-4 pb-3 -mt-1">
-          <div className="rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100">
-            {purchases.map((p, index) => {
-              const prev = purchases[index + 1]
-              const change = prev?.unit_price > 0
-                ? ((p.unit_price - prev.unit_price) / prev.unit_price) * 100
-                : 0
-              return (
-                <div key={p.id} className="flex items-center justify-between gap-2 px-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-gray-700">
-                      {formatThaiDate(p.date)}
-                      <span className="font-normal text-gray-400 ml-2">
-                        {p.qty} {p.unit} × {p.unit_price.toFixed(2)} ฿
-                      </span>
-                    </p>
-                    {(p.vendor || p.note) && (
-                      <p className="text-[10px] text-gray-400 truncate">
-                        {[p.vendor, p.note].filter(Boolean).join(' · ')}
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {Math.abs(change) >= 10 && (
-                      <span className={`text-[10px] font-bold ${change > 0 ? 'text-red-500' : 'text-green-600'}`}>
-                        {change > 0 ? '↑แพงขึ้น' : '↓ถูกลง'}
-                      </span>
-                    )}
-                    <span className="text-xs font-bold text-gray-700 tabular-nums">
-                      {p.total_amount.toLocaleString()} ฿
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => onDeletePurchase(p.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors"
-                      aria-label="ลบรายการนี้"
-                    >
-                      <Trash2 size={13} />
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
+      <button type="button" onClick={() => onDelete(entry)}
+        className="shrink-0 w-10 h-10 -mr-2 flex items-center justify-center text-gray-300 hover:text-red-500 transition-colors"
+        aria-label={`ลบ ${entry.name}`}>
+        <Trash2 size={15} />
+      </button>
     </div>
   )
 }
 
-function ExpensesPage({ onNavigate }) {
-  const { activeIngredients, ingredientById, ingredientsLoading, shopName, online } = useAppData()
+function CompareRow({ label, value, sign = '', strong = false, muted = false }) {
+  return (
+    <div className={`flex items-baseline justify-between gap-3 ${strong ? 'text-gray-800' : muted ? 'text-gray-400' : 'text-gray-600'}`}>
+      <span className={strong ? 'text-sm font-bold' : 'text-sm'}>{label}</span>
+      <span className={`tabular-nums ${strong ? 'text-lg font-extrabold' : 'text-sm font-bold'}`}>
+        {sign}{baht(value)} ฿
+      </span>
+    </div>
+  )
+}
 
-  const [tab, setTab] = useState('ingredients')
+function ExpensesPage() {
+  const { shopName, online } = useAppData()
+
+  const [tab, setTab] = useState('list')
   const [rangePreset, setRangePreset] = useState('month')
   const [monthCursor, setMonthCursor] = useState(() => {
     const now = new Date()
     return new Date(now.getFullYear(), now.getMonth(), 1)
   })
-  const [expandedId, setExpandedId] = useState(null)
-  const [purchaseModalOpen, setPurchaseModalOpen] = useState(false)
-  const [editIngredient, setEditIngredient] = useState(null)
-  const [expenseModalOpen, setExpenseModalOpen] = useState(false)
+  // null = ปิด · {} = จดใหม่ · entry = แก้รายการเดิม
+  const [editing, setEditing] = useState(null)
+  const [confirmDelete, setConfirmDelete] = useState(null)
   const [exporting, setExporting] = useState(false)
-  const [seeding, setSeeding] = useState(false)
 
   const { from, to } =
     rangePreset === 'month' ? getMonthRange(monthCursor) : getPresetRange(rangePreset)
-  const prevRange = getPreviousRange(from, to)
 
   const { purchases, loading: purchasesLoading } = usePurchasesInRange(from, to)
-  const { purchases: prevPurchases } = usePurchasesInRange(prevRange.from, prevRange.to)
-  const { expenses } = useExpensesInRange(from, to)
-  const { orders } = useOrdersInRange(from, to)
+  const { expenses, loading: expensesLoading } = useExpensesInRange(from, to)
+  const sales = useShiftSales(from, to)
+  const recent = useRecentEntries(editing !== null)
 
-  const totalSales = useMemo(
-    () => orders.reduce((s, o) => s + (o.total_amount ?? 0), 0),
-    [orders],
+  const entries = useMemo(() => mergeEntries(purchases, expenses), [purchases, expenses])
+  const recentEntries = useMemo(
+    () => mergeEntries(recent.purchases, recent.expenses),
+    [recent.purchases, recent.expenses],
   )
-
-  const summary = useMemo(() => summarizePurchases(purchases), [purchases])
-  const ingredientTotal = useMemo(
-    () => purchases.reduce((s, p) => s + (p.total_amount ?? 0), 0),
-    [purchases],
-  )
-  const prevIngredientTotal = useMemo(
-    () => prevPurchases.reduce((s, p) => s + (p.total_amount ?? 0), 0),
-    [prevPurchases],
-  )
-  const ingredientChange = prevIngredientTotal > 0
-    ? Math.round(((ingredientTotal - prevIngredientTotal) / prevIngredientTotal) * 100)
-    : null
-
-  const categoryTotals = useMemo(() => {
-    const totals = {}
-    purchases.forEach((p) => {
-      const key = p.category ?? 'other'
-      totals[key] = (totals[key] ?? 0) + (p.total_amount ?? 0)
+  const total = useMemo(() => totalOf(entries), [entries])
+  const byName = useMemo(() => summarizeByName(entries), [entries])
+  const byDate = useMemo(() => {
+    const groups = []
+    entries.forEach((e) => {
+      const last = groups[groups.length - 1]
+      if (last && last.date === e.date) last.items.push(e)
+      else groups.push({ date: e.date, items: [e] })
     })
-    return totals
-  }, [purchases])
+    return groups.map((g) => ({ ...g, total: totalOf(g.items) }))
+  }, [entries])
 
-  const purchasesByIngredient = useMemo(() => {
-    const map = new Map()
-    purchases.forEach((p) => {
-      const key = p.ingredient_id ?? p.ingredient_name
-      if (!map.has(key)) map.set(key, [])
-      map.get(key).push(p)
-    })
-    map.forEach((list) => list.sort((a, b) => String(b.date).localeCompare(String(a.date))))
-    return map
-  }, [purchases])
-
-  /** ประวัติล่าสุดของแต่ละวัตถุดิบ ใช้เติมปุ่ม "ซื้อซ้ำครั้งก่อน" และเรียงปุ่มลัด */
-  const recentByIngredient = useMemo(() => {
-    const map = new Map()
-    purchases.forEach((p) => {
-      if (!p.ingredient_id) return
-      const entry = map.get(p.ingredient_id) ?? { times: 0, last: null }
-      entry.times += 1
-      if (!entry.last || String(p.date) > String(entry.last.date)) entry.last = p
-      map.set(p.ingredient_id, entry)
-    })
-    return map
-  }, [purchases])
-
-  const otherExpenseTotal = useMemo(
-    () => expenses.reduce((s, e) => s + (e.amount ?? 0), 0),
-    [expenses],
-  )
+  const left = sales.net - total
+  const expenseShare = sales.net > 0 ? Math.round((total / sales.net) * 100) : null
+  const loading = purchasesLoading || expensesLoading
 
   const periodLabel = rangePreset === 'month'
     ? formatThaiMonth(monthCursor)
-    : `${formatThaiDate(from)} – ${formatThaiDate(to)}`
-
-  const handleExport = async () => {
-    setExporting(true)
-    try {
-      await exportIngredientWorkbook({
-        purchases,
-        expenses,
-        totalSales,
-        periodLabel,
-        shopName,
-        filename: `วัตถุดิบ_${from}_ถึง_${to}.xlsx`,
-      })
-    } finally {
-      setExporting(false)
-    }
-  }
-
-  const handleSeed = async () => {
-    setSeeding(true)
-    try {
-      await seedStarterIngredients()
-    } finally {
-      setSeeding(false)
-    }
-  }
+    : from === to ? formatThaiDate(from) : `${formatThaiDate(from)} – ${formatThaiDate(to)}`
 
   const isCurrentMonth = (() => {
     const now = new Date()
     return monthCursor.getFullYear() === now.getFullYear() && monthCursor.getMonth() === now.getMonth()
   })()
 
+  const handleExport = async () => {
+    setExporting(true)
+    try {
+      await exportExpenseWorkbook({
+        entries,
+        sales,
+        periodLabel,
+        shopName,
+        filename: `รายจ่าย_${from}_ถึง_${to}.xlsx`,
+      })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleSubmit = async (payload) => {
+    if (editing?.id) await updateExpense(editing.id, payload)
+    else await createExpense(payload)
+    setEditing(null)
+  }
+
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden relative">
-      {/* ── Header ── */}
+      {/* ── หัว ── */}
       <header className="shrink-0 bg-white border-b border-gray-100">
         <div className="flex items-center justify-between px-4 pt-3">
-          <h1 className="font-bold text-gray-800 text-base tracking-wide">ค่าใช้จ่าย</h1>
-          {tab === 'ingredients' && (
-            <button
-              type="button"
-              onClick={handleExport}
-              disabled={exporting || purchases.length === 0}
-              className="flex items-center gap-1.5 rounded-full bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold px-3.5 py-1.5 active:scale-95 transition-all"
-            >
-              <Download size={13} />
-              {exporting ? 'กำลังสร้าง...' : 'Excel'}
-            </button>
-          )}
+          <h1 className="font-bold text-gray-800 text-base tracking-wide">รายจ่าย</h1>
+          <button type="button" onClick={handleExport} disabled={exporting || entries.length === 0}
+            className="flex items-center gap-1.5 rounded-full bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold px-3.5 py-1.5 active:scale-95 transition-all">
+            <Download size={13} />
+            {exporting ? 'กำลังสร้าง...' : 'Excel'}
+          </button>
         </div>
-
-        {/* แท็บ */}
-        <div className="flex gap-1 px-4 mt-2.5">
-          {[
-            { key: 'ingredients', label: '🥬 วัตถุดิบ' },
-            { key: 'others', label: '💡 ค่าใช้จ่ายอื่น' },
-          ].map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              onClick={() => setTab(t.key)}
+        <div className="flex gap-1 px-4 mt-2.5" role="tablist">
+          {TABS.map((t) => (
+            <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
               className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${
-                tab === t.key
-                  ? 'border-orange-500 text-orange-600'
-                  : 'border-transparent text-gray-400'
-              }`}
-            >
+                tab === t.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-400'
+              }`}>
               {t.label}
             </button>
           ))}
         </div>
       </header>
 
-      {/* ── ตัวเลือกช่วงเวลา ── */}
+      {/* ── ช่วงเวลา ── */}
       <div className="shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2 overflow-x-auto">
         {RANGE_PRESETS.map((r) => (
           <button key={r.key} type="button" onClick={() => setRangePreset(r.key)}
@@ -308,9 +186,7 @@ function ExpensesPage({ onNavigate }) {
               className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500" aria-label="เดือนก่อนหน้า">
               <ChevronLeft size={15} />
             </button>
-            <span className="text-xs font-bold text-gray-600 min-w-[7.5rem] text-center">
-              {formatThaiMonth(monthCursor)}
-            </span>
+            <span className="text-xs font-bold text-gray-600 min-w-[7.5rem] text-center">{formatThaiMonth(monthCursor)}</span>
             <button type="button" disabled={isCurrentMonth}
               onClick={() => setMonthCursor((p) => new Date(p.getFullYear(), p.getMonth() + 1, 1))}
               className="w-7 h-7 rounded-full bg-gray-100 disabled:opacity-30 flex items-center justify-center text-gray-500" aria-label="เดือนถัดไป">
@@ -321,209 +197,172 @@ function ExpensesPage({ onNavigate }) {
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto">
-        {/* ═══════════ แท็บวัตถุดิบ ═══════════ */}
-        {tab === 'ingredients' && (
-          <div className="p-3 max-w-3xl mx-auto w-full flex flex-col gap-2.5 pb-24">
-            {/* สรุปหัวหน้า */}
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 pt-4 pb-4">
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
-                ค่าวัตถุดิบ {periodLabel}
-              </p>
-              <div className="flex items-baseline gap-2.5 mb-3">
-                <p className="font-black text-gray-800 tabular-nums leading-none"
-                  style={{ fontSize: 'clamp(2rem, 7vw, 2.6rem)' }}>
-                  {Math.round(ingredientTotal).toLocaleString()}
-                </p>
-                <span className="text-gray-400 font-bold">฿</span>
-                {ingredientChange !== null && (
-                  <span className={`ml-auto text-xs font-bold px-2.5 py-1 rounded-full ${
-                    ingredientChange > 0 ? 'bg-red-50 text-red-500' : ingredientChange < 0 ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    {ingredientChange > 0 ? '↑' : ingredientChange < 0 ? '↓' : ''}{Math.abs(ingredientChange)}% เทียบช่วงก่อน
-                  </span>
+        <div className="p-3 max-w-3xl mx-auto w-full flex flex-col gap-2.5 pb-24">
+          {/* ═══════════ รายการ ═══════════ */}
+          {tab === 'list' && (
+            <>
+              <div className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 pt-4 pb-4">
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">รายจ่าย {periodLabel}</p>
+                <div className="flex items-baseline gap-2.5">
+                  <p className="font-black text-gray-800 tabular-nums leading-none" style={{ fontSize: 'clamp(2rem, 7vw, 2.6rem)' }}>
+                    {baht(total)}
+                  </p>
+                  <span className="text-gray-400 font-bold">฿</span>
+                  <span className="ml-auto text-xs text-gray-400">{entries.length} รายการ</span>
+                </div>
+                {byName.length > 0 && (
+                  <p className="text-[11px] text-gray-400 mt-2 truncate">
+                    จ่ายเยอะสุด: {byName.slice(0, 3).map((r) => `${r.name} ${baht(r.total)}`).join(' · ')}
+                  </p>
                 )}
               </div>
 
-              <ShareBar
-                total={ingredientTotal}
-                segments={Object.entries(INGREDIENT_CATEGORIES).map(([key, label]) => ({
-                  key,
-                  label,
-                  value: categoryTotals[key] ?? 0,
-                  color: CATEGORY_BAR_COLORS[key],
-                }))}
-              />
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
-                {Object.entries(INGREDIENT_CATEGORIES).map(([key, label]) => (
-                  (categoryTotals[key] ?? 0) > 0 && (
-                    <span key={key} className="text-[11px] text-gray-500">
-                      <span className={`inline-block w-2 h-2 rounded-sm mr-1 align-middle ${CATEGORY_BAR_COLORS[key]}`} />
-                      {label} {Math.round(categoryTotals[key]).toLocaleString()}
-                    </span>
-                  )
-                ))}
-              </div>
-            </div>
-
-            {/* ยังไม่มีทะเบียนวัตถุดิบ */}
-            {!ingredientsLoading && activeIngredients.length === 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 p-6 flex flex-col items-center gap-3 text-center">
-                <span className="text-4xl">🥬</span>
-                <p className="text-sm text-gray-500 leading-relaxed">
-                  ยังไม่มีทะเบียนวัตถุดิบ<br />
-                  เพิ่มรายการที่ซื้อประจำไว้ก่อน จะได้กรอกเร็วตอนกลับจากตลาด
-                </p>
-                <button type="button" onClick={handleSeed} disabled={seeding || !online}
-                  className="rounded-2xl bg-orange-500 disabled:bg-gray-300 text-white font-bold text-sm px-5 py-2.5 active:scale-95 transition-all">
-                  {seeding ? 'กำลังเพิ่ม...' : 'เพิ่มรายการตั้งต้น 19 อย่าง'}
-                </button>
-              </div>
-            )}
-
-            {/* ทางลัดไปรายการที่ต้องซื้อ — คนคิดว่า "ซื้อของ" อยู่คู่กับค่าใช้จ่าย
-                ถ้าซ่อนไว้แค่ในแท็บน้ำจิ้มจะหาไม่เจอตอนรีบจะออกไปตลาด */}
-            {onNavigate && (
-              <button type="button" onClick={() => onNavigate('sauce', 'shopping')}
-                className="rounded-2xl bg-white border border-gray-100 shadow-sm px-4 py-3 flex items-center gap-3 text-left">
-                <span className="text-xl shrink-0">🛒</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-800">จะไปตลาด?</p>
-                  <p className="text-[11px] text-gray-400">
-                    ดูของที่ใกล้หมดทั้งจากสูตรน้ำจิ้มและจุดเตือนที่ตั้งเอง แตะแล้วบันทึกเข้าคลังได้เลย
-                  </p>
-                </div>
-                <span className="text-gray-300 shrink-0">›</span>
-              </button>
-            )}
-
-            {/* รายการวัตถุดิบ */}
-            {summary.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                <div className="px-4 pt-3 pb-2 flex items-center justify-between">
-                  <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-                    รายการวัตถุดิบ
-                  </p>
-                  <p className="text-[10px] text-gray-300">{summary.length} รายการ · กดเพื่อดูประวัติ</p>
-                </div>
-                {summary.map((entry) => (
-                  <IngredientRow
-                    key={entry.key}
-                    entry={entry}
-                    purchases={purchasesByIngredient.get(entry.key) ?? []}
-                    expanded={expandedId === entry.key}
-                    onToggle={() => setExpandedId(expandedId === entry.key ? null : entry.key)}
-                    onDeletePurchase={(id) => deletePurchase(id)}
-                    ingredient={ingredientById.get(entry.key) ?? null}
-                    onEdit={setEditIngredient}
-                  />
-                ))}
-              </div>
-            )}
-
-            {!purchasesLoading && purchases.length === 0 && activeIngredients.length > 0 && (
-              <div className="flex flex-col items-center justify-center py-14 gap-2">
-                <span className="text-4xl">🧾</span>
-                <p className="text-gray-400 text-sm">ยังไม่มีการซื้อวัตถุดิบในช่วงนี้</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ═══════════ แท็บค่าใช้จ่ายอื่น ═══════════ */}
-        {tab === 'others' && (
-          <div className="p-3 max-w-3xl mx-auto w-full flex flex-col gap-2.5 pb-24">
-            <div className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 pt-4 pb-4">
-              <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
-                ค่าใช้จ่ายอื่น {periodLabel}
-              </p>
-              <div className="flex items-baseline gap-2.5">
-                <p className="font-black text-gray-800 tabular-nums leading-none"
-                  style={{ fontSize: 'clamp(2rem, 7vw, 2.6rem)' }}>
-                  {Math.round(otherExpenseTotal).toLocaleString()}
-                </p>
-                <span className="text-gray-400 font-bold">฿</span>
-              </div>
-              <p className="text-[11px] text-gray-400 mt-2">
-                ค่าน้ำ ค่าไฟ ค่าเช่า ค่าแรง — ค่าวัตถุดิบอยู่ในแท็บวัตถุดิบ
-              </p>
-            </div>
-
-            {expenses.length > 0 && (
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50 overflow-hidden">
-                {expenses.map((e) => (
-                  <div key={e.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                    <div className="min-w-0 flex items-center gap-2.5">
-                      <span className="text-lg shrink-0">{EXPENSE_CATEGORY_ICONS[e.category] ?? '📝'}</span>
-                      <div className="min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">
-                          {e.custom_label || expenseCategoryLabel(e.category)}
-                        </p>
-                        <p className="text-[11px] text-gray-400">
-                          {formatThaiDate(e.date)}
-                          {e.note ? ` · ${e.note}` : ''}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${EXPENSE_CATEGORY_COLORS[e.category] ?? 'bg-gray-100 text-gray-600'}`}>
-                        {expenseCategoryLabel(e.category)}
-                      </span>
-                      <span className="text-sm font-extrabold text-gray-800 tabular-nums">
-                        {(e.amount ?? 0).toLocaleString()} ฿
-                      </span>
-                      <button type="button" onClick={() => deleteExpense(e.id)}
-                        className="text-gray-300 hover:text-red-500 transition-colors" aria-label="ลบรายการนี้">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
+              {byDate.map((group) => (
+                <div key={group.date} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div className="px-4 pt-2.5 pb-1 flex items-center justify-between">
+                    <p className="text-xs font-bold text-gray-500">{formatThaiDate(group.date)}</p>
+                    <p className="text-xs font-bold text-gray-400 tabular-nums">{baht(group.total)} ฿</p>
                   </div>
-                ))}
-              </div>
-            )}
+                  <div className="divide-y divide-gray-50">
+                    {group.items.map((e) => (
+                      <EntryRow key={`${e.source}-${e.id}`} entry={e} onEdit={setEditing} onDelete={setConfirmDelete} />
+                    ))}
+                  </div>
+                </div>
+              ))}
 
-            {expenses.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-14 gap-2">
-                <span className="text-4xl">💡</span>
-                <p className="text-gray-400 text-sm">ยังไม่มีค่าใช้จ่ายอื่นในช่วงนี้</p>
+              {!loading && entries.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-14 gap-2 text-center">
+                  <span className="text-4xl">🧾</span>
+                  <p className="text-gray-400 text-sm">ยังไม่ได้จดรายจ่ายในช่วงนี้</p>
+                  <p className="text-gray-300 text-xs">กดปุ่ม “จดรายจ่าย” มุมขวาล่าง</p>
+                </div>
+              )}
+            </>
+          )}
+
+          {/* ═══════════ รับ-จ่าย ═══════════ */}
+          {tab === 'compare' && (
+            <>
+              <div className="bg-white rounded-3xl border border-gray-100 shadow-sm px-5 pt-4 pb-4">
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">เหลือ {periodLabel}</p>
+                <div className="flex items-baseline gap-2.5 mb-1">
+                  <p className={`font-black tabular-nums leading-none ${left >= 0 ? 'text-green-600' : 'text-red-500'}`}
+                    style={{ fontSize: 'clamp(2rem, 7vw, 2.6rem)' }}>
+                    {left >= 0 ? '+' : '−'}{baht(Math.abs(left))}
+                  </p>
+                  <span className="text-gray-400 font-bold">฿</span>
+                </div>
+                <p className="text-[11px] text-gray-400 mb-4">
+                  เงินเข้าจริง ลบ รายจ่ายที่จดไว้
+                  {sales.shiftCount > 0 && ` · จาก ${sales.shiftCount} กะ`}
+                </p>
+
+                {/* แถบเทียบ — ยาวเท่ากันทั้งคู่ถ้าจ่ายเท่ากับที่ได้ */}
+                <div className="flex flex-col gap-2 mb-4">
+                  {[
+                    { label: 'รับ', value: sales.net, color: 'bg-green-500' },
+                    { label: 'จ่าย', value: total, color: 'bg-red-400' },
+                  ].map((bar) => {
+                    const max = Math.max(sales.net, total, 1)
+                    return (
+                      <div key={bar.label} className="flex items-center gap-2">
+                        <span className="w-8 text-xs font-bold text-gray-500">{bar.label}</span>
+                        <div className="flex-1 h-5 rounded-full bg-gray-100 overflow-hidden">
+                          <div className={`h-full rounded-full ${bar.color}`} style={{ width: `${(bar.value / max) * 100}%` }} />
+                        </div>
+                        <span className="w-20 text-right text-xs font-bold text-gray-700 tabular-nums">{baht(bar.value)}</span>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div className="flex flex-col gap-1.5 border-t border-gray-100 pt-3">
+                  <CompareRow label="ขายได้" value={sales.gross} />
+                  {sales.gpFee > 0 && <CompareRow label="หัก ค่า GP เดลิเวอรี" value={sales.gpFee} sign="−" muted />}
+                  <CompareRow label="เงินเข้าจริง" value={sales.net} strong />
+                  <CompareRow label="หัก รายจ่ายที่จดไว้" value={total} sign="−" />
+                  <div className="border-t border-dashed border-gray-200 mt-1 pt-2">
+                    <CompareRow label="เหลือ" value={left} strong />
+                  </div>
+                </div>
+                {expenseShare !== null && (
+                  <p className="text-[11px] text-gray-400 mt-3">
+                    เงินเข้ามา 100 บาท จ่ายออกไป {expenseShare} บาท
+                  </p>
+                )}
+                {sales.truncated && (
+                  <p className="text-[11px] text-amber-600 mt-2">บิลในช่วงนี้เยอะเกินที่ดึงได้ ยอดขายอาจขาด ลองเลือกช่วงสั้นลง</p>
+                )}
+                {sales.loading && <p className="text-[11px] text-gray-400 mt-2">กำลังโหลดยอดขาย...</p>}
               </div>
-            )}
-          </div>
-        )}
+
+              {byName.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <p className="px-4 pt-3 pb-2 text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
+                    จ่ายไปกับอะไรบ้าง
+                  </p>
+                  <div className="divide-y divide-gray-50">
+                    {byName.map((row) => (
+                      <div key={row.key} className="px-4 py-2.5">
+                        <div className="flex items-baseline justify-between gap-3">
+                          <p className="text-sm font-bold text-gray-800 truncate">{row.name}</p>
+                          <p className="text-sm font-extrabold text-gray-800 tabular-nums shrink-0">{baht(row.total)} ฿</p>
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex-1 h-1.5 rounded-full bg-gray-100 overflow-hidden">
+                            <div className="h-full rounded-full bg-orange-400" style={{ width: `${total > 0 ? (row.total / total) * 100 : 0}%` }} />
+                          </div>
+                          <span className="text-[10px] text-gray-400 shrink-0">
+                            {row.times} ครั้ง{row.qty > 0 ? ` · ${Number(row.qty.toFixed(3)).toLocaleString()} ${row.unit ?? ''}` : ''}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* ── ปุ่มลอย ── */}
-      <button
-        type="button"
-        onClick={() => (tab === 'ingredients' ? setPurchaseModalOpen(true) : setExpenseModalOpen(true))}
-        disabled={!online}
-        className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold px-5 py-3.5 shadow-xl shadow-orange-300/50 active:scale-95 transition-all"
-      >
+      <button type="button" onClick={() => setEditing({})} disabled={!online}
+        className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold px-5 py-3.5 shadow-xl shadow-orange-300/50 active:scale-95 transition-all">
         <Plus size={20} />
-        {tab === 'ingredients' ? 'บันทึกการซื้อ' : 'เพิ่มค่าใช้จ่าย'}
+        จดรายจ่าย
       </button>
 
-      {editIngredient && (
-        <IngredientModal ingredient={editIngredient} onClose={() => setEditIngredient(null)} />
-      )}
-
-      {purchaseModalOpen && (
-        <PurchaseModal
-          ingredients={activeIngredients}
-          recentByIngredient={recentByIngredient}
-          defaultDate={toDateString()}
-          onClose={() => setPurchaseModalOpen(false)}
-          onSaved={() => setPurchaseModalOpen(false)}
-        />
-      )}
-
-      {expenseModalOpen && (
+      {editing !== null && (
         <ExpenseModal
-          onClose={() => setExpenseModalOpen(false)}
-          onSubmit={async (payload) => {
-            await createExpense(payload)
-            setExpenseModalOpen(false)
-          }}
+          entry={editing.id ? editing : null}
+          recentEntries={recentEntries}
+          onClose={() => setEditing(null)}
+          onSubmit={handleSubmit}
         />
+      )}
+
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-end sm:items-center justify-center p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm bg-white rounded-2xl p-5 flex flex-col gap-3">
+            <p className="text-base font-bold text-gray-800">ลบ “{confirmDelete.name}”?</p>
+            <p className="text-sm text-gray-500">
+              {formatThaiDate(confirmDelete.date)} · {confirmDelete.amount.toLocaleString()} ฿
+            </p>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <button type="button" onClick={() => setConfirmDelete(null)}
+                className="min-h-[48px] rounded-xl bg-gray-100 text-gray-600 font-bold">ไม่ลบ</button>
+              <button type="button"
+                onClick={async () => {
+                  const target = confirmDelete
+                  setConfirmDelete(null)
+                  await deleteEntry(target)
+                }}
+                className="min-h-[48px] rounded-xl bg-red-500 text-white font-bold">ลบ</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
