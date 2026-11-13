@@ -240,22 +240,24 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
             <div className="flex-1 min-h-0 flex flex-col px-3 pb-3 gap-1.5">
 
               {/* Display row */}
-              <div className="shrink-0 flex gap-1.5">
-                <div className="flex-1 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-3 py-1.5">
-                  <span className="text-3xl font-extrabold text-gray-800 tabular-nums leading-none">
-                    {Number(numpadValue).toLocaleString()}
-                  </span>
-                  <span className="text-base font-bold text-gray-400">
-                    {discountMode ? '฿ ลด' : '฿'}
-                  </span>
-                </div>
-                {!discountMode && (
-                  <button type="button" onClick={() => setNumpadValue(String(remaining))}
-                    className="shrink-0 rounded-xl bg-orange-500 px-4 text-sm font-bold text-white active:scale-95 shadow-sm">
-                    พอดี
-                  </button>
-                )}
+              <div className="shrink-0 flex items-center justify-between rounded-xl bg-orange-50 border border-orange-100 px-3 py-1.5">
+                <span className="text-3xl font-extrabold text-gray-800 tabular-nums leading-none">
+                  {Number(numpadValue).toLocaleString()}
+                </span>
+                <span className="text-base font-bold text-gray-400">
+                  {discountMode ? '฿ ลด' : '฿'}
+                </span>
               </div>
+
+              {/* ปุ่มพอดีคือปุ่มที่กดบ่อยที่สุดในหน้านี้ ลูกค้าส่วนใหญ่จ่ายพอดีหรือสแกนจ่าย
+                  เดิมถูกบีบอยู่ข้างช่องตัวเลขจนเล็กกว่าปุ่มจำนวนเงินด่วนที่กดนาน ๆ ที
+                  โชว์ยอดในปุ่มด้วย จะได้เห็นว่ากำลังรับเงินเท่าไหร่ก่อนกด ไม่ต้องเงยไปดูข้างบน */}
+              {!discountMode && remaining > 0 && (
+                <button type="button" onClick={() => setNumpadValue(String(remaining))}
+                  className="shrink-0 w-full min-h-[56px] rounded-xl bg-orange-500 text-white font-extrabold text-xl flex items-center justify-center gap-2 active:scale-[0.98] active:bg-orange-600 shadow-sm transition-transform">
+                  ✓ พอดี <span className="tabular-nums">{remaining.toLocaleString()} ฿</span>
+                </button>
+              )}
 
               {/* Error */}
               {saveError && (
