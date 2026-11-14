@@ -3,7 +3,7 @@ import { useAppData } from '../lib/appDataContext'
 import { calcCartTotal } from '../lib/cart'
 import { METHOD_ICONS, METHOD_SHORT, PLATFORM_ICONS } from '../lib/constants'
 import { createOrder, InsufficientStockError } from '../lib/orders'
-import { netAfterGp } from '../lib/pricing'
+import { netAfterGp, quickPrices } from '../lib/pricing'
 import ModalBackdrop from './ModalBackdrop'
 
 const DIGIT_ROWS = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['ล้าง','0','⌫']]
@@ -25,7 +25,11 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState(null)
   const [discount, setDiscount]       = useState(0)
-  const [discountMode, setDiscountMode] = useState(false)
+  // ปรับยอดก่อนรับเงิน: 'discount' = กรอกว่าลดกี่บาท · 'price' = กรอกราคาที่เก็บลูกค้าจริง
+  // สองแบบได้ผลเหมือนกันคือเก็บเป็นส่วนลด รายงานจึงไม่ต้องรู้ว่าคนขายกดทางไหน
+  const [adjustMode, setAdjustMode] = useState(null)
+  const discountMode = adjustMode !== null
+  const priceMode = adjustMode === 'price'
 
   const total      = Math.max(subtotal - discount, 0)
   const paidSoFar  = payments.reduce((s, p) => s + p.amount, 0)
@@ -33,7 +37,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   const entered    = Number(numpadValue) || 0
 
   const canAdd = discountMode
-    ? entered <= subtotal
+    ? (priceMode ? entered > 0 && entered <= subtotal : entered <= subtotal)
     : (entered > 0 && remaining > 0 && (method === 'cash' ? true : entered <= remaining))
 
   const finalizeOrder = async (finalPayments, overrideTotal = total, overrideSubtotal = subtotal) => {
@@ -63,8 +67,10 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   }
 
   const handleDiscountConfirm = () => {
-    setDiscount(Math.min(entered, subtotal))
-    setDiscountMode(false)
+    if (!canAdd) return
+    // ราคาที่เก็บจริง 100 จากยอด 130 = ส่วนลด 30
+    setDiscount(priceMode ? subtotal - entered : Math.min(entered, subtotal))
+    setAdjustMode(null)
     setNumpadValue('0')
     setPayments([])
   }
@@ -96,6 +102,12 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   }
 
   const btnLabel = () => {
+    if (priceMode) {
+      if (entered === 0) return 'กรอกราคาที่เก็บจริง'
+      if (entered > subtotal) return 'ราคาเกินยอดสินค้า'
+      if (entered === subtotal) return 'ยืนยัน (ราคาเต็ม)'
+      return `✓ เก็บ ${entered.toLocaleString()} ฿ (ลด ${(subtotal - entered).toLocaleString()})`
+    }
     if (discountMode) {
       return entered === 0 ? 'ยืนยัน (ไม่มีส่วนลด)' : `🏷️ ส่วนลด ${entered.toLocaleString()} ฿`
     }
@@ -110,12 +122,17 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   }
 
   const openDiscountMode = () => {
-    setDiscountMode(true)
+    setAdjustMode('discount')
     setNumpadValue(discount > 0 ? String(discount) : '0')
   }
 
+  const openPriceMode = () => {
+    setAdjustMode('price')
+    setNumpadValue(discount > 0 ? String(total) : '0')
+  }
+
   const cancelDiscountMode = () => {
-    setDiscountMode(false)
+    setAdjustMode(null)
     setNumpadValue('0')
   }
 
@@ -168,12 +185,20 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
             </div>
             <div className="shrink-0 flex flex-col items-end gap-1.5">
               {payments.length === 0 && !discountMode && (
-                <button
-                  type="button"
-                  onClick={openDiscountMode}
-                  className="rounded-lg bg-white/20 text-white text-[11px] font-bold px-2.5 py-1 active:bg-white/30 whitespace-nowrap">
-                  {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={openPriceMode}
+                    className="min-h-[36px] rounded-lg bg-white text-orange-600 text-xs font-extrabold px-3 active:bg-orange-50 whitespace-nowrap shadow-sm">
+                    ✏️ ใส่ราคา
+                  </button>
+                  <button
+                    type="button"
+                    onClick={openDiscountMode}
+                    className="min-h-[36px] rounded-lg bg-white/20 text-white text-xs font-bold px-3 active:bg-white/30 whitespace-nowrap">
+                    {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
+                  </button>
+                </div>
               )}
               <button type="button" onClick={() => !saving && onClose()} disabled={saving}
                 className="w-10 h-10 rounded-full bg-white/20 text-white text-2xl font-bold flex items-center justify-center disabled:opacity-40">
@@ -186,10 +211,16 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
           {discountMode ? (
             <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-100">
               <div className="flex items-center gap-2">
-                <span className="text-lg">🏷️</span>
+                <span className="text-lg">{priceMode ? '✏️' : '🏷️'}</span>
                 <div>
-                  <p className="text-orange-700 font-bold text-sm leading-none">ป้อนส่วนลด</p>
-                  <p className="text-orange-400 text-[10px]">กรอกจำนวนเงินที่ต้องการลด</p>
+                  <p className="text-orange-700 font-bold text-sm leading-none">
+                    {priceMode ? 'ใส่ราคาที่เก็บลูกค้าจริง' : 'ป้อนส่วนลด'}
+                  </p>
+                  <p className="text-orange-400 text-[10px]">
+                    {priceMode
+                      ? `ยอดสินค้า ${subtotal.toLocaleString()} ฿ — ระบบคิดส่วนลดให้เอง`
+                      : 'กรอกจำนวนเงินที่ต้องการลด'}
+                  </p>
                 </div>
               </div>
               <button type="button" onClick={cancelDiscountMode}
@@ -245,7 +276,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
                   {Number(numpadValue).toLocaleString()}
                 </span>
                 <span className="text-base font-bold text-gray-400">
-                  {discountMode ? '฿ ลด' : '฿'}
+                  {priceMode ? '฿ เก็บจริง' : discountMode ? '฿ ลด' : '฿'}
                 </span>
               </div>
 
@@ -270,20 +301,25 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
               )}
               {discountMode && entered > subtotal && (
                 <p className="shrink-0 text-center text-xs font-semibold text-red-500">
-                  ส่วนลดต้องไม่เกิน {subtotal.toLocaleString()} ฿
+                  {priceMode ? 'ราคาที่เก็บ' : 'ส่วนลด'}ต้องไม่เกิน {subtotal.toLocaleString()} ฿
+                </p>
+              )}
+              {priceMode && entered > 0 && entered < subtotal && (
+                <p className="shrink-0 text-center text-xs font-semibold text-green-600">
+                  ลดให้ลูกค้า {(subtotal - entered).toLocaleString()} ฿
                 </p>
               )}
 
               {/* Quick amounts */}
               <div className="shrink-0 flex gap-1.5">
-                {(discountMode ? QUICK_DISCOUNTS : QUICK_AMOUNTS).map((v) => (
+                {(priceMode ? quickPrices(subtotal) : discountMode ? QUICK_DISCOUNTS : QUICK_AMOUNTS).map((v) => (
                   <button key={v} type="button" onClick={() => setNumpadValue(String(v))}
                     className={`flex-1 h-11 rounded-xl font-bold text-base active:scale-95 transition-all ${
                       discountMode
                         ? 'bg-green-50 border border-green-100 text-green-700 active:bg-green-100'
                         : 'bg-blue-50 border border-blue-100 text-blue-700 active:bg-blue-100'
                     }`}>
-                    {discountMode ? `-${v}` : v}
+                    {priceMode ? `${v.toLocaleString()} ฿` : discountMode ? `-${v}` : v}
                   </button>
                 ))}
               </div>
@@ -311,7 +347,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
               {/* Confirm button */}
               <button type="button"
                 onClick={discountMode ? handleDiscountConfirm : handleAddPayment}
-                disabled={(!discountMode && (!canAdd || saving)) || (discountMode && entered > subtotal)}
+                disabled={!canAdd || (!discountMode && saving)}
                 className={`shrink-0 h-14 rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all text-white ${
                   discountMode
                     ? 'bg-gradient-to-r from-green-500 to-emerald-500 disabled:from-gray-300 disabled:to-gray-300'

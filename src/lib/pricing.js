@@ -37,3 +37,14 @@ export function separatePriceOf(bundle, productById) {
 export function netAfterGp(grossAmount, gpRate = DEFAULT_GP_RATE) {
   return grossAmount * (1 - gpRate)
 }
+
+/**
+ * ราคาปัดลงที่คนขายมักเก็บจริง — ยอด 137 ปุ่มจะเป็น 130 · 100
+ * เก็บแค่ที่ต่ำกว่ายอดจริงและมากกว่าศูนย์ ไม่งั้นกดแล้วไม่มีอะไรเปลี่ยน
+ */
+export function quickPrices(subtotal) {
+  const list = [10, 50, 100]
+    .map((step) => Math.floor(subtotal / step) * step)
+    .filter((v) => v > 0 && v < subtotal)
+  return [...new Set(list)].sort((a, b) => b - a).slice(0, 3)
+}
