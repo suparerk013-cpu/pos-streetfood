@@ -164,3 +164,49 @@ describe('shiftTimeRange', () => {
     expect(shiftTimeRange(shift12)).toBe('16:10 – 01:05')
   })
 })
+
+describe('compareShiftsHourly — เทียบรายชั่วโมงกับกะก่อน', async () => {
+  const { compareShiftsHourly, previousShiftName } = await import('../shiftSales')
+  const yest = { id: 'y', status: 'closed', opened_at: at(2026, 11, 12, 16, 10), closed_at: at(2026, 11, 13, 0, 50) }
+  const today = { id: 't', status: 'open', opened_at: at(2026, 11, 13, 16, 30), closed_at: null }
+  const yOrders = [
+    order({ created_at: at(2026, 11, 12, 16, 20), total_amount: 100 }),
+    order({ created_at: at(2026, 11, 12, 20, 15), total_amount: 300 }),
+    order({ created_at: at(2026, 11, 12, 22, 0), total_amount: 500 }),
+    order({ created_at: at(2026, 11, 13, 0, 30), total_amount: 200 }),
+  ]
+  const tOrders = [
+    order({ created_at: at(2026, 11, 13, 16, 40), total_amount: 150 }),
+    order({ created_at: at(2026, 11, 13, 20, 5), total_amount: 250 }),
+  ]
+  const now = at(2026, 11, 13, 20, 30)
+
+  it('ชั่วโมงเดียวกันตามนาฬิกาอยู่แท่งเดียวกัน แม้เปิดร้านคนละนาที', () => {
+    const { bars } = compareShiftsHourly(tOrders, today, yOrders, yest, { now })
+    expect(bars[0]).toMatchObject({ shortLabel: '16', value: 150, compare: 100 })
+    expect(bars[4]).toMatchObject({ shortLabel: '20', value: 250, compare: 300 })
+  })
+
+  it('แกนยาวถึงเวลาปิดกะเมื่อวาน (เที่ยงคืน) ชั่วโมงที่ยังไม่ถึงของวันนี้ติดป้ายว่ายังไม่ถึง', () => {
+    const { bars } = compareShiftsHourly(tOrders, today, yOrders, yest, { now })
+    expect(bars[bars.length - 1]).toMatchObject({ shortLabel: '0', compare: 200, future: true })
+    expect(bars[4].future).toBe(false)
+  })
+
+  it('เทียบยอดถึงเวลาเดียวกัน ไม่เอายอดเต็มกะเมื่อวานมาเทียบยอดครึ่งกะ', () => {
+    const { sameTime, previousTotal } = compareShiftsHourly(tOrders, today, yOrders, yest, { now })
+    expect(sameTime).toMatchObject({ current: 400, previous: 400, at: '20:30' })
+    expect(previousTotal).toBe(1100)
+  })
+
+  it('ดูกะที่ปิดแล้ว ไม่มีการเทียบเวลาเดียวกัน (เทียบทั้งกะแทน)', () => {
+    const { sameTime } = compareShiftsHourly(yOrders, yest, [], null)
+    expect(sameTime).toBe(null)
+  })
+
+  it('กะก่อนเปิดวันก่อนหน้าพอดีเรียกว่าเมื่อวาน ห่างกว่านั้นบอกวันที่', () => {
+    expect(previousShiftName(today, yest)).toBe('เมื่อวาน')
+    const older = { opened_at: at(2026, 11, 10, 16, 0) }
+    expect(previousShiftName(today, older)).toBe('กะ 10/11')
+  })
+})

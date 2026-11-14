@@ -5,14 +5,17 @@ import { useId } from 'react'
  * แอปนี้ต้องเบาเพราะรันบนมือถือหน้าร้าน กราฟที่ใช้จริงมีแค่ 3 แบบจึงวาดเองคุ้มกว่า
  */
 export function BarChart({ data, selectedKey, onSelect, height = 128, formatValue }) {
-  const max = Math.max(...data.map((d) => d.value), 1)
+  // มีค่า compare = โหมดเทียบ: แต่ละช่องมีสองแท่งติดกัน (ส้ม = ตอนนี้ / เทา = ที่เอามาเทียบ)
+  const compareMode = data.some((d) => d.compare != null)
+  const max = Math.max(...data.map((d) => Math.max(d.value, d.compare ?? 0)), 1)
   const nonZero = data.filter((d) => d.value > 0)
-  const average = nonZero.length > 0
+  const average = !compareMode && nonZero.length > 0
     ? nonZero.reduce((s, d) => s + d.value, 0) / nonZero.length
     : 0
   const averagePct = max > 0 ? (average / max) * 100 : 0
   // ป้ายกำกับแกนนอนจะทับกันถ้าแท่งเยอะ จึงเว้นระยะตามจำนวนแท่ง
   const labelStep = data.length > 20 ? 5 : data.length > 10 ? 2 : 1
+  const fmt = (v) => (formatValue ? formatValue(v) : v.toLocaleString())
 
   return (
     <div>
@@ -27,39 +30,49 @@ export function BarChart({ data, selectedKey, onSelect, height = 128, formatValu
             </span>
           </div>
         )}
-        <div className="absolute inset-0 flex items-end gap-[2px]">
+        <div className={`absolute inset-0 flex items-end ${compareMode ? 'gap-1' : 'gap-[2px]'}`}>
           {data.map((d) => {
             const pct = max > 0 ? (d.value / max) * 100 : 0
+            const comparePct = max > 0 ? ((d.compare ?? 0) / max) * 100 : 0
             const isSelected = selectedKey === d.key
+            const mainClass = isSelected
+              ? d.muted ? 'bg-gray-500' : compareMode ? 'bg-orange-600' : 'bg-gradient-to-t from-red-500 to-orange-400'
+              : d.value > 0
+              ? d.muted ? 'bg-gray-300 group-hover:bg-gray-400' : compareMode ? 'bg-orange-500' : 'bg-orange-300 group-hover:bg-orange-400'
+              : 'bg-gray-100'
             return (
               <button
                 key={d.key}
                 type="button"
                 onClick={() => onSelect?.(isSelected ? null : d.key)}
-                title={`${d.label} · ${formatValue ? formatValue(d.value) : d.value.toLocaleString()}`}
-                className="relative flex-1 min-w-0 h-full flex items-end group"
-                aria-label={`${d.label} ${d.value.toLocaleString()}`}
+                title={`${d.label} · ${fmt(d.value)}${compareMode ? ` / ${fmt(d.compare ?? 0)}` : ''}`}
+                className={`relative flex-1 min-w-0 h-full flex items-end group ${compareMode ? 'gap-[2px]' : ''} ${
+                  isSelected && compareMode ? 'bg-orange-50 rounded-t-md' : ''
+                }`}
+                aria-label={`${d.label} ${d.value.toLocaleString()}${compareMode ? ` เทียบ ${(d.compare ?? 0).toLocaleString()}` : ''}`}
               >
                 <span
-                  className={`w-full rounded-t-[3px] transition-all ${
-                    isSelected
-                      ? d.muted ? 'bg-gray-500' : 'bg-gradient-to-t from-red-500 to-orange-400'
-                      : d.value > 0
-                      ? d.muted ? 'bg-gray-300 group-hover:bg-gray-400' : 'bg-orange-300 group-hover:bg-orange-400'
-                      : 'bg-gray-100'
-                  }`}
+                  className={`${compareMode ? 'flex-1' : 'w-full'} rounded-t-[3px] transition-all ${d.future ? 'opacity-0' : ''} ${mainClass}`}
                   style={{ height: `${Math.max(pct, d.value > 0 ? 2 : 1)}%` }}
                 />
+                {compareMode && (
+                  <span
+                    className={`flex-1 rounded-t-[3px] transition-all ${isSelected ? 'bg-gray-400' : (d.compare ?? 0) > 0 ? 'bg-gray-300' : 'bg-gray-100'}`}
+                    style={{ height: `${Math.max(comparePct, (d.compare ?? 0) > 0 ? 2 : 1)}%` }}
+                  />
+                )}
               </button>
             )
           })}
         </div>
       </div>
-      <div className="flex gap-[2px] mt-1">
+      <div className={`flex mt-1 ${compareMode ? 'gap-1' : 'gap-[2px]'}`}>
         {data.map((d, i) => (
           <span
             key={d.key}
-            className="flex-1 min-w-0 text-center text-[9px] text-gray-400 tabular-nums truncate"
+            className={`flex-1 min-w-0 text-center text-[9px] tabular-nums truncate ${
+              selectedKey === d.key ? 'text-orange-600 font-bold' : 'text-gray-400'
+            }`}
           >
             {i % labelStep === 0 ? d.shortLabel ?? d.label : ''}
           </span>

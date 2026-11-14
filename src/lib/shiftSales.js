@@ -209,3 +209,96 @@ export function totalsFromSummaries(shifts = []) {
     { gross: 0, count: 0 },
   )
 }
+
+/**
+ * เทียบรายชั่วโมงสองกะ (กะที่ดูอยู่ กับกะก่อนหน้า) บนแกนเวลาเดียวกัน
+ *
+ * จัดแกนตามเวลานาฬิกา ไม่ใช่ "ชั่วโมงที่เท่าไหร่ของกะ" — เปิดสี่โมงสิบกับสี่โมงครึ่ง
+ * ต้องอยู่แท่งสี่โมงเหมือนกัน คนในร้านคิดว่า "สองทุ่มวันนี้ขายได้เท่าไหร่ เทียบสองทุ่มเมื่อวาน"
+ * แกนเริ่มที่ชั่วโมงเปิดร้านที่เช้ากว่า ข้ามเที่ยงคืนต่อไปได้ (เที่ยงคืนครึ่งอยู่ท้ายแกน)
+ *
+ * `sameTime` = ยอดถึงเวลาเดียวกันของสองกะ ใช้ตอนกะยังเปิดอยู่เท่านั้น
+ * ยอดครึ่งกะเทียบกับยอดเต็มกะของเมื่อวานจะดูตกตลอดจนปิดร้าน
+ */
+export function compareShiftsHourly(orders = [], shift, prevOrders = [], prevShift, { now = new Date() } = {}) {
+  const opened = toDate(shift?.opened_at)
+  if (!opened) return { bars: [], sameTime: null, previousTotal: 0, currentTotal: 0 }
+  const prevOpened = toDate(prevShift?.opened_at)
+
+  // จุดเริ่มแกน = ชั่วโมงเปิดร้านที่เช้ากว่า (นับเป็นนาทีของวัน)
+  const openHourOf = (d) => d.getHours()
+  const pivot = Math.min(openHourOf(opened), prevOpened ? openHourOf(prevOpened) : 24) * 60
+  const minuteOnAxis = (d) => ((d.getHours() * 60 + d.getMinutes() - pivot) % 1440 + 1440) % 1440
+
+  const bucket = (list) => {
+    const values = []
+    const counts = []
+    list.forEach((o) => {
+      const at = toDate(o.created_at)
+      if (!at) return
+      const i = Math.floor(minuteOnAxis(at) / 60)
+      values[i] = (values[i] ?? 0) + (o.total_amount ?? 0)
+      counts[i] = (counts[i] ?? 0) + 1
+    })
+    return { values, counts }
+  }
+  const cur = bucket(orders)
+  const prev = bucket(prevShift ? prevOrders : [])
+
+  const isOpen = shift.status === 'open'
+  const curEnd = toDate(shift.closed_at) ?? (isOpen ? now : opened)
+  const prevEnd = toDate(prevShift?.closed_at)
+  const nowIndex = isOpen ? Math.floor(minuteOnAxis(now) / 60) : null
+  const length = Math.max(
+    cur.values.length,
+    prev.values.length,
+    Math.floor(minuteOnAxis(curEnd) / 60) + 1,
+    prevEnd ? Math.floor(minuteOnAxis(prevEnd) / 60) + 1 : 0,
+    1,
+  )
+
+  const bars = Array.from({ length }, (_, i) => {
+    const hour = (pivot / 60 + i) % 24
+    return {
+      key: String(i),
+      label: `${hour}:00 น.`,
+      shortLabel: String(hour),
+      value: cur.values[i] ?? 0,
+      count: cur.counts[i] ?? 0,
+      compare: prevShift ? prev.values[i] ?? 0 : null,
+      compareCount: prev.counts[i] ?? 0,
+      // ชั่วโมงที่ยังมาไม่ถึง — กะยังเปิดอยู่ ไม่ใช่ขายไม่ได้
+      // ถ้ามีบิลอยู่แล้วไม่ซ่อน (นาฬิกาเครื่องนี้อาจช้ากว่าเครื่องที่ออกบิล)
+      future: nowIndex !== null && i > nowIndex && !(cur.values[i] > 0),
+    }
+  })
+
+  const total = (list) => list.reduce((s, o) => s + (o.total_amount ?? 0), 0)
+  let sameTime = null
+  if (isOpen && prevShift) {
+    const cutoff = minuteOnAxis(now)
+    const upToNow = prevOrders.filter((o) => {
+      const at = toDate(o.created_at)
+      return at && minuteOnAxis(at) <= cutoff
+    })
+    sameTime = {
+      current: total(orders),
+      currentCount: orders.length,
+      previous: total(upToNow),
+      previousCount: upToNow.length,
+      at: `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`,
+    }
+  }
+
+  return { bars, sameTime, previousTotal: total(prevShift ? prevOrders : []), currentTotal: total(orders) }
+}
+
+/** ชื่อเรียกกะก่อนหน้า — เปิดวันก่อนหน้าพอดีเรียกว่า "เมื่อวาน" ไม่งั้นบอกวันที่ */
+export function previousShiftName(shift, prevShift) {
+  const a = toDate(shift?.opened_at)
+  const b = toDate(prevShift?.opened_at)
+  if (!a || !b) return 'กะก่อน'
+  const dayBefore = new Date(a.getFullYear(), a.getMonth(), a.getDate() - 1)
+  const sameDay = b.getFullYear() === dayBefore.getFullYear() && b.getMonth() === dayBefore.getMonth() && b.getDate() === dayBefore.getDate()
+  return sameDay ? 'เมื่อวาน' : `กะ ${shiftLabel(prevShift)}`
+}

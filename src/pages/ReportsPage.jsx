@@ -25,7 +25,8 @@ import { summarizeDelivery, summarizeFreebies } from '../lib/deliveryReport'
 import { effectiveRates } from '../lib/payoutMath'
 import {
   groupByShift,
-  hourlyWithinShift,
+  compareShiftsHourly,
+  previousShiftName,
   netOfOrders,
   orderWindow,
   ordersInShiftRange,
@@ -174,15 +175,37 @@ function ReportsPage() {
   const shiftIndex = recentShifts.findIndex((s) => s.id === viewShift?.id)
   const olderShift = shiftIndex >= 0 ? recentShifts[shiftIndex + 1] ?? null : null
   const newerShift = shiftIndex > 0 ? recentShifts[shiftIndex - 1] : null
+
+  // ── เทียบกับกะก่อน (เมื่อวาน) รายชั่วโมง — ต้องมีบิลของกะนั้นด้วย ──
+  const { orders: prevShiftOrders } = useOrdersForShift(isShiftView ? olderShift?.id : null)
+  // กะยังเปิดอยู่ "เวลาเดียวกัน" ต้องขยับตามนาฬิกา ไม่งั้นตัวเลขเทียบค้างอยู่ที่ตอนเปิดหน้า
+  const [now, setNow] = useState(() => new Date())
+  const viewIsOpen = isShiftView && viewShift?.status === 'open'
+  useEffect(() => {
+    if (!viewIsOpen) return undefined
+    const timer = setInterval(() => setNow(new Date()), 60000)
+    return () => clearInterval(timer)
+  }, [viewIsOpen])
+  const comparison = useMemo(
+    () => (isShiftView && viewShift
+      ? compareShiftsHourly(orders, viewShift, prevShiftOrders, olderShift, { now })
+      : null),
+    [isShiftView, viewShift, orders, prevShiftOrders, olderShift, now],
+  )
+  const prevName = previousShiftName(viewShift, olderShift)
+
   const prevTotals = useMemo(() => {
     if (isShiftView) {
-      // กะที่ยังขายอยู่ห้ามเทียบกับกะที่ปิดแล้ว ยอดครึ่งกะเทียบยอดเต็มกะจะขึ้นลูกศรแดงลงตลอด
-      // จนกว่าจะปิดร้าน ทำให้ตกใจทั้งที่ขายปกติ
-      if (viewShift?.status === 'open') return null
+      // กะที่ยังขายอยู่เทียบกับกะก่อน "ถึงเวลาเดียวกัน" — ยอดครึ่งกะเทียบยอดเต็มกะจะดูตกตลอดจนปิดร้าน
+      if (viewShift?.status === 'open') {
+        return comparison?.sameTime
+          ? { gross: comparison.sameTime.previous, count: comparison.sameTime.previousCount }
+          : null
+      }
       return olderShift ? totalsFromSummaries([olderShift]) : null
     }
     return totalsFromSummaries(prevShifts)
-  }, [isShiftView, viewShift, olderShift, prevShifts])
+  }, [isShiftView, viewShift, olderShift, prevShifts, comparison])
 
   const payouts = usePayouts()
   const { purchases } = usePurchasesInRange(from, to)
@@ -241,7 +264,7 @@ function ReportsPage() {
   )
 
   const chartData = useMemo(() => {
-    if (isShiftView) return viewShift ? hourlyWithinShift(orders, viewShift) : []
+    if (isShiftView) return comparison?.bars ?? []
     return shiftRows.map((r) => ({
       key: r.key,
       label: `${r.label} ${r.timeRange}`,
@@ -249,7 +272,7 @@ function ReportsPage() {
       value: r.gross,
       muted: r.isOutside,
     }))
-  }, [isShiftView, viewShift, orders, shiftRows])
+  }, [isShiftView, comparison, shiftRows])
 
   const sparklineValues = useMemo(() => chartData.map((d) => d.value), [chartData])
 
@@ -257,7 +280,16 @@ function ReportsPage() {
     if (!selectedBar) return null
     if (isShiftView) {
       const point = chartData.find((d) => d.key === selectedBar)
-      return point ? { label: point.label, gross: point.value, count: point.count ?? null } : null
+      return point
+        ? {
+            label: point.label,
+            gross: point.value,
+            count: point.count ?? null,
+            future: point.future,
+            compare: point.compare,
+            compareCount: point.compareCount,
+          }
+        : null
     }
     const row = shiftRows.find((r) => r.key === selectedBar)
     if (!row) return null
@@ -492,11 +524,47 @@ function ReportsPage() {
           {/* ── กราฟยอดขาย — หลายวันเป็นแท่งละกะ วันเดียวเป็นรายชั่วโมงในกะนั้น ── */}
           {hasData && (
             <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
-              <div className="flex items-center justify-between mb-3">
+              {/* เทียบกับกะก่อน — กะยังเปิด: ถึงเวลาเดียวกัน / กะปิดแล้ว: ทั้งกะ */}
+              {isShiftView && olderShift && comparison && (() => {
+                const open = Boolean(comparison.sameTime)
+                const current = open ? comparison.sameTime.current : comparison.currentTotal
+                const previous = open ? comparison.sameTime.previous : comparison.previousTotal
+                const pct = previous > 0 ? Math.round(((current - previous) / previous) * 100) : null
+                return (
+                  <div className="mb-3 rounded-2xl bg-gray-50 px-4 py-3">
+                    <p className="text-xs font-bold text-gray-400">
+                      {open ? `กะนี้ถึงตอนนี้ (${comparison.sameTime.at})` : `ทั้งกะ เทียบ${prevName}`}
+                    </p>
+                    <div className="flex items-baseline gap-2">
+                      <p className="text-3xl font-black text-gray-900 tabular-nums">{Math.round(current).toLocaleString()}</p>
+                      <span className="text-gray-400 font-bold">฿</span>
+                      {pct !== null && (
+                        <span className={`ml-auto text-sm font-black rounded-full px-3 py-1 ${
+                          pct > 0 ? 'bg-emerald-100 text-emerald-700' : pct < 0 ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-500'
+                        }`}>
+                          {pct > 0 ? '↑' : pct < 0 ? '↓' : ''} {pct === 0 ? 'เท่าเดิม' : `${Math.abs(pct)}%`}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-500">
+                      {open ? `${prevName}เวลาเดียวกัน` : prevName}{' '}
+                      <b className="text-gray-700 tabular-nums">{Math.round(previous).toLocaleString()} ฿</b>
+                      {open && <> · ทั้งกะ{prevName} {Math.round(comparison.previousTotal).toLocaleString()} ฿</>}
+                    </p>
+                  </div>
+                )
+              })()}
+
+              <div className="flex items-center justify-between mb-3 gap-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
-                  {isShiftView ? 'ยอดขายรายชั่วโมงในกะ' : 'ยอดขายรายกะ'}
+                  {isShiftView ? (olderShift ? `รายชั่วโมง เทียบ${prevName}` : 'ยอดขายรายชั่วโมงในกะ') : 'ยอดขายรายกะ'}
                 </p>
-                {!selectedDetail && (
+                {isShiftView && olderShift ? (
+                  <span className="flex gap-3 text-[11px] font-bold text-gray-500 shrink-0">
+                    <span className="flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-orange-500 inline-block" />{viewShift?.status === 'open' ? 'กะนี้' : `กะ ${shiftLabel(viewShift)}`}</span>
+                    <span className="flex items-center gap-1"><i className="w-2.5 h-2.5 rounded-sm bg-gray-300 inline-block" />{prevName}</span>
+                  </span>
+                ) : !selectedDetail && (
                   <p className="text-[10px] text-gray-300">แตะแท่งเพื่อดูรายละเอียด</p>
                 )}
               </div>
@@ -512,12 +580,22 @@ function ReportsPage() {
                   selectedDetail.isOutside ? 'bg-gray-50 border border-gray-200' : 'bg-orange-50 border border-orange-100'
                 }`}>
                   <p className="text-xs font-bold text-gray-700">{selectedDetail.label}</p>
-                  <p className="text-lg font-black text-gray-800 tabular-nums">
-                    {Math.round(selectedDetail.gross).toLocaleString()} ฿
-                    {selectedDetail.count != null && (
-                      <span className="text-xs font-semibold text-gray-400 ml-1.5">{selectedDetail.count} บิล</span>
-                    )}
-                  </p>
+                  {selectedDetail.future ? (
+                    <p className="text-sm font-bold text-gray-400">ยังไม่ถึงเวลานี้</p>
+                  ) : (
+                    <p className="text-lg font-black text-gray-800 tabular-nums">
+                      {Math.round(selectedDetail.gross).toLocaleString()} ฿
+                      {selectedDetail.count != null && (
+                        <span className="text-xs font-semibold text-gray-400 ml-1.5">{selectedDetail.count} บิล</span>
+                      )}
+                    </p>
+                  )}
+                  {selectedDetail.compare != null && (
+                    <p className="text-sm text-gray-500 tabular-nums">
+                      {prevName}ชั่วโมงเดียวกัน <b className="text-gray-700">{Math.round(selectedDetail.compare).toLocaleString()} ฿</b>
+                      <span className="text-xs text-gray-400 ml-1">{selectedDetail.compareCount} บิล</span>
+                    </p>
+                  )}
                   {selectedDetail.net != null && Math.round(selectedDetail.net) !== Math.round(selectedDetail.gross) && (
                     <p className="text-[11px] text-gray-500">
                       เงินเข้าจริงหลังหัก GP {Math.round(selectedDetail.net).toLocaleString()} ฿

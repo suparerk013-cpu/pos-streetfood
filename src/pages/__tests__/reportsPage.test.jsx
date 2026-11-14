@@ -5,7 +5,7 @@
  * และยืนยันว่าบิลหลังเที่ยงคืนยังนับเป็นของกะที่เปิดเมื่อวาน
  */
 import { renderToString } from 'react-dom/server'
-import { beforeAll, describe, expect, it, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 
 const at = (y, m, d, h, min = 0) => new Date(y, m - 1, d, h, min)
 
@@ -24,13 +24,20 @@ const shiftOrders = [
   { id: 'o3', shift_id: 's13', channel: 'delivery', platform: 'GrabFood', total_amount: 1000, created_at: at(2026, 11, 13, 20), items: [], payments: [] },
 ]
 
+// กะเมื่อวาน — 20:00 ขาย 300 และหลังเที่ยงคืน 00:30 ขาย 600
+const yesterdayOrders = [
+  { id: 'y1', shift_id: 's12', channel: 'store', total_amount: 300, created_at: at(2026, 11, 12, 20), items: [], payments: [] },
+  { id: 'y2', shift_id: 's12', channel: 'store', total_amount: 600, created_at: at(2026, 11, 13, 0, 30), items: [], payments: [] },
+  { id: 'y3', shift_id: 's12', channel: 'store', total_amount: 400, created_at: at(2026, 11, 13, 0, 59), items: [], payments: [] },
+]
+
 vi.mock('../../lib/firebase', () => ({ db: {}, auth: {} }))
 vi.mock('firebase/firestore', () => ({
   collection: () => ({}), query: () => ({}), where: () => ({}), orderBy: () => ({}), limit: () => ({}),
   onSnapshot: () => () => {}, Timestamp: { fromDate: (d) => d, fromMillis: (n) => new Date(n) },
 }))
 vi.mock('../../lib/useOrders', () => ({
-  useOrdersForShift: (id) => ({ orders: id === 's13' ? shiftOrders : [], loading: false }),
+  useOrdersForShift: (id) => ({ orders: id === 's13' ? shiftOrders : id === 's12' ? yesterdayOrders : [], loading: false }),
   useOrdersBetween: () => ({ orders: [], loading: false, truncated: false }),
   useShiftsInRange: () => ({ shifts: [], loading: false }),
 }))
@@ -49,6 +56,10 @@ const ctx = {
 
 let AppDataContext
 let ReportsPage
+// ตอนนี้ = ตีศูนย์ห้าสิบของคืนวันที่ 13 กะยังเปิดอยู่
+beforeAll(() => { vi.setSystemTime(at(2026, 11, 14, 0, 50)) })
+afterAll(() => { vi.useRealTimers() })
+
 beforeAll(async () => {
   ;({ AppDataContext } = await import('../../lib/appDataContext'))
   ReportsPage = (await import('../ReportsPage')).default
@@ -88,9 +99,20 @@ describe('แดชบอร์ดรายกะ', () => {
     expect(html).toMatch(/aria-label="กะก่อนหน้า"(?![^>]*disabled)/)
   })
 
-  it('กะที่ยังขายอยู่ ไม่เทียบกับกะที่ปิดแล้ว ยอดครึ่งกะจะดูตกตลอด', () => {
-    // ยอดกะนี้ 1,500 กับกะก่อนที่ปิดแล้ว 900 — ถ้าเทียบจะขึ้นลูกศร ซึ่งไม่ควรขึ้น
-    expect(render()).not.toMatch(/[↑↓]\d+%/)
+  it('กะที่ยังขายอยู่ เทียบกับเมื่อวานถึงเวลาเดียวกัน ไม่ใช่ทั้งกะ', () => {
+    // ถึง 00:50 เมื่อวานขายได้ 300 + 600 = 900 (บิล 00:59 ยังไม่นับ) — ทั้งกะเมื่อวาน 1,300
+    const t = text(render())
+    expect(t).toContain('กะนี้ถึงตอนนี้ (00:50)')
+    expect(t).toContain('เมื่อวานเวลาเดียวกัน 900 ฿')
+    expect(t).toContain('ทั้งกะเมื่อวาน 1,300 ฿')
+    // 1,500 เทียบ 900 = ↑67%
+    expect(t).toContain('↑ 67%')
+  })
+
+  it('กราฟรายชั่วโมงมีแท่งเทียบเมื่อวาน พร้อมป้ายสี', () => {
+    const t = text(render())
+    expect(t).toContain('รายชั่วโมง เทียบเมื่อวาน')
+    expect(t).toContain('กะนี้')
   })
 
   it('ไม่ได้เปิดกะ ปุ่มเขียนว่ากะล่าสุด แล้วโชว์กะที่ปิดไปล่าสุดแทน', () => {
