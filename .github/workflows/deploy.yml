@@ -43,10 +43,17 @@ jobs:
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
-          if [ -n "$ENV_FILE" ]; then
+          # ใช้ ENV_FILE เฉพาะเมื่อหน้าตาถูกต้อง (มีกุญแจเว็บและเป็นโปรเจกต์ร้าน)
+          # วางผิดมา เช่นเอาไฟล์กุญแจ JSON มาใส่ ถ้าใช้ไปเว็บจะขึ้นไปแบบต่อฐานข้อมูลไม่ได้
+          if [ -n "$ENV_FILE" ] \
+            && printf '%s\n' "$ENV_FILE" | grep -Eq '^VITE_FIREBASE_API_KEY=.+' \
+            && printf '%s\n' "$ENV_FILE" | grep -Eq '^VITE_FIREBASE_PROJECT_ID=pospos-b87bf\s*$'; then
             printf '%s\n' "$ENV_FILE" > .env
             echo "ใช้ค่าจาก Secret ENV_FILE"
           else
+            if [ -n "$ENV_FILE" ]; then
+              echo "::warning::ENV_FILE หน้าตาไม่ถูกต้อง (ต้องมีบรรทัด VITE_FIREBASE_API_KEY=... และ VITE_FIREBASE_PROJECT_ID=pospos-b87bf) — ไม่ใช้ ดึงค่าจากเว็บร้านแทน"
+            fi
             curl -fsS https://pospos-b87bf.web.app/__/firebase/init.json -o "$RUNNER_TEMP/init.json"
             node -e '
               const c = require(process.argv[1]);
