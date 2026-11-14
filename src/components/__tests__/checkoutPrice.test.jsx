@@ -31,7 +31,7 @@ describe('quickPrices — ราคาปัดลงให้กดเร็ว
 })
 
 describe('หน้าคิดเงิน', () => {
-  it('หัวจอเหลือปุ่มส่วนลดปุ่มเดียว ใส่ราคาย้ายไปอยู่ข้างในหน้าส่วนลด', () => {
+  it('หัวจอมีปุ่มแก้ราคา ให้กรอกราคาที่เก็บลูกค้าจริงได้', () => {
     const cart = [{ key: 'p1', productId: 'p1', name: 'หมึก', price: 10, quantity: 13, modifiers: {} }]
     const ctx = { currentShift: null, productById: new Map(), gpRateFor: () => 0 }
     const html = renderToString(
@@ -39,7 +39,6 @@ describe('หน้าคิดเงิน', () => {
         <CheckoutModal cart={cart} onClose={() => {}} onSuccess={() => {}} />
       </AppDataContext.Provider>,
     )
-    expect(html).toContain('+ ส่วนลด')
-    expect(html).not.toContain('ใส่ราคา')
+    expect(html).toContain('แก้ราคา')
   })
 })

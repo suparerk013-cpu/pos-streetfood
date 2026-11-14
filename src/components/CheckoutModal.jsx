@@ -22,6 +22,8 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   )
   const [payments, setPayments]       = useState([])
   const [changePopup, setChangePopup] = useState(null)
+  // สรุปหลังแก้ราคา: ราคาสินค้า → เก็บจริง → ลดไปเท่าไหร่ ให้คนขายเห็นชัดก่อนรับเงิน
+  const [priceSummary, setPriceSummary] = useState(null)
   const [saving, setSaving]           = useState(false)
   const [saveError, setSaveError]     = useState(null)
   const [discount, setDiscount]       = useState(0)
@@ -69,7 +71,11 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
   const handleDiscountConfirm = () => {
     if (!canAdd) return
     // ราคาที่เก็บจริง 100 จากยอด 130 = ส่วนลด 30
-    setDiscount(priceMode ? subtotal - entered : Math.min(entered, subtotal))
+    const newDiscount = priceMode ? subtotal - entered : Math.min(entered, subtotal)
+    setDiscount(newDiscount)
+    if (newDiscount > 0) {
+      setPriceSummary({ subtotal, total: subtotal - newDiscount, discount: newDiscount })
+    }
     setAdjustMode(null)
     setNumpadValue('0')
     setPayments([])
@@ -121,9 +127,10 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
     return `✓ รับ ${applied.toLocaleString()} ฿  (ค้าง ${newRemaining.toLocaleString()})`
   }
 
+  // เปิดมาที่ "ราคาเก็บจริง" ก่อน — ร้านส่วนใหญ่คิดเป็นราคาที่เก็บ (13 ไม้ 100) ไม่ได้คิดว่าลดกี่บาท
   const openDiscountMode = () => {
-    setAdjustMode('discount')
-    setNumpadValue(discount > 0 ? String(discount) : '0')
+    setAdjustMode('price')
+    setNumpadValue(discount > 0 ? String(total) : '0')
   }
 
   /**
@@ -193,8 +200,8 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
                 <button
                   type="button"
                   onClick={openDiscountMode}
-                  className="min-h-[36px] rounded-lg bg-white/20 text-white text-xs font-bold px-3 active:bg-white/30 whitespace-nowrap">
-                  {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
+                  className="min-h-[40px] rounded-xl bg-white text-orange-600 text-sm font-extrabold px-3.5 active:bg-orange-50 whitespace-nowrap shadow-sm">
+                  {discount > 0 ? `✏️ เก็บ ${total.toLocaleString()}฿` : '✏️ แก้ราคา'}
                 </button>
               )}
               <button type="button" onClick={() => !saving && onClose()} disabled={saving}
@@ -210,8 +217,8 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
               <div className="flex items-center gap-2">
                 <div className="flex-1 grid grid-cols-2 gap-1 rounded-xl bg-white border border-orange-200 p-1" role="tablist">
                   {[
-                    { key: 'discount', label: '🏷️ ลดกี่บาท' },
                     { key: 'price', label: '✏️ ราคาเก็บจริง' },
+                    { key: 'discount', label: '🏷️ ลดกี่บาท' },
                   ].map((m) => (
                     <button key={m.key} type="button" role="tab" aria-selected={adjustMode === m.key}
                       onClick={() => switchAdjustMode(m.key)}
@@ -368,6 +375,32 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
       </div>
 
       {/* Change popup */}
+      {priceSummary && (
+        <ModalBackdrop canClose={false} maxWidthClass="max-w-sm">
+          <div className="p-6 text-center">
+            <p className="text-gray-500 font-medium mb-4">สรุปราคา</p>
+            <div className="flex flex-col gap-2 text-left mb-5">
+              <div className="flex justify-between text-gray-500">
+                <span>ราคาสินค้า</span>
+                <span className="tabular-nums line-through">{priceSummary.subtotal.toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between items-baseline">
+                <span className="font-bold text-gray-800">เก็บลูกค้า</span>
+                <span className="text-3xl font-extrabold text-gray-800 tabular-nums">{priceSummary.total.toLocaleString()} ฿</span>
+              </div>
+              <div className="flex justify-between items-baseline rounded-xl bg-green-50 px-3 py-2 mt-1">
+                <span className="font-bold text-green-700">ส่วนลด</span>
+                <span className="text-2xl font-extrabold text-green-600 tabular-nums">{priceSummary.discount.toLocaleString()} ฿</span>
+              </div>
+            </div>
+            <button type="button" onClick={() => setPriceSummary(null)}
+              className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold text-lg shadow-lg active:scale-95">
+              ตกลง รับเงิน
+            </button>
+          </div>
+        </ModalBackdrop>
+      )}
+
       {changePopup && (
         <ModalBackdrop canClose={false} maxWidthClass="max-w-sm">
           <div className="p-6 text-center">
