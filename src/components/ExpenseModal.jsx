@@ -36,12 +36,13 @@ function ExpenseModal({ entry = null, recentEntries = [], onClose, onSubmit }) {
     [recentEntries, name, picked],
   )
 
-  // หน่วยที่เคยใช้แต่ไม่อยู่ในปุ่มมาตรฐาน (เช่น "กระสอบ" จากรายการเก่า) ต้องกดได้ด้วย
-  const unitChoices = useMemo(() => {
-    const list = [...EXPENSE_UNITS]
-    if (unit && !list.includes(unit)) list.push(unit)
-    return list
-  }, [unit])
+  // หน่วยที่เคยพิมพ์ไว้ + หน่วยที่ใช้บ่อย ขึ้นเป็นคำแนะนำตอนพิมพ์ (ไม่ใช่ปุ่ม) พิมพ์อะไรก็ได้
+  const unitHints = useMemo(() => {
+    const seen = new Set()
+    return [...recentEntries.map((e) => e.unit), ...EXPENSE_UNITS]
+      .map((u) => String(u ?? '').trim())
+      .filter((u) => u && !seen.has(u) && seen.add(u))
+  }, [recentEntries])
 
   const pick = (s) => {
     setName(s.name)
@@ -70,7 +71,7 @@ function ExpenseModal({ entry = null, recentEntries = [], onClose, onSubmit }) {
 
   return (
     <ModalBackdrop onClose={onClose} canClose={canClose}>
-      <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-orange-500 to-red-500 shrink-0">
+      <div className="flex items-center justify-between px-5 py-3 bg-orange-500 shrink-0">
         <h2 className="text-base font-bold text-white">{entry ? 'แก้รายจ่าย' : 'จดรายจ่าย'}</h2>
         <button type="button" onClick={() => canClose && onClose()} disabled={!canClose}
           aria-label="ปิด"
@@ -127,44 +128,43 @@ function ExpenseModal({ entry = null, recentEntries = [], onClose, onSubmit }) {
           />
         </div>
 
-        {/* ── หน่วย ── */}
+        {/* ── จำนวน + หน่วย — พิมพ์เองทั้งคู่ ไม่ใส่ก็ได้ ── */}
         <div>
-          <p className="text-xs font-bold text-gray-500 mb-1.5">หน่วย <span className="font-normal text-gray-400">(ไม่ใส่ก็ได้)</span></p>
-          <div className="grid grid-cols-4 gap-1.5">
-            {unitChoices.map((u) => (
-              <button key={u} type="button" onClick={() => setUnit(unit === u ? '' : u)}
-                aria-pressed={unit === u}
-                className={`min-h-[44px] rounded-xl border-2 text-sm font-bold transition-colors ${
-                  unit === u ? 'border-orange-500 bg-orange-500 text-white' : 'border-gray-200 bg-white text-gray-600'
-                }`}>
-                {u}
-              </button>
-            ))}
+          <div className="grid grid-cols-2 gap-2">
+            <label className="block">
+              <span className="text-xs font-bold text-gray-500">จำนวน <span className="font-normal text-gray-400">(ไม่ใส่ก็ได้)</span></span>
+              <input
+                id="expense-qty"
+                type="text"
+                inputMode="decimal"
+                value={qty}
+                onChange={(e) => setQty(decimalOnly(e.target.value))}
+                placeholder="เช่น 2"
+                className="mt-1 w-full min-h-[52px] rounded-xl border-2 border-gray-200 bg-white px-4 text-lg font-bold tabular-nums focus:outline-none focus:border-orange-400"
+              />
+            </label>
+            <label className="block">
+              <span className="text-xs font-bold text-gray-500">หน่วย <span className="font-normal text-gray-400">(ไม่ใส่ก็ได้)</span></span>
+              <input
+                id="expense-unit"
+                type="text"
+                value={unit}
+                onChange={(e) => setUnit(e.target.value)}
+                placeholder="เช่น ถุง กิโล มัด"
+                list="expense-unit-hints"
+                autoComplete="off"
+                className="mt-1 w-full min-h-[52px] rounded-xl border-2 border-gray-200 bg-white px-4 text-lg font-bold focus:outline-none focus:border-orange-400"
+              />
+              <datalist id="expense-unit-hints">
+                {unitHints.map((u) => <option key={u} value={u} />)}
+              </datalist>
+            </label>
           </div>
-        </div>
-
-        {/* ── จำนวน ── */}
-        <div>
-          <label htmlFor="expense-qty" className="text-xs font-bold text-gray-500">
-            จำนวน <span className="font-normal text-gray-400">(ไม่ใส่ก็ได้)</span>
-          </label>
-          <div className="mt-1 flex items-center gap-2">
-            <input
-              id="expense-qty"
-              type="text"
-              inputMode="decimal"
-              value={qty}
-              onChange={(e) => setQty(decimalOnly(e.target.value))}
-              placeholder="-"
-              className="w-28 min-h-[48px] rounded-xl border-2 border-gray-200 bg-white px-4 text-lg font-bold tabular-nums focus:outline-none focus:border-orange-400"
-            />
-            <span className="text-sm font-bold text-gray-500">{unit}</span>
-            {unitPrice !== null && (
-              <span className="ml-auto text-xs text-gray-400 tabular-nums">
-                ตก{unit || 'ชิ้น'}ละ {Number(unitPrice.toFixed(2)).toLocaleString()} ฿
-              </span>
-            )}
-          </div>
+          {unitPrice !== null && (
+            <p className="mt-1.5 text-xs text-gray-400 tabular-nums">
+              ตก{unit.trim() || 'ชิ้น'}ละ {Number(unitPrice.toFixed(2)).toLocaleString()} ฿
+            </p>
+          )}
         </div>
 
         {/* ── วันที่ + โน้ต ── */}
@@ -185,7 +185,7 @@ function ExpenseModal({ entry = null, recentEntries = [], onClose, onSubmit }) {
         {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</p>}
 
         <button type="button" onClick={handleSubmit} disabled={Boolean(built.error) || saving}
-          className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-bold text-base shadow-lg shadow-orange-200 active:scale-95 transition-all">
+          className="w-full min-h-[56px] rounded-2xl bg-gray-900 disabled:bg-gray-300 text-white font-black text-lg active:scale-95 transition-transform">
           {saving ? 'กำลังบันทึก...' : built.error && (name.trim() || amount) ? built.error : 'บันทึก'}
         </button>
       </div>
