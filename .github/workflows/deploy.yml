@@ -118,9 +118,10 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        # ส่งตรงผ่าน Firebase Rules API (ดูเหตุผลในสคริปต์) — ดัชนีค้นหาขึ้นไว้แล้วจาก deploy.cmd
         run: |
-          npx --yes firebase-tools@14.27.0 deploy --only firestore:rules,firestore:indexes --project pospos-b87bf --non-interactive || {
-            echo "::error::อัปเดตกฎฐานข้อมูลไม่สำเร็จ (เว็บขึ้นแล้ว) — ถ้าขึ้น Permission denied ให้เพิ่มสิทธิ์ Firebase Admin และ Service Usage Consumer ให้บัญชีของกุญแจด้านบน ที่ IAM ของโปรเจกต์ pospos-b87bf"
+          node .github/scripts/deploy-rules.mjs pospos-b87bf firestore.rules || {
+            echo "::error::อัปเดตกฎฐานข้อมูลไม่สำเร็จ (เว็บขึ้นแล้ว) — ถ้าขึ้น 403 ให้เช็คว่าบัญชีของกุญแจด้านบนมีสิทธิ์ Firebase Admin ใน IAM ของโปรเจกต์ pospos-b87bf"
             exit 1
           }
 
