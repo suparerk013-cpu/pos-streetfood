@@ -218,7 +218,7 @@ function SettingsPage() {
 
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
-      <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-3 shadow-sm">
+      <header className="shrink-0 bg-orange-500 text-white px-4 py-3 shadow-sm">
         <h1 className="font-bold text-lg">ตั้งค่าร้าน</h1>
       </header>
 
@@ -366,7 +366,7 @@ function SettingsPage() {
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-bold text-base shadow-lg active:scale-95 transition-all">
+              className="w-full min-h-[56px] rounded-2xl bg-gray-900 disabled:bg-gray-300 text-white font-black text-base active:scale-95 transition-transform">
               {saving ? 'กำลังบันทึก...' : saved ? '✓ บันทึกแล้ว' : 'บันทึกการตั้งค่า'}
             </button>
 

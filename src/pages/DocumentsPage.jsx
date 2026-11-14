@@ -60,7 +60,7 @@ function DocumentsPage() {
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
       {/* Header */}
-      <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-3">
+      <header className="shrink-0 bg-orange-500 text-white px-4 py-3">
         <div className="flex items-center justify-between">
           <h1 className="font-bold text-lg">เอกสาร / บิล</h1>
           {!loading && (

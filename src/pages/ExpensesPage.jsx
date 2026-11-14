@@ -149,20 +149,23 @@ function ExpensesPage() {
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden relative">
       {/* ── หัว ── */}
-      <header className="shrink-0 bg-white border-b border-gray-100">
-        <div className="flex items-center justify-between px-4 pt-3">
-          <h1 className="font-bold text-gray-800 text-base tracking-wide">รายจ่าย</h1>
+      <header className="shrink-0 bg-orange-500 text-white">
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <div className="min-w-0">
+            <p className="text-xs text-white/75 font-semibold truncate">{periodLabel}</p>
+            <h1 className="text-xl font-black leading-tight">รายจ่าย</h1>
+          </div>
           <button type="button" onClick={handleExport} disabled={exporting || entries.length === 0}
-            className="flex items-center gap-1.5 rounded-full bg-green-600 disabled:bg-gray-200 disabled:text-gray-400 text-white text-xs font-bold px-3.5 py-1.5 active:scale-95 transition-all">
-            <Download size={13} />
+            className="shrink-0 min-h-[44px] flex items-center gap-1.5 rounded-xl bg-white/20 disabled:opacity-50 text-white text-sm font-bold px-3.5 active:bg-white/30 transition-all">
+            <Download size={15} />
             {exporting ? 'กำลังสร้าง...' : 'Excel'}
           </button>
         </div>
         <div className="flex gap-1 px-4 mt-2.5" role="tablist">
           {TABS.map((t) => (
             <button key={t.key} type="button" role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)}
-              className={`px-4 py-2 text-sm font-bold border-b-2 transition-colors ${
-                tab === t.key ? 'border-orange-500 text-orange-600' : 'border-transparent text-gray-400'
+              className={`px-4 py-2.5 text-sm font-bold border-b-[3px] transition-colors ${
+                tab === t.key ? 'border-white text-white' : 'border-transparent text-white/65'
               }`}>
               {t.label}
             </button>
@@ -171,7 +174,7 @@ function ExpensesPage() {
       </header>
 
       {/* ── ช่วงเวลา ── */}
-      <div className="shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex items-center gap-2 overflow-x-auto">
+      <div className="shrink-0 bg-white border-b border-gray-100 px-4 py-2 flex flex-wrap items-center gap-2">
         {RANGE_PRESETS.map((r) => (
           <button key={r.key} type="button" onClick={() => setRangePreset(r.key)}
             className={`shrink-0 px-3 py-1 rounded-full text-xs font-bold transition-all ${
@@ -329,7 +332,7 @@ function ExpensesPage() {
 
       {/* ── ปุ่มลอย ── */}
       <button type="button" onClick={() => setEditing({})} disabled={!online}
-        className="absolute bottom-5 right-5 z-10 flex items-center gap-2 rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold px-5 py-3.5 shadow-xl shadow-orange-300/50 active:scale-95 transition-all">
+        className="absolute bottom-5 right-5 z-10 min-h-[60px] flex items-center gap-2 rounded-2xl bg-gray-900 disabled:bg-gray-300 text-white font-black text-lg px-6 shadow-xl active:scale-95 transition-transform">
         <Plus size={20} />
         จดรายจ่าย
       </button>

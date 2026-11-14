@@ -10,6 +10,7 @@ import { LOW_STOCK_THRESHOLD, productCategoryLabel } from '../lib/constants'
 import { bundleStock, netAfterGp, separatePriceOf } from '../lib/pricing'
 import { addBundle, addProduct, deleteProduct, updateProduct } from '../lib/products'
 import { seedInitialProducts } from '../lib/seedProducts'
+import { categoryColorMap, colorOfCategory } from '../lib/categoryColors'
 import { adjustStock, restockProduct } from '../lib/stock'
 
 function InventoryPage() {
@@ -103,11 +104,26 @@ function InventoryPage() {
     return products.filter((p) => p.name?.toLowerCase().includes(term))
   }, [products, search])
 
+  // สีหมวดชุดเดียวกับหน้าขาย คิดจากสินค้าที่ขายอยู่ จะได้ตรงกันทั้งสองหน้า
+  const colorMap = categoryColorMap(allProducts.filter((p) => p.is_active !== false && !p.is_bundle))
+  const lowCount = products.filter((p) => p.is_active !== false && (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD).length
+
   return (
-    <div className="h-full w-full flex flex-col bg-orange-50 overflow-hidden">
-      <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-sm">
-        <div className="flex items-center justify-between px-4 pt-3">
-          <h1 className="font-bold text-lg">คลังสินค้า</h1>
+    <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
+      <header className="shrink-0 bg-orange-500 text-white">
+        <div className="flex items-center justify-between gap-3 px-4 pt-3">
+          <div className="min-w-0">
+            <p className="text-xs text-white/75 font-semibold">
+              {products.length} สินค้า{lowCount > 0 ? ` · ใกล้หมด ${lowCount}` : ''}
+            </p>
+            <h1 className="text-xl font-black leading-tight">คลังสินค้า</h1>
+          </div>
+          {tab === 'products' && (
+            <button type="button" onClick={() => setAddModalOpen(true)}
+              className="shrink-0 min-h-[44px] px-4 rounded-xl bg-white text-orange-600 font-black text-sm shadow-sm active:bg-orange-50">
+              + เพิ่มสินค้า
+            </button>
+          )}
         </div>
         <div className="flex gap-1 px-4 mt-2">
           {[
@@ -126,14 +142,6 @@ function InventoryPage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4">
       {tab === 'products' && (<>
-        <button
-          type="button"
-          onClick={() => setAddModalOpen(true)}
-          className="mb-4 w-full min-h-[56px] rounded-2xl border-2 border-dashed border-orange-300 text-orange-600 font-bold active:scale-95 transition-transform"
-        >
-          + เพิ่มสินค้าใหม่
-        </button>
-
         <div className="mb-4 flex items-center gap-2 bg-white rounded-2xl border border-gray-200 px-3.5 py-2.5">
           <Search size={16} className="text-gray-400 shrink-0" />
           <input
@@ -180,14 +188,17 @@ function InventoryPage() {
             const qty = product.stock_qty ?? 0
             const isLow = qty <= LOW_STOCK_THRESHOLD
             const isArchived = product.is_active === false
+            const color = colorOfCategory(colorMap, product.category)
 
             return (
               <div
                 key={product.id}
-                className={`rounded-2xl border p-4 ${
-                  isArchived ? 'bg-gray-50 border-gray-200 opacity-70' : 'bg-white border-orange-100'
+                className={`relative rounded-2xl border-2 p-4 pl-5 overflow-hidden ${
+                  isArchived ? 'bg-gray-50 border-gray-200 opacity-70' : 'bg-white border-gray-100'
                 }`}
               >
+                {/* แถบสีหมวด สีเดียวกับการ์ดในหน้าขาย */}
+                <span className={`absolute left-0 top-0 bottom-0 w-1.5 ${isArchived ? 'bg-gray-300' : color.bar}`} />
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-start gap-3">
                     <div className="w-12 h-12 shrink-0 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center overflow-hidden">
@@ -217,7 +228,7 @@ function InventoryPage() {
                     </div>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className={`text-2xl font-bold ${isLow ? 'text-red-600' : 'text-gray-800'}`}>
+                    <p className={`text-3xl font-black tabular-nums ${isLow ? 'text-red-600' : 'text-gray-800'}`}>
                       {qty}
                     </p>
                     {isLow && (
@@ -232,9 +243,9 @@ function InventoryPage() {
                   <button
                     type="button"
                     onClick={() => setStockModalTarget({ product, mode: 'restock' })}
-                    className="min-h-[44px] flex-1 rounded-xl bg-orange-600 text-white font-medium active:scale-95 transition-transform"
+                    className="min-h-[48px] flex-[1.4] rounded-xl bg-orange-500 text-white font-black active:scale-95 transition-transform"
                   >
-                    นำเข้าสต็อก
+                    + เติมของ
                   </button>
                   <button
                     type="button"

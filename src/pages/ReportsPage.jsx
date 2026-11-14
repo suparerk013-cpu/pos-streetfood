@@ -347,14 +347,19 @@ function ReportsPage() {
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
       {/* ── Header ── */}
-      <header className="shrink-0 bg-white px-4 py-2.5 border-b border-gray-100">
+      <header className="shrink-0 bg-orange-500 text-white px-4 pt-3 pb-3">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="font-bold text-gray-800 text-base tracking-wide">แดชบอร์ด</h1>
+          <div className="min-w-0">
+            <p className="text-xs text-white/75 font-semibold truncate">
+              {isShiftView ? 'ดูทีละกะ' : `${shiftRows.filter((r) => !r.isOutside).length} กะในช่วงนี้`}
+            </p>
+            <h1 className="text-xl font-black leading-tight">รายงาน</h1>
+          </div>
           <div className="flex items-center gap-2 relative">
             <button type="button" onClick={() => setExportOpen((v) => !v)}
-              className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-gray-500 active:bg-gray-200 transition-all"
+              className="w-11 h-11 rounded-xl bg-white/20 flex items-center justify-center text-white active:bg-white/30 transition-all"
               aria-label="ส่งออกข้อมูล">
-              <Download size={14} />
+              <Download size={18} />
             </button>
             {exportOpen && (
               <div className="absolute right-0 top-10 z-20 w-52 rounded-2xl bg-white border border-gray-100 shadow-xl overflow-hidden">
@@ -369,26 +374,30 @@ function ReportsPage() {
                   💰 บันทึกรอบจ่ายเงินเดลิเวอรี
                 </button>
                 <p className="px-4 py-2 text-[11px] text-gray-400 border-t border-gray-100 leading-snug">
-                  รายงานวัตถุดิบแบบ Excel อยู่ที่หน้าค่าใช้จ่าย
+                  ไฟล์ Excel รายจ่ายอยู่ที่หน้ารายจ่าย
                 </p>
               </div>
             )}
-            <div className="flex bg-gray-100 rounded-full p-0.5">
-              {RANGE_PRESETS.map((r) => (
-                <button key={r.key} type="button"
-                  onClick={() => { setPreset(r.key); setSelectedBar(null); setFocusShift(null) }}
-                  className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
-                    preset === r.key ? 'bg-orange-500 text-white shadow-sm' : 'text-gray-400'
-                  }`}>
-                  {r.key === 'shift' && !currentShift ? 'กะล่าสุด' : r.label}
-                </button>
-              ))}
-            </div>
           </div>
         </div>
+        <div className="flex gap-2 mt-3 overflow-x-auto">
+          {RANGE_PRESETS.map((r) => (
+            <button key={r.key} type="button"
+              onClick={() => { setPreset(r.key); setSelectedBar(null); setFocusShift(null) }}
+              className={`shrink-0 min-h-[40px] px-4 rounded-full text-sm font-bold transition-colors ${
+                preset === r.key ? 'bg-white text-orange-600' : 'bg-white/20 text-white'
+              }`}>
+              {r.key === 'shift' && !currentShift ? 'กะล่าสุด' : r.label}
+            </button>
+          ))}
+        </div>
+      </header>
+
+      {((isShiftView && viewShift) || preset === 'month') && (
+      <div className="shrink-0 bg-white border-b border-gray-100 px-4 py-2">
 
         {isShiftView && viewShift && (
-          <div className="flex items-center justify-between gap-2 mt-2">
+          <div className="flex items-center justify-between gap-2">
             <button type="button" disabled={!olderShift}
               onClick={() => { setFocusShift(olderShift); setSelectedBar(null) }}
               className="min-h-[40px] px-3 rounded-full bg-gray-100 disabled:opacity-30 flex items-center gap-1 text-xs font-bold text-gray-600"
@@ -409,7 +418,7 @@ function ReportsPage() {
         )}
 
         {preset === 'month' && (
-          <div className="flex items-center justify-end gap-1 mt-2">
+          <div className="flex items-center justify-end gap-1">
             <button type="button" onClick={() => setMonthCursor((p) => new Date(p.getFullYear(), p.getMonth() - 1, 1))}
               className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center text-gray-500" aria-label="เดือนก่อนหน้า">
               <ChevronLeft size={15} />
@@ -424,7 +433,8 @@ function ReportsPage() {
             </button>
           </div>
         )}
-      </header>
+      </div>
+      )}
 
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-3 max-w-5xl mx-auto w-full grid gap-2.5 lg:grid-cols-2 items-start">

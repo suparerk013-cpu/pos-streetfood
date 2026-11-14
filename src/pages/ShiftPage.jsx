@@ -288,15 +288,14 @@ function ShiftPage() {
   /* ─────────────── ยังไม่มีกะ ─────────────── */
   if (!currentShift) return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
-      <header className="shrink-0 bg-gradient-to-r from-orange-500 to-red-600 text-white px-4 py-3 shadow-sm flex items-center gap-2">
-        <span className="text-base">🔓</span>
-        <h1 className="font-bold text-lg">เปิดกะ</h1>
+      <header className="shrink-0 bg-orange-500 text-white px-4 pt-3 pb-3">
+        <p className="text-xs text-white/75 font-semibold">ยังไม่ได้เปิดกะ</p>
+        <h1 className="text-xl font-black leading-tight">เปิดกะ</h1>
       </header>
 
       <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-4">
         {/* Open shift card */}
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="h-1.5 bg-gradient-to-r from-orange-400 to-red-400" />
           <div className="p-5 flex flex-col gap-4">
             <div>
               <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-1">เงินทอนตั้งต้นในลิ้นชัก</p>
@@ -332,7 +331,7 @@ function ShiftPage() {
             </label>
 
             <button type="button" onClick={handleOpenShift} disabled={opening || !online}
-              className="w-full min-h-[60px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-xl shadow-xl shadow-orange-200 active:scale-95 transition-all">
+              className="w-full min-h-[60px] rounded-2xl bg-gray-900 disabled:bg-gray-300 text-white font-black text-xl active:scale-95 transition-transform">
               {opening ? 'กำลังเปิดกะ...' : online ? '🔓 เปิดกะ' : 'ออฟไลน์ — เปิดกะไม่ได้'}
             </button>
           </div>
@@ -356,8 +355,8 @@ function ShiftPage() {
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
 
-      {/* Header — สีเขียว แสดงสถานะกะ */}
-      <header className="shrink-0 bg-gradient-to-r from-green-500 to-emerald-600 px-4 pt-3 pb-4 shadow-md">
+      {/* Header — หัวส้มแบบเดียวกับทุกหน้า แสดงยอดของกะนี้ */}
+      <header className="shrink-0 bg-orange-500 px-4 pt-3 pb-4">
         <div className="flex items-center gap-2 mb-1">
           <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
           <p className="text-white/80 text-[10px] font-bold uppercase tracking-widest">กะกำลังทำงาน</p>
@@ -385,38 +384,26 @@ function ShiftPage() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-3 flex flex-col gap-3">
 
-          {/* ── ยอดแยกประเภท ── */}
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="px-4 pt-3 pb-1">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">ยอดขายแยกประเภท</p>
-            </div>
-            <div className="px-4 pb-3 mt-1 flex flex-col gap-2">
-              {[
-                { label: '💵 เงินสด', value: summary.cashSales, color: 'from-green-400 to-emerald-500' },
-                { label: '📱 โมบายแบงค์กิ้ง', value: summary.promptpaySales, color: 'from-blue-400 to-indigo-500' },
-                ...Object.entries(summary.deliverySales).map(([p, v]) => ({
-                  label: `${PLATFORM_ICONS[p] ?? '🛵'} ${p}`, value: v, color: 'from-orange-400 to-red-400',
-                })),
-              ].map((row) => (
-                <div key={row.label}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs font-medium text-gray-600">{row.label}</span>
-                    <span className="text-xs font-extrabold text-gray-800 tabular-nums">{row.value.toLocaleString()} ฿</span>
-                  </div>
-                  <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className={`h-full bg-gradient-to-r ${row.color} rounded-full transition-all duration-500`}
-                      style={{ width: summary.total > 0 ? `${Math.max((row.value / summary.total) * 100, row.value > 0 ? 3 : 0)}%` : '0%' }} />
-                  </div>
-                </div>
-              ))}
-              {summary.changeTotal > 0 && (
-                <div className="flex items-center justify-between pt-1 border-t border-gray-100 mt-1">
-                  <span className="text-xs text-gray-400">เงินทอนที่จ่ายไป</span>
-                  <span className="text-xs font-bold text-gray-500 tabular-nums">{summary.changeTotal.toLocaleString()} ฿</span>
-                </div>
-              )}
-            </div>
+          {/* ── ยอดแยกประเภท — กล่องสีเดียวกับปุ่มจ่ายเงิน: เงินสดเขียว โอนฟ้า เดลิเวอรีส้ม ── */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {[
+              { label: '💵 เงินสด', value: summary.cashSales, color: 'bg-emerald-600' },
+              { label: '📱 โอน/สแกน', value: summary.promptpaySales, color: 'bg-sky-600' },
+              ...Object.entries(summary.deliverySales).map(([p, v]) => ({
+                label: `${PLATFORM_ICONS[p] ?? '🛵'} ${p}`, value: v, color: 'bg-orange-500',
+              })),
+            ].map((row) => (
+              <div key={row.label} className={`${row.color} text-white rounded-2xl px-3.5 py-3`}>
+                <p className="text-xs font-bold text-white/85 truncate">{row.label}</p>
+                <p className="text-2xl font-black tabular-nums leading-tight">{row.value.toLocaleString()}</p>
+              </div>
+            ))}
           </div>
+          {summary.changeTotal > 0 && (
+            <p className="-mt-1 px-1 text-xs text-gray-400">
+              เงินทอนที่จ่ายไป <span className="font-bold text-gray-500 tabular-nums">{summary.changeTotal.toLocaleString()} ฿</span>
+            </p>
+          )}
 
           {/* ── นับของเหลือ (ข้ามได้) ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -514,7 +501,6 @@ function ShiftPage() {
 
           {/* ── นับเงินปิดกะ ── */}
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
-            <div className="h-1 bg-gradient-to-r from-red-400 to-rose-500" />
             <div className="px-4 pt-3 pb-4 flex flex-col gap-3">
               <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">🔒 นับเงินปิดกะ</p>
 
@@ -581,7 +567,7 @@ function ShiftPage() {
               ) : (
                 <button type="button" onClick={handleCloseShift}
                   disabled={closing || !online}
-                  className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-red-500 to-rose-600 disabled:from-gray-200 disabled:to-gray-200 disabled:text-gray-400 text-white font-extrabold text-lg shadow-lg shadow-red-200 active:scale-95 transition-all">
+                  className="w-full min-h-[56px] rounded-2xl bg-gray-900 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-lg active:scale-95 transition-transform">
                   {closing ? 'กำลังปิดกะ...' : !online ? 'ออฟไลน์ — ปิดกะไม่ได้' : '🔒 ยืนยันปิดกะ'}
                 </button>
               )}
@@ -753,7 +739,7 @@ function ShiftPage() {
               </button>
               <button type="button"
                 onClick={() => { setCashCounted(countDraft === '0' ? '0' : countDraft); setCountingOpen(false) }}
-                className="flex-[2] min-h-[52px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-extrabold">
+                className="flex-[2] min-h-[52px] rounded-2xl bg-gray-900 text-white font-black">
                 ยืนยันยอดที่นับได้
               </button>
             </div>
