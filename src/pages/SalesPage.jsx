@@ -8,7 +8,7 @@ import ModalBackdrop from '../components/ModalBackdrop'
 import ProductGrid from '../components/ProductGrid'
 import SuccessModal from '../components/SuccessModal'
 import { useAppData } from '../lib/appDataContext'
-import { isBundle, missingDeliveryPrice, priceFor, sellableIn } from '../lib/bundles'
+import { expandToStockUnits, isBundle, missingDeliveryPrice, priceFor, remainingAfterCart, sellableIn } from '../lib/bundles'
 import { PLATFORM_BUTTON_BG, PLATFORM_ICONS, productCategoryLabel } from '../lib/constants'
 import { bundleStock } from '../lib/pricing'
 import { searchProducts } from '../lib/productSearch'
@@ -105,6 +105,12 @@ function SalesPage() {
 
   // สีตามหมวดคิดจากสินค้าทั้งร้าน ไม่ใช่เฉพาะช่องทางนี้ สลับหน้าร้าน/เดลิเวอรีแล้วสีหมวดเดิมไม่เปลี่ยน
   const colorMap = useMemo(() => categoryColorMap(activeProducts), [activeProducts])
+
+  // ป้าย "เหลือ" บนการ์ด = สต็อกลบของที่กดลงตะกร้าแล้ว (รวมของแถมและส่วนประกอบเซ็ต)
+  const remainingByProduct = useMemo(() => {
+    const usage = expandToStockUnits(cart, productById)
+    return new Map(channelProducts.map((p) => [p.id, remainingAfterCart(p, usage, productById)]))
+  }, [cart, channelProducts, productById])
 
   const categories = useMemo(
     () => [...new Set(channelProducts.map((p) => p.category).filter(Boolean))],
@@ -305,6 +311,7 @@ function SalesPage() {
                 products={visibleProducts}
                 cartQtyByProductId={cartQtyByProductId}
                 maxByProduct={maxByProduct}
+                remainingByProduct={remainingByProduct}
                 colorMap={colorMap}
                 onSelectProduct={handleSelectProduct}
                 emptyMessage={

@@ -107,3 +107,28 @@ describe('expandToStockUnits', () => {
     expect(map.get('p2')).toBe(4)
   })
 })
+
+describe('remainingAfterCart — ป้ายเหลือลดตามที่กดลงตะกร้า', async () => {
+  const { expandToStockUnits, remainingAfterCart } = await import('../bundles')
+  const squid = { id: 'p1', stock_qty: 40 }
+  const mussel = { id: 'p2', stock_qty: 3 }
+  const set8 = { id: 'b1', is_bundle: true, components: [{ product_id: 'p1', qty: 8 }] }
+  const byId = new Map([['p1', squid], ['p2', mussel], ['b1', set8]])
+
+  it('กดหมึก 13 ไม้ เหลือ 40 → 27', () => {
+    const usage = expandToStockUnits([{ productId: 'p1', quantity: 13 }], byId)
+    expect(remainingAfterCart(squid, usage, byId)).toBe(27)
+    expect(remainingAfterCart(mussel, usage, byId)).toBe(3)
+  })
+
+  it('กดเซ็ต 8 ไม้ 2 ชุด หมึกเหลือ 24 และเซ็ตทำได้อีก 3 ชุด', () => {
+    const usage = expandToStockUnits([{ productId: 'b1', quantity: 2 }], byId)
+    expect(remainingAfterCart(squid, usage, byId)).toBe(24)
+    expect(remainingAfterCart(set8, usage, byId)).toBe(3)
+  })
+
+  it('ไม่ติดลบ', () => {
+    const usage = expandToStockUnits([{ productId: 'p2', quantity: 5 }], byId)
+    expect(remainingAfterCart(mussel, usage, byId)).toBe(0)
+  })
+})

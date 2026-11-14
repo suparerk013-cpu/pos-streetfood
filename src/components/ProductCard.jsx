@@ -7,8 +7,10 @@ import { CRITICAL_STOCK_THRESHOLD } from '../lib/constants'
  * ช่วงคนเยอะคนขายไม่อ่านชื่อ จำสีกับตำแหน่งเอา — ส้มคือหมึก ฟ้าคือหอย
  * ราคาตัวโตอยู่มุมล่างซ้าย จำนวนที่กดไว้ขึ้นเป็นวงกลมขาวมุมขวาบน
  */
-function ProductCard({ product, cartQty = 0, maxQty, color = UNCATEGORIZED_COLOR, onSelect }) {
+function ProductCard({ product, cartQty = 0, maxQty, remaining, color = UNCATEGORIZED_COLOR, onSelect }) {
   const stockQty = product.stock_qty ?? 0
+  // ที่เหลือหลังหักของในตะกร้า — กดหมึก 13 ไม้จาก 40 ป้ายต้องขึ้น 27 ไม่ใช่ 40 ค้างไว้
+  const left = remaining ?? stockQty
   const outOfStock = stockQty <= 0
   // เพดานจริงอาจต่ำกว่าสต็อก เพราะโปรแถมกินของในสต็อกด้วย
   // ถ้าใช้สต็อกตรง ๆ การ์ดจะยังดูกดได้ทั้งที่กดแล้วไม่มีอะไรเกิดขึ้น
@@ -43,9 +45,9 @@ function ProductCard({ product, cartQty = 0, maxQty, color = UNCATEGORIZED_COLOR
           {product.price}<span className="text-base ml-0.5">฿</span>
         </span>
         <span className={`shrink-0 text-xs font-bold rounded-full px-2 py-0.5 ${
-          outOfStock ? 'bg-black/15' : cartFull ? 'bg-white text-gray-900' : stockQty <= CRITICAL_STOCK_THRESHOLD ? 'bg-red-600 ring-2 ring-white' : 'bg-black/20'
+          outOfStock ? 'bg-black/15' : cartFull ? 'bg-white text-gray-900' : left <= CRITICAL_STOCK_THRESHOLD ? 'bg-red-600 ring-2 ring-white' : 'bg-black/20'
         }`}>
-          {outOfStock ? 'หมด' : cartFull ? 'ครบแล้ว' : `เหลือ ${stockQty}`}
+          {outOfStock ? 'หมด' : cartFull ? 'ครบแล้ว' : `เหลือ ${left}`}
         </span>
       </div>
     </button>

@@ -53,3 +53,20 @@ export function expandToStockUnits(lines, productById) {
   })
   return map
 }
+
+/**
+ * ของเหลือหลังหักที่กดลงตะกร้าแล้ว — ป้าย "เหลือ" บนการ์ดสินค้าจะได้ลดตามที่กด
+ *
+ * `usage` = ผลของ expandToStockUnits(ตะกร้า) คือของจริงที่จะออกจากร้าน รวมของแถมและส่วนประกอบเซ็ต
+ * เซ็ตคิดจากส่วนประกอบที่เหลือ — กดเซ็ตหมึก 8 ไม้ไปแล้ว เซ็ตอื่นที่ใช้หมึกก็ต้องลดด้วย
+ */
+export function remainingAfterCart(product, usage, productById) {
+  const left = (id, stock) => Math.max(0, (stock ?? 0) - (usage?.get(id) ?? 0))
+  if (!isBundle(product)) return left(product.id, product.stock_qty)
+  const components = product.components.filter((c) => (c.qty ?? 0) > 0)
+  if (components.length === 0) return 0
+  return components.reduce((min, c) => {
+    const stock = left(c.product_id, productById?.get(c.product_id)?.stock_qty)
+    return Math.min(min, Math.floor(stock / c.qty))
+  }, Infinity)
+}
