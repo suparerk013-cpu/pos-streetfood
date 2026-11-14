@@ -48,14 +48,25 @@ export function useOrdersInRange(from, to, { includeVoided = false } = {}) {
   return { orders, loading }
 }
 
-/** บิลของกะที่ระบุ — ค้นด้วย shift_id ตรง ๆ ไม่ใช่เดาจากเวลาเปิดกะ */
+/**
+ * เพดานบิลต่อกะ — ร้านขายราว 60–100 บิลต่อกะ ตั้งเผื่อไว้มาก
+ * ไม่มีบิลก็ไม่เสียค่าอ่าน เพดานมีไว้กันพังเงียบ ๆ ถ้ามีบั๊กเท่านั้น
+ */
+export const SHIFT_ORDER_LIMIT = 2000
+
+/**
+ * บิลของกะที่ระบุ — ค้นด้วย shift_id ตรง ๆ ไม่ใช่เดาจากเวลาเปิดกะ
+ * `truncated` = ชนเพดาน ยอดที่ได้อาจไม่ครบ หน้าปิดกะต้องเตือนก่อนบันทึกยอด
+ */
 export function useOrdersForShift(shiftId) {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [truncated, setTruncated] = useState(false)
 
   useEffect(() => {
     if (!shiftId) {
       setOrders([])
+      setTruncated(false)
       setLoading(false)
       return undefined
     }
@@ -64,15 +75,16 @@ export function useOrdersForShift(shiftId) {
       collection(db, 'orders'),
       where('shift_id', '==', shiftId),
       orderBy('created_at', 'desc'),
-      limit(ORDER_PAGE_SIZE),
+      limit(SHIFT_ORDER_LIMIT),
     )
     return onSnapshot(q, (snap) => {
       setOrders(snap.docs.map((d) => ({ id: d.id, ...d.data() })).filter((o) => !o.is_voided))
+      setTruncated(snap.size >= SHIFT_ORDER_LIMIT)
       setLoading(false)
     }, logSnapshotError('บิลขายในกะ'))
   }, [shiftId])
 
-  return { orders, loading }
+  return { orders, loading, truncated }
 }
 
 /**

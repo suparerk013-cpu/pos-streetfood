@@ -121,7 +121,7 @@ function ShiftPage() {
   const [countingOpen, setCountingOpen] = useState(false)
   const [countDraft, setCountDraft] = useState('0')
 
-  const { orders: shiftOrders } = useOrdersForShift(currentShift?.id)
+  const { orders: shiftOrders, truncated: shiftTruncated } = useOrdersForShift(currentShift?.id)
 
   // ยอดเดลิเวอรีของกะนี้ เก็บแยกจาก orders จึงต้องดึงมาบวกเอง
   useEffect(() => {
@@ -205,6 +205,7 @@ function ShiftPage() {
       const countedRows = countRows.filter((r) => r.filled)
       for (const row of countedRows) {
         await applyClosingCount({
+          shiftId: currentShift.id,
           productId: row.productId,
           countedQty: row.counted,
           discardLeftover: row.isDaily,
@@ -395,6 +396,11 @@ function ShiftPage() {
               </div>
             ))}
           </div>
+          {shiftTruncated && (
+            <p className="rounded-xl bg-amber-50 border border-amber-200 px-3 py-2 text-sm font-semibold text-amber-800">
+              ⚠️ กะนี้มีบิลเยอะเกินที่ระบบดึงได้ ยอดด้านบนอาจไม่ครบ แจ้งคนดูแลระบบก่อนปิดกะ
+            </p>
+          )}
           {summary.changeTotal > 0 && (
             <p className="-mt-1 px-1 text-xs text-gray-400">
               เงินทอนที่จ่ายไป <span className="font-bold text-gray-500 tabular-nums">{summary.changeTotal.toLocaleString()} ฿</span>

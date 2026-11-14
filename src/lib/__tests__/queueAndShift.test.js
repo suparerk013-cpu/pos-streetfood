@@ -43,3 +43,11 @@ describe('dailyProductsToReset — เปิดกะล้างสต็อก
     expect(dailyProductsToReset(products).map((p) => p.id)).toEqual(['a'])
   })
 })
+
+describe('closingLogIds — กดปิดกะซ้ำไม่บันทึกของทิ้งซ้ำ', async () => {
+  const { closingLogIds } = await import('../stock')
+  it('รหัสประวัติตายตัวต่อกะต่อสินค้า กดซ้ำได้รหัสเดิม', () => {
+    expect(closingLogIds('s1', 'p1')).toEqual(closingLogIds('s1', 'p1'))
+    expect(closingLogIds('s1', 'p1')).not.toEqual(closingLogIds('s2', 'p1'))
+  })
+})

@@ -48,8 +48,33 @@ export function adjustStock(productId, qtyChange, note) {
   return applyStockChange(productId, qtyChange, 'adjustment', note)
 }
 
-export function reportDamage({ productId, qty, reason }) {
-  return applyStockChange(productId, -Math.abs(qty), 'damage', reason)
+export class DamageExceedsStockError extends Error {
+  constructor(available) {
+    super(`มีของอยู่แค่ ${available} แจ้งเสียเกินนี้ไม่ได้`)
+    this.name = 'DamageExceedsStockError'
+  }
+}
+
+/** แจ้งของเสีย — เช็คในทรานแซกชันด้วย เผื่อเพิ่งขายไปจากอีกเครื่องจนของเหลือน้อยกว่าที่เห็นบนจอ */
+export async function reportDamage({ productId, qty, reason }) {
+  const productRef = doc(db, 'products', productId)
+  const logRef = doc(collection(db, 'stock_logs'))
+  const amount = Math.abs(qty)
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(productRef)
+    const currentQty = snap.exists() ? (snap.data().stock_qty ?? 0) : 0
+    if (amount > currentQty) throw new DamageExceedsStockError(currentQty)
+    transaction.update(productRef, { stock_qty: currentQty - amount })
+    transaction.set(logRef, {
+      product_id: productId,
+      type: 'damage',
+      qty_change: -amount,
+      note: reason || null,
+      order_id: null,
+      created_at: serverTimestamp(),
+    })
+  })
 }
 
 export async function resetDailyStock(productId) {
@@ -77,17 +102,29 @@ export async function resetDailyStock(productId) {
  *
  * แยกบันทึกเป็นสองเหตุผลในธุรกรรมเดียว เพราะสองอย่างนี้คนละเรื่องกัน
  * - ส่วนต่างจากที่ระบบคิดไว้ = ของหายโดยไม่มีบิล ต้องตามหาสาเหตุ
- * - ของเหลือของสินค้ารายวัน = ทิ้ง เป็นต้นทุนที่จ่ายไปแล้วขายไม่ได้
+ * - ของเหลือของสินค้ารายวัน = ทิ้ง ขายไม่ได้
  * ถ้ารวมเป็นก้อนเดียวจะแยกไม่ออกว่าวันไหนสั่งของเกิน วันไหนมีของหาย
+ *
+ * กดปิดกะซ้ำได้ไม่เพี้ยน: ประวัติใช้รหัสตายตัวต่อกะต่อสินค้า ถ้าเคยบันทึกไปแล้ว
+ * (เน็ตหลุดหลังปรับสต็อกบางตัว แล้วกดปิดกะใหม่) ตัวนั้นข้ามไปเลย ไม่บันทึกของทิ้งซ้ำ
  */
-export async function applyClosingCount({ productId, countedQty, discardLeftover, note }) {
+export function closingLogIds(shiftId, productId) {
+  return { diff: `count_${shiftId}_${productId}`, waste: `waste_${shiftId}_${productId}` }
+}
+
+export async function applyClosingCount({ shiftId = null, productId, countedQty, discardLeftover, note }) {
   const productRef = doc(db, 'products', productId)
-  const diffLogRef = doc(collection(db, 'stock_logs'))
-  const wasteLogRef = doc(collection(db, 'stock_logs'))
+  const ids = shiftId ? closingLogIds(shiftId, productId) : null
+  const diffLogRef = ids ? doc(db, 'stock_logs', ids.diff) : doc(collection(db, 'stock_logs'))
+  const wasteLogRef = ids ? doc(db, 'stock_logs', ids.waste) : doc(collection(db, 'stock_logs'))
   const counted = Math.max(0, Math.floor(countedQty))
 
   await runTransaction(db, async (transaction) => {
     const snap = await transaction.get(productRef)
+    if (ids) {
+      const [diffDone, wasteDone] = await Promise.all([transaction.get(diffLogRef), transaction.get(wasteLogRef)])
+      if (diffDone.exists() || wasteDone.exists()) return
+    }
     const currentQty = snap.exists() ? (snap.data().stock_qty ?? 0) : 0
     const diff = counted - currentQty
 
@@ -96,6 +133,7 @@ export async function applyClosingCount({ productId, countedQty, discardLeftover
     if (diff !== 0) {
       transaction.set(diffLogRef, {
         product_id: productId,
+        shift_id: shiftId,
         type: 'shift_count',
         qty_change: diff,
         note: note || 'นับของเหลือตอนปิดกะ',
@@ -107,6 +145,7 @@ export async function applyClosingCount({ productId, countedQty, discardLeftover
     if (discardLeftover && counted > 0) {
       transaction.set(wasteLogRef, {
         product_id: productId,
+        shift_id: shiftId,
         type: 'waste',
         qty_change: -counted,
         note: 'ของเหลือทิ้งตอนปิดกะ',

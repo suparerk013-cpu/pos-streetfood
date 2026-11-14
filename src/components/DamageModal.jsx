@@ -13,7 +13,10 @@ function DamageModal({ products, onClose, onSubmit }) {
 
   const parsedQty = Number(qty)
   const finalReason = reason === 'อื่นๆ' ? customReason.trim() : reason
-  const isValid = productId !== '' && Number.isInteger(parsedQty) && parsedQty > 0 && finalReason !== ''
+  // แจ้งเสียเกินของที่มีไม่ได้ สต็อกจะติดลบแล้วยอดคลังเพี้ยนไปทุกวันหลังจากนั้น
+  const stockOf = products.find((p) => p.id === productId)?.stock_qty ?? 0
+  const overStock = productId !== '' && parsedQty > stockOf
+  const isValid = productId !== '' && Number.isInteger(parsedQty) && parsedQty > 0 && !overStock && finalReason !== ''
   const canClose = !saving
 
   const handleSubmit = async () => {
@@ -22,9 +25,11 @@ function DamageModal({ products, onClose, onSubmit }) {
     setError(null)
     try {
       await onSubmit({ productId, qty: parsedQty, reason: finalReason })
-    } catch {
+    } catch (err) {
       setSaving(false)
-      setError('บันทึกไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
+      setError(err?.name === 'DamageExceedsStockError'
+        ? err.message
+        : 'บันทึกไม่สำเร็จ อาจเป็นเพราะอินเทอร์เน็ตขัดข้อง ลองอีกครั้ง')
     }
   }
 
@@ -68,6 +73,11 @@ function DamageModal({ products, onClose, onSubmit }) {
             onChange={(event) => setQty(event.target.value)}
             className="mt-1 w-full min-h-[52px] rounded-xl border border-gray-200 px-4 text-lg"
           />
+          {overStock && (
+            <span className="block mt-1 text-sm font-semibold text-red-600">
+              มีอยู่แค่ {stockOf} — แจ้งเสียเกินของที่มีไม่ได้
+            </span>
+          )}
         </label>
 
         <div className="mb-4">

@@ -1,4 +1,5 @@
 import { UNCATEGORIZED_COLOR } from '../lib/categoryColors'
+import { CRITICAL_STOCK_THRESHOLD } from '../lib/constants'
 
 /**
  * การ์ดสินค้าแบบปุ่มใหญ่ สีตามหมวด
@@ -42,7 +43,7 @@ function ProductCard({ product, cartQty = 0, maxQty, color = UNCATEGORIZED_COLOR
           {product.price}<span className="text-base ml-0.5">฿</span>
         </span>
         <span className={`shrink-0 text-xs font-bold rounded-full px-2 py-0.5 ${
-          outOfStock ? 'bg-black/15' : cartFull ? 'bg-white text-gray-900' : stockQty <= 5 ? 'bg-red-600 ring-2 ring-white' : 'bg-black/20'
+          outOfStock ? 'bg-black/15' : cartFull ? 'bg-white text-gray-900' : stockQty <= CRITICAL_STOCK_THRESHOLD ? 'bg-red-600 ring-2 ring-white' : 'bg-black/20'
         }`}>
           {outOfStock ? 'หมด' : cartFull ? 'ครบแล้ว' : `เหลือ ${stockQty}`}
         </span>

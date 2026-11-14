@@ -74,9 +74,5 @@ export const CHANNELS = {
   both: 'ทั้งคู่',
 }
 
-/** ค่าเริ่มต้นของตัวเลขต้นทุน/GP ที่ตั้งได้ในหน้าตั้งค่า */
+/** ค่า GP เริ่มต้นของแอปเดลิเวอรี ตั้งเองได้ในหน้าตั้งค่า */
 export const DEFAULT_GP_RATE = 0.30
-export const DEFAULT_PACKAGING_COST = 5
-export const DEFAULT_CONSUMABLE_COST = 1.5
-/** กำไรเป้าหมายที่ใช้คำนวณราคาเดลิเวอรีแนะนำ */
-export const TARGET_MARGIN = 0.35
