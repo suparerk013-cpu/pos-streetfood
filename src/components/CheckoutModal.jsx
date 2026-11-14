@@ -126,9 +126,14 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
     setNumpadValue(discount > 0 ? String(discount) : '0')
   }
 
-  const openPriceMode = () => {
-    setAdjustMode('price')
-    setNumpadValue(discount > 0 ? String(total) : '0')
+  /**
+   * สลับระหว่าง "ลดกี่บาท" กับ "ราคาที่เก็บจริง" ในหน้าส่วนลดเดียวกัน
+   * ตัวเลขที่กรอกไว้แปลงตามให้ — ลด 40 จากยอด 340 สลับไปจะเห็น 300 ไม่ต้องกรอกใหม่
+   */
+  const switchAdjustMode = (mode) => {
+    if (mode === adjustMode) return
+    setNumpadValue(entered > 0 && entered <= subtotal ? String(subtotal - entered) : '0')
+    setAdjustMode(mode)
   }
 
   const cancelDiscountMode = () => {
@@ -185,20 +190,12 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
             </div>
             <div className="shrink-0 flex flex-col items-end gap-1.5">
               {payments.length === 0 && !discountMode && (
-                <div className="flex gap-1.5">
-                  <button
-                    type="button"
-                    onClick={openPriceMode}
-                    className="min-h-[36px] rounded-lg bg-white text-orange-600 text-xs font-extrabold px-3 active:bg-orange-50 whitespace-nowrap shadow-sm">
-                    ✏️ ใส่ราคา
-                  </button>
-                  <button
-                    type="button"
-                    onClick={openDiscountMode}
-                    className="min-h-[36px] rounded-lg bg-white/20 text-white text-xs font-bold px-3 active:bg-white/30 whitespace-nowrap">
-                    {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={openDiscountMode}
+                  className="min-h-[36px] rounded-lg bg-white/20 text-white text-xs font-bold px-3 active:bg-white/30 whitespace-nowrap">
+                  {discount > 0 ? `🏷️ ลด ${discount}฿` : '+ ส่วนลด'}
+                </button>
               )}
               <button type="button" onClick={() => !saving && onClose()} disabled={saving}
                 className="w-10 h-10 rounded-full bg-white/20 text-white text-2xl font-bold flex items-center justify-center disabled:opacity-40">
@@ -209,24 +206,32 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
 
           {/* ══ METHOD TABS or DISCOUNT BANNER ══ */}
           {discountMode ? (
-            <div className="shrink-0 flex items-center justify-between px-3 py-2 bg-orange-50 border-b border-orange-100">
+            <div className="shrink-0 px-3 py-2 bg-orange-50 border-b border-orange-100 flex flex-col gap-1.5">
               <div className="flex items-center gap-2">
-                <span className="text-lg">{priceMode ? '✏️' : '🏷️'}</span>
-                <div>
-                  <p className="text-orange-700 font-bold text-sm leading-none">
-                    {priceMode ? 'ใส่ราคาที่เก็บลูกค้าจริง' : 'ป้อนส่วนลด'}
-                  </p>
-                  <p className="text-orange-400 text-[10px]">
-                    {priceMode
-                      ? `ยอดสินค้า ${subtotal.toLocaleString()} ฿ — ระบบคิดส่วนลดให้เอง`
-                      : 'กรอกจำนวนเงินที่ต้องการลด'}
-                  </p>
+                <div className="flex-1 grid grid-cols-2 gap-1 rounded-xl bg-white border border-orange-200 p-1" role="tablist">
+                  {[
+                    { key: 'discount', label: '🏷️ ลดกี่บาท' },
+                    { key: 'price', label: '✏️ ราคาเก็บจริง' },
+                  ].map((m) => (
+                    <button key={m.key} type="button" role="tab" aria-selected={adjustMode === m.key}
+                      onClick={() => switchAdjustMode(m.key)}
+                      className={`min-h-[40px] rounded-lg text-sm font-bold transition-colors ${
+                        adjustMode === m.key ? 'bg-orange-500 text-white' : 'text-gray-500 active:bg-orange-50'
+                      }`}>
+                      {m.label}
+                    </button>
+                  ))}
                 </div>
+                <button type="button" onClick={cancelDiscountMode}
+                  className="shrink-0 min-h-[40px] text-xs text-gray-500 font-semibold px-3 rounded-xl bg-white border border-gray-200 active:scale-95">
+                  ยกเลิก
+                </button>
               </div>
-              <button type="button" onClick={cancelDiscountMode}
-                className="text-xs text-gray-500 font-semibold px-3 py-1.5 rounded-xl bg-white border border-gray-200 active:scale-95">
-                ยกเลิก
-              </button>
+              <p className="text-orange-500 text-[11px] leading-none">
+                {priceMode
+                  ? `ยอดสินค้า ${subtotal.toLocaleString()} ฿ — กรอกราคาที่เก็บลูกค้าจริง ระบบคิดส่วนลดให้เอง`
+                  : 'กรอกจำนวนเงินที่ต้องการลด'}
+              </p>
             </div>
           ) : (
             <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1">
