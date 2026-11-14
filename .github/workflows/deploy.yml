@@ -69,4 +69,13 @@ jobs:
 
       - name: Secrets not set
         if: env.HAS_SECRETS != 'true'
-        run: echo "::notice::ยังไม่ได้ตั้ง FIREBASE_SERVICE_ACCOUNT / ENV_FILE ใน GitHub Secrets — เทสต์และ build ผ่าน แต่ยังไม่ได้ขึ้นเว็บ"
+        env:
+          SA_SET: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+          ENV_SET: ${{ secrets.ENV_FILE != '' }}
+          SA_IN_VARS: ${{ vars.FIREBASE_SERVICE_ACCOUNT != '' }}
+          ENV_IN_VARS: ${{ vars.ENV_FILE != '' }}
+        run: |
+          # บอกให้ชัดว่าตัวไหนหาย จะได้แก้ถูกที่ — ไม่พิมพ์ค่าจริงออกมา
+          echo "FIREBASE_SERVICE_ACCOUNT ใน Secrets: $SA_SET (อยู่ในแท็บ Variables แทน: $SA_IN_VARS)"
+          echo "ENV_FILE ใน Secrets: $ENV_SET (อยู่ในแท็บ Variables แทน: $ENV_IN_VARS)"
+          echo "::warning::ยังไม่ได้ขึ้นเว็บ — Secrets ไม่ครบ ดูบรรทัดด้านบนว่าตัวไหนหาย"
