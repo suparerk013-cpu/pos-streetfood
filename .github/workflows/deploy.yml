@@ -1,0 +1,72 @@
+name: Deploy
+
+# ขึ้นเว็บอัตโนมัติทุกครั้งที่มีโค้ดใหม่ใน branch ที่ร้านใช้งาน — ทำแทน deploy.cmd
+# ลำดับเหมือน deploy.cmd: เทสต์ → build → ขึ้นเว็บ → อัปเดตกฎฐานข้อมูล
+# เทสต์ไม่ผ่านจะหยุดก่อน ไม่มีทางขึ้นเว็บที่พัง
+#
+# ต้องตั้ง Secrets ใน GitHub ครั้งแรก 2 ตัว (ดูขั้นตอนใน README หัวข้อ "ขึ้นเว็บอัตโนมัติ")
+#   FIREBASE_SERVICE_ACCOUNT  ไฟล์กุญแจ JSON จาก Firebase Console ทั้งไฟล์
+#   ENV_FILE                  เนื้อหาไฟล์ .env ทั้งไฟล์
+# ยังไม่ได้ตั้ง: ขั้นขึ้นเว็บจะถูกข้าม (ไม่ขึ้นแดง) แค่รันเทสต์กับ build
+
+on:
+  push:
+    branches: [claude/pos-streetfood-analysis-lcawl7]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_SECRETS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' && secrets.ENV_FILE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Write .env
+        if: env.HAS_SECRETS == 'true'
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: printf '%s\n' "$ENV_FILE" > .env
+
+      - name: Build
+        run: npm run build
+
+      - name: Write service account
+        if: env.HAS_SECRETS == 'true'
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+
+      - name: Deploy website
+        if: env.HAS_SECRETS == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@14.27.0 deploy --only hosting --project pospos-b87bf --non-interactive
+
+      - name: Deploy database rules
+        if: env.HAS_SECRETS == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: npx --yes firebase-tools@14.27.0 deploy --only firestore:rules,firestore:indexes --project pospos-b87bf --non-interactive
+
+      - name: Remove service account
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json" .env
+
+      - name: Secrets not set
+        if: env.HAS_SECRETS != 'true'
+        run: echo "::notice::ยังไม่ได้ตั้ง FIREBASE_SERVICE_ACCOUNT / ENV_FILE ใน GitHub Secrets — เทสต์และ build ผ่าน แต่ยังไม่ได้ขึ้นเว็บ"

@@ -39,6 +39,27 @@ bash deploy.sh    # macOS / Linux
 deploy เว็บก่อน rules เสมอ — ถ้าปิดฐานข้อมูลตอนที่เว็บยังเป็นโค้ดเก่าที่ไม่มีระบบล็อกอิน
 ร้านจะอ่านข้อมูลไม่ได้ทันที
 
+### ขึ้นเว็บอัตโนมัติ (GitHub Actions)
+
+ทุกครั้งที่มีโค้ดใหม่ใน branch `claude/pos-streetfood-analysis-lcawl7` GitHub จะรันเทสต์
+แล้วขึ้นเว็บ + อัปเดตกฎฐานข้อมูลให้เอง (`.github/workflows/deploy.yml`) ไม่ต้องกด deploy.cmd
+ดูผลได้ที่แท็บ **Actions** ของ repo — ติ๊กเขียวคือขึ้นเว็บแล้ว
+
+ตั้งครั้งแรกครั้งเดียว:
+
+1. **สร้างกุญแจ** — Firebase Console → ⚙️ Project settings → แท็บ Service accounts
+   → กด **Generate new private key** → ได้ไฟล์ `.json` มา 1 ไฟล์
+2. **ให้สิทธิ์กุญแจ** — เปิด https://console.cloud.google.com/iam-admin/iam?project=pospos-b87bf
+   → หาแถวที่ขึ้นต้นด้วย `firebase-adminsdk-` → กดรูปดินสอ → **Add another role**
+   → พิมพ์ค้นหา **Firebase Admin** → เลือก → Save
+3. **ใส่ใน GitHub** — repo → Settings → Secrets and variables → Actions → **New repository secret**
+   - ชื่อ `FIREBASE_SERVICE_ACCOUNT` — เปิดไฟล์ `.json` ด้วย Notepad คัดลอกทั้งหมดมาวาง
+   - ชื่อ `ENV_FILE` — เปิดไฟล์ `.env` ในเครื่องด้วย Notepad คัดลอกทั้งหมดมาวาง
+4. **ลองรัน** — แท็บ Actions → Deploy → **Run workflow**
+
+ไฟล์ `.json` คือกุญแจขึ้นเว็บ ใส่ใน GitHub Secrets แล้วลบทิ้งจากเครื่องได้ ห้ามส่งให้ใครหรือ commit
+ยังไม่ได้ตั้ง Secrets ระบบแค่รันเทสต์ ไม่ขึ้นเว็บ และไม่ขึ้นแดง — `deploy.cmd` ยังใช้ได้เหมือนเดิม
+
 ---
 
 ## เริ่มใช้งาน
