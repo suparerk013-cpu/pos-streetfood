@@ -4,10 +4,12 @@ name: Deploy
 # ลำดับเหมือน deploy.cmd: เทสต์ → build → ขึ้นเว็บ → อัปเดตกฎฐานข้อมูล
 # เทสต์ไม่ผ่านจะหยุดก่อน ไม่มีทางขึ้นเว็บที่พัง
 #
-# ต้องตั้ง Secrets ใน GitHub ครั้งแรก 2 ตัว (ดูขั้นตอนใน README หัวข้อ "ขึ้นเว็บอัตโนมัติ")
-#   FIREBASE_SERVICE_ACCOUNT  ไฟล์กุญแจ JSON จาก Firebase Console ทั้งไฟล์
-#   ENV_FILE                  เนื้อหาไฟล์ .env ทั้งไฟล์
-# ยังไม่ได้ตั้ง: ขั้นขึ้นเว็บจะถูกข้าม (ไม่ขึ้นแดง) แค่รันเทสต์กับ build
+# ต้องตั้ง Secret ใน GitHub ครั้งแรก (ดูขั้นตอนใน README หัวข้อ "ขึ้นเว็บอัตโนมัติ")
+#   FIREBASE_SERVICE_ACCOUNT  ไฟล์กุญแจ JSON จาก Firebase Console ทั้งไฟล์   (ต้องมี)
+#   ENV_FILE                  เนื้อหาไฟล์ .env ทั้งไฟล์                     (ไม่ใส่ก็ได้)
+# ไม่มี ENV_FILE: ดึงค่าเชื่อมต่อจากเว็บร้านเอง (/__/firebase/init.json ที่ Firebase Hosting เปิดให้อยู่แล้ว)
+#   ค่าพวกนี้เป็นค่าสาธารณะ อยู่ในโค้ดเว็บที่ทุกคนโหลดได้อยู่แล้ว ไม่ใช่ความลับ
+# ยังไม่ได้ตั้งกุญแจ: ขั้นขึ้นเว็บจะถูกข้าม (ไม่ขึ้นแดง) แค่รันเทสต์กับ build
 
 on:
   push:
@@ -22,7 +24,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      HAS_SECRETS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' && secrets.ENV_FILE != '' }}
+      HAS_SECRETS: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,7 +42,23 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         env:
           ENV_FILE: ${{ secrets.ENV_FILE }}
-        run: printf '%s\n' "$ENV_FILE" > .env
+        run: |
+          if [ -n "$ENV_FILE" ]; then
+            printf '%s\n' "$ENV_FILE" > .env
+            echo "ใช้ค่าจาก Secret ENV_FILE"
+          else
+            curl -fsS https://pospos-b87bf.web.app/__/firebase/init.json -o "$RUNNER_TEMP/init.json"
+            node -e '
+              const c = require(process.argv[1]);
+              const map = { apiKey: "API_KEY", authDomain: "AUTH_DOMAIN", projectId: "PROJECT_ID",
+                storageBucket: "STORAGE_BUCKET", messagingSenderId: "MESSAGING_SENDER_ID",
+                appId: "APP_ID", measurementId: "MEASUREMENT_ID" };
+              if (!c.apiKey || !c.projectId) { console.error("init.json ไม่มีค่าเชื่อมต่อ"); process.exit(1) }
+              const lines = Object.entries(map).map(([k, v]) => `VITE_FIREBASE_${v}=${c[k] ?? ""}`);
+              require("fs").writeFileSync(".env", lines.join("\n") + "\n");
+            ' "$RUNNER_TEMP/init.json"
+            echo "ดึงค่าเชื่อมต่อจากเว็บร้าน (projectId: $(node -p "require('$RUNNER_TEMP/init.json').projectId"))"
+          fi
 
       - name: Build
         run: npm run build
@@ -49,7 +67,19 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          # เช็คว่าวางไฟล์กุญแจมาครบ ไม่มีอย่างอื่นปน — บอกให้ชัดแทนที่จะไปพังตอนขึ้นเว็บ
+          node -e '
+            let k
+            try { k = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")) }
+            catch { console.error("::error::FIREBASE_SERVICE_ACCOUNT ไม่ใช่ไฟล์ JSON ที่ถูกต้อง — แก้ Secret ให้มีแค่เนื้อหาไฟล์ .json (ขึ้นต้น { ลงท้าย })"); process.exit(1) }
+            if (k.type !== "service_account" || !k.client_email || !k.private_key) {
+              console.error("::error::FIREBASE_SERVICE_ACCOUNT ไม่ใช่กุญแจ service account — ใช้ไฟล์จาก Firebase Console > Project settings > Service accounts > Generate new private key"); process.exit(1)
+            }
+            if (k.project_id !== "pospos-b87bf") console.log("::warning::กุญแจเป็นของโปรเจกต์ " + k.project_id + " ไม่ใช่ pospos-b87bf")
+            console.log("กุญแจถูกต้อง (" + k.project_id + ")")
+          ' "$RUNNER_TEMP/sa.json"
 
       - name: Deploy website
         if: env.HAS_SECRETS == 'true'
@@ -65,17 +95,12 @@ jobs:
 
       - name: Remove service account
         if: always()
-        run: rm -f "$RUNNER_TEMP/sa.json" .env
+        run: rm -f "$RUNNER_TEMP/sa.json" "$RUNNER_TEMP/init.json" .env
 
       - name: Secrets not set
         if: env.HAS_SECRETS != 'true'
         env:
-          SA_SET: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
-          ENV_SET: ${{ secrets.ENV_FILE != '' }}
           SA_IN_VARS: ${{ vars.FIREBASE_SERVICE_ACCOUNT != '' }}
-          ENV_IN_VARS: ${{ vars.ENV_FILE != '' }}
         run: |
-          # บอกให้ชัดว่าตัวไหนหาย จะได้แก้ถูกที่ — ไม่พิมพ์ค่าจริงออกมา
-          echo "FIREBASE_SERVICE_ACCOUNT ใน Secrets: $SA_SET (อยู่ในแท็บ Variables แทน: $SA_IN_VARS)"
-          echo "ENV_FILE ใน Secrets: $ENV_SET (อยู่ในแท็บ Variables แทน: $ENV_IN_VARS)"
-          echo "::warning::ยังไม่ได้ขึ้นเว็บ — Secrets ไม่ครบ ดูบรรทัดด้านบนว่าตัวไหนหาย"
+          echo "ยังไม่มี Secret กุญแจขึ้นเว็บ (อยู่ในแท็บ Variables แทน: $SA_IN_VARS)"
+          echo "::warning::ยังไม่ได้ขึ้นเว็บ — ตั้ง Secret กุญแจ Firebase ก่อน"

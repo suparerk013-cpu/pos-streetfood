@@ -54,7 +54,7 @@ deploy เว็บก่อน rules เสมอ — ถ้าปิดฐา�
    → พิมพ์ค้นหา **Firebase Admin** → เลือก → Save
 3. **ใส่ใน GitHub** — repo → Settings → Secrets and variables → Actions → **New repository secret**
    - ชื่อ `FIREBASE_SERVICE_ACCOUNT` — เปิดไฟล์ `.json` ด้วย Notepad คัดลอกทั้งหมดมาวาง
-   - ชื่อ `ENV_FILE` — เปิดไฟล์ `.env` ในเครื่องด้วย Notepad คัดลอกทั้งหมดมาวาง
+   - (ไม่บังคับ) ชื่อ `ENV_FILE` — เนื้อหาไฟล์ `.env` ถ้าไม่ใส่ ระบบดึงค่าเชื่อมต่อจากเว็บร้านเอง
 4. **ลองรัน** — แท็บ Actions → Deploy → **Run workflow**
 
 ไฟล์ `.json` คือกุญแจขึ้นเว็บ ใส่ใน GitHub Secrets แล้วลบทิ้งจากเครื่องได้ ห้ามส่งให้ใครหรือ commit
