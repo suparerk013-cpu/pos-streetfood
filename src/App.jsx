@@ -19,6 +19,7 @@ const InventoryPage = lazy(() => import('./pages/InventoryPage'))
 const ShiftPage = lazy(() => import('./pages/ShiftPage'))
 const ExpensesPage = lazy(() => import('./pages/ExpensesPage'))
 const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const MorePage = lazy(() => import('./pages/MorePage'))
 
 const PAGES = {
   sales: SalesPage,
@@ -28,6 +29,7 @@ const PAGES = {
   shift: ShiftPage,
   expenses: ExpensesPage,
   settings: SettingsPage,
+  more: MorePage,
 }
 
 function PageFallback() {
@@ -73,7 +75,7 @@ function Shell() {
           {/* key=page ทำให้กลับมาใช้งานได้เองเมื่อกดเมนูไปหน้าอื่น ไม่ต้องปิดแอปทิ้ง */}
           <ErrorBoundary key={page}>
             <Suspense fallback={<PageFallback />}>
-              <PageComponent onNavigate={handleNavigate} initialTab={pageTab} />
+              <PageComponent onNavigate={handleNavigate} initialTab={pageTab} lowStockCount={lowStockCount} />
             </Suspense>
           </ErrorBoundary>
         </div>

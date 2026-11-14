@@ -20,6 +20,8 @@ import {
   updateItemQuantity,
 } from '../lib/cart'
 import { reportDamage } from '../lib/stock'
+import { categoryColorMap, colorOfCategory } from '../lib/categoryColors'
+import { shiftTimeRange } from '../lib/shiftSales'
 
 function SalesPage() {
   const {
@@ -29,6 +31,7 @@ function SalesPage() {
     shopName,
     online,
     enabledPlatforms,
+    currentShift,
   } = useAppData()
   const [channel, setChannel] = useState('store')
   const [platform, setPlatform] = useState(enabledPlatforms[0] ?? null)
@@ -99,6 +102,9 @@ function SalesPage() {
     })
     return map
   }, [cart])
+
+  // สีตามหมวดคิดจากสินค้าทั้งร้าน ไม่ใช่เฉพาะช่องทางนี้ สลับหน้าร้าน/เดลิเวอรีแล้วสีหมวดเดิมไม่เปลี่ยน
+  const colorMap = useMemo(() => categoryColorMap(activeProducts), [activeProducts])
 
   const categories = useMemo(
     () => [...new Set(channelProducts.map((p) => p.category).filter(Boolean))],
@@ -179,43 +185,37 @@ function SalesPage() {
   const total = cartSubtotal(cart, productById, { channel })
 
   return (
-    <div className="h-full w-full flex flex-col bg-orange-50 overflow-hidden">
-      {/* Full-width header */}
-      <header className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-orange-500 to-red-600 text-white shadow-sm shrink-0">
-        {shopName && <h1 className="font-bold text-lg truncate">{shopName}</h1>}
-        <div className="flex items-center gap-2 ml-auto">
-          <button type="button" onClick={() => setDamageOpen(true)}
-            className="flex items-center gap-1.5 text-xs font-bold bg-white/20 px-3 py-1.5 rounded-lg active:bg-white/30 transition-colors">
-            <PackageX size={14} />
-            เสียหาย/เครม
-          </button>
+    <div className="h-full w-full flex flex-col bg-white overflow-hidden">
+      {/* หัวส้ม: สถานะกะ ชื่อร้าน และสวิตช์ช่องทางขาย */}
+      <header className="shrink-0 bg-orange-500 text-white px-4 pt-3 pb-3 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs text-white/75 font-semibold truncate">
+            {currentShift ? `กะเปิดอยู่ · ${shiftTimeRange(currentShift).split(' – ')[0]}` : 'ยังไม่ได้เปิดกะ'}
+          </p>
+          <h1 className="text-xl font-black leading-tight truncate">{shopName || 'หน้าขาย'}</h1>
         </div>
-      </header>
-
-      {/* ตัวเลือกช่องทาง/หมวดหมู่อยู่ในคอลัมน์ซ้ายทั้งหมด แถบตะกร้าฝั่งขวาจะได้เต็มความสูง
-          ตั้งแต่ใต้หัวเรื่องจนถึงขอบล่าง ไม่มีแถบสีส้มโผล่คั่นข้างบน */}
-      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
-        {/* Left: product grid */}
-        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
-        {/* สลับช่องทางขาย — ราคาและรายการสินค้าเปลี่ยนตามช่องทาง */}
-        <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1 bg-orange-50">
+        {/* ราคาและรายการสินค้าเปลี่ยนตามช่องทาง */}
+        <div className="shrink-0 flex bg-white/20 rounded-xl p-1 text-sm font-bold" role="tablist" aria-label="ช่องทางขาย">
           {[
-            { key: 'store', label: '🏠 หน้าร้าน' },
-            { key: 'delivery', label: '🛵 เดลิเวอรี' },
+            { key: 'store', label: 'หน้าร้าน' },
+            { key: 'delivery', label: 'เดลิเวอรี' },
           ].map((c) => (
-            <button key={c.key} type="button" onClick={() => requestChannel(c.key)}
-              className={`flex-1 min-h-[44px] rounded-2xl border-2 font-bold text-sm transition-all ${
-                channel === c.key
-                  ? 'border-orange-500 bg-white text-orange-600 shadow-sm'
-                  : 'border-transparent bg-white/60 text-gray-500'
+            <button key={c.key} type="button" role="tab" aria-selected={channel === c.key} onClick={() => requestChannel(c.key)}
+              className={`min-h-[40px] px-3 rounded-lg transition-colors ${
+                channel === c.key ? 'bg-white text-orange-600' : 'text-white'
               }`}>
               {c.label}
             </button>
           ))}
         </div>
+      </header>
 
+      {/* ตัวเลือกหมวด/ค้นหาอยู่ในคอลัมน์ซ้ายทั้งหมด แถบตะกร้าฝั่งขวาจะได้เต็มความสูง */}
+      <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden">
+        {/* Left: product grid */}
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden">
         {channel === 'delivery' && (
-          <div className="shrink-0 px-3 pb-2 bg-orange-50">
+          <div className="shrink-0 px-3 pt-2.5">
             <div className="flex gap-1.5 overflow-x-auto">
               {enabledPlatforms.map((p) => (
                 <button key={p} type="button" onClick={() => setPlatform(p)}
@@ -241,9 +241,9 @@ function SalesPage() {
         )}
 
         {/* ช่องค้นหา — ไม่ auto focus เด็ดขาด ไม่งั้นเปิดหน้าขายทีคีย์บอร์ดเด้งบังครึ่งจอ */}
-        <div className="shrink-0 px-3 pt-1 pb-2 bg-orange-50">
-          <div className="flex items-center gap-2 rounded-2xl bg-white border-2 border-transparent px-3 shadow-sm transition-colors focus-within:border-orange-400 focus-within:shadow">
-            <Search size={17} className="shrink-0 text-orange-400" />
+        <div className="shrink-0 px-3 pt-2.5 flex items-center gap-2">
+          <div className="flex-1 min-w-0 flex items-center gap-2 rounded-2xl bg-gray-100 border-2 border-transparent px-3 transition-colors focus-within:border-orange-400 focus-within:bg-white">
+            <Search size={17} className="shrink-0 text-gray-400" />
             <input
               type="text"
               value={search}
@@ -264,31 +264,39 @@ function SalesPage() {
               </button>
             )}
           </div>
+          <button type="button" onClick={() => setDamageOpen(true)}
+            className="shrink-0 min-h-[48px] px-3 rounded-2xl bg-gray-100 text-gray-600 text-xs font-bold flex flex-col items-center justify-center leading-tight active:bg-gray-200">
+            <PackageX size={16} />
+            เสีย/เครม
+          </button>
         </div>
 
           {categories.length > 1 && search.trim() === '' && (
-            <div className="shrink-0 flex gap-2 px-4 py-2.5 overflow-x-auto bg-orange-50">
+            <div className="shrink-0 flex gap-2 px-3 pt-2.5 overflow-x-auto">
               <button
                 type="button"
                 onClick={() => setActiveCategory('all')}
-                className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-                  activeCategory === 'all' ? 'bg-orange-500 text-white shadow' : 'bg-white border border-gray-200 text-gray-600'
+                className={`shrink-0 min-h-[40px] px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
+                  activeCategory === 'all' ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600'
                 }`}
               >
                 ทั้งหมด
               </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat}
-                  type="button"
-                  onClick={() => setActiveCategory(cat)}
-                  className={`shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap transition-colors ${
-                    activeCategory === cat ? 'bg-orange-500 text-white shadow' : 'bg-white border border-gray-200 text-gray-600'
-                  }`}
-                >
-                  {productCategoryLabel(cat)}
-                </button>
-              ))}
+              {categories.map((cat) => {
+                const color = colorOfCategory(colorMap, cat)
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setActiveCategory(cat)}
+                    className={`shrink-0 min-h-[40px] px-4 rounded-full text-sm font-bold whitespace-nowrap transition-colors ${
+                      activeCategory === cat ? `${color.tile} text-white` : color.soft
+                    }`}
+                  >
+                    {productCategoryLabel(cat)}
+                  </button>
+                )
+              })}
             </div>
           )}
           <div className="flex-1 min-h-0 overflow-y-auto">
@@ -297,6 +305,7 @@ function SalesPage() {
                 products={visibleProducts}
                 cartQtyByProductId={cartQtyByProductId}
                 maxByProduct={maxByProduct}
+                colorMap={colorMap}
                 onSelectProduct={handleSelectProduct}
                 emptyMessage={
                   search.trim() !== ''
@@ -329,17 +338,17 @@ function SalesPage() {
         </div>
 
         {/* Right cart panel — desktop only */}
-        <div className="hidden md:flex flex-col w-80 shrink-0 bg-white border-l border-orange-100 shadow-[-4px_0_16px_rgba(0,0,0,0.07)]">
+        <div className="hidden md:flex flex-col w-80 shrink-0 bg-white border-l-2 border-gray-100">
           {/* Panel header */}
-          <div className="flex items-center justify-between px-4 pt-3 pb-2.5 shrink-0 bg-gradient-to-r from-orange-500 to-red-500">
-            <h2 className="font-bold text-white tracking-wide">ตะกร้าสินค้า</h2>
-            <span className="text-sm text-white/80 bg-white/20 rounded-full px-2.5 py-0.5 font-medium">
+          <div className="flex items-center justify-between px-4 pt-3 pb-2.5 shrink-0 border-b border-gray-100">
+            <h2 className="font-black text-gray-900 text-lg">ตะกร้าสินค้า</h2>
+            <span className="text-sm text-gray-500 bg-gray-100 rounded-full px-2.5 py-0.5 font-bold">
               {cart.length} รายการ
             </span>
           </div>
 
           {/* Scrollable cart items */}
-          <div className="flex-1 min-h-0 overflow-y-auto px-4 divide-y divide-orange-50 bg-white">
+          <div className="flex-1 min-h-0 overflow-y-auto px-4 divide-y divide-gray-100 bg-white">
             {cart.length === 0 ? (
               <p className="py-10 text-center text-gray-400 text-sm">ยังไม่มีสินค้าในตะกร้า</p>
             ) : (
@@ -363,10 +372,10 @@ function SalesPage() {
           </div>
 
           {/* Panel footer: total + checkout */}
-          <div className="shrink-0 border-t border-orange-100 bg-white">
+          <div className="shrink-0 border-t-2 border-gray-100 bg-white">
             <div className="px-4 pt-3 pb-1 flex items-baseline justify-between">
-              <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">ยอดรวม</p>
-              <p className="text-2xl font-extrabold bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
+              <p className="text-sm text-gray-400 font-bold">ยอดรวม</p>
+              <p className="text-3xl font-black text-gray-900 tabular-nums">
                 {total.toLocaleString()} ฿
               </p>
             </div>
@@ -375,7 +384,7 @@ function SalesPage() {
                 type="button"
                 onClick={openCheckout}
                 disabled={cart.length === 0 || !online}
-                className="w-full min-h-[64px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300 text-white font-extrabold text-2xl shadow-xl shadow-orange-200 active:scale-95 transition-all tracking-wide"
+                className="w-full min-h-[64px] rounded-2xl bg-gray-900 disabled:bg-gray-200 disabled:text-gray-400 text-white font-black text-2xl active:scale-95 transition-transform"
               >
                 {online ? 'คิดเงิน' : 'ออฟไลน์'}
               </button>

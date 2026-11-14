@@ -7,8 +7,12 @@ import { netAfterGp, quickPrices } from '../lib/pricing'
 import ModalBackdrop from './ModalBackdrop'
 
 const DIGIT_ROWS = [['1','2','3'], ['4','5','6'], ['7','8','9'], ['ล้าง','0','⌫']]
-const QUICK_AMOUNTS  = [20, 50, 100]
+// แบงก์ที่ลูกค้ายื่นจริง — กดแล้วได้ยอดรับมาทันที เหลือแค่ดูเงินทอน
+const QUICK_AMOUNTS  = [100, 500, 1000]
 const QUICK_DISCOUNTS = [5, 10, 20]
+
+/** สีปุ่มวิธีจ่าย ตรงกับกล่องยอดในหน้าปิดกะ: เงินสดเขียว โอนฟ้า เดลิเวอรีส้ม */
+const METHOD_TILE = { cash: 'bg-emerald-600', promptpay: 'bg-sky-600', delivery: 'bg-orange-500' }
 
 function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = null, onClose, onSuccess }) {
   const { currentShift, productById, gpRateFor } = useAppData()
@@ -162,10 +166,10 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
         >
 
           {/* ══ HEADER ══ */}
-          <div className="shrink-0 bg-gradient-to-r from-orange-500 to-red-500 px-4 py-2.5 flex items-center justify-between gap-3">
+          <div className="shrink-0 bg-orange-500 px-4 py-3 flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
               <p className="text-white/60 text-[10px] font-bold uppercase tracking-widest leading-none">
-                {discount > 0 ? 'ราคาสินค้า → ยอดสุทธิ' : 'ยอดรวม'}
+                {discount > 0 ? 'ยอดที่ต้องเก็บ (แก้ราคาแล้ว)' : 'ยอดที่ต้องเก็บ'}
               </p>
               {discount > 0 ? (
                 <div className="flex items-baseline gap-2 flex-wrap">
@@ -241,16 +245,17 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
               </p>
             </div>
           ) : (
-            <div className="shrink-0 flex gap-1.5 px-3 pt-2 pb-1">
+            <div className="shrink-0 flex gap-2 px-3 pt-2.5 pb-1">
               {(isDelivery ? ['delivery'] : ['cash','promptpay']).map((m) => (
                 <button key={m} type="button"
                   onClick={() => { setMethod(m); setNumpadValue('0') }}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 font-bold text-xs transition-all ${
+                  aria-pressed={method === m}
+                  className={`flex-1 min-h-[52px] flex items-center justify-center gap-1.5 rounded-2xl font-black text-base transition-all ${
                     method === m
-                      ? 'border-orange-500 bg-orange-50 text-orange-600'
-                      : 'border-gray-200 bg-white text-gray-500 active:scale-95'
+                      ? `${METHOD_TILE[m]} text-white`
+                      : 'bg-gray-100 text-gray-500 active:scale-95'
                   }`}>
-                  <span className="text-sm">{METHOD_ICONS[m]}</span>
+                  <span className="text-lg">{METHOD_ICONS[m]}</span>
                   {METHOD_SHORT[m]}
                 </button>
               ))}
@@ -322,19 +327,21 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
                 </p>
               )}
 
-              {/* Quick amounts */}
+              {/* Quick amounts — ตอนรับเงินมีเฉพาะเงินสด โอนต้องตรงยอดอยู่แล้ว ใช้ปุ่มพอดีแทน */}
+              {(discountMode || method === 'cash') && (
               <div className="shrink-0 flex gap-1.5">
                 {(priceMode ? quickPrices(subtotal) : discountMode ? QUICK_DISCOUNTS : QUICK_AMOUNTS).map((v) => (
                   <button key={v} type="button" onClick={() => setNumpadValue(String(v))}
-                    className={`flex-1 h-11 rounded-xl font-bold text-base active:scale-95 transition-all ${
+                    className={`flex-1 h-12 rounded-xl font-black text-lg active:scale-95 transition-all ${
                       discountMode
                         ? 'bg-green-50 border border-green-100 text-green-700 active:bg-green-100'
-                        : 'bg-blue-50 border border-blue-100 text-blue-700 active:bg-blue-100'
+                        : 'bg-sky-600 text-white active:bg-sky-700'
                     }`}>
-                    {priceMode ? `${v.toLocaleString()} ฿` : discountMode ? `-${v}` : v}
+                    {priceMode ? `${v.toLocaleString()} ฿` : discountMode ? `-${v}` : v.toLocaleString()}
                   </button>
                 ))}
               </div>
+              )}
 
               {/* Digit grid */}
               <div className="flex-1 min-h-0 flex flex-col gap-1.5">
@@ -363,7 +370,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
                 className={`shrink-0 h-14 rounded-2xl font-bold text-lg shadow-lg active:scale-95 transition-all text-white ${
                   discountMode
                     ? 'bg-gradient-to-r from-green-500 to-emerald-500 disabled:from-gray-300 disabled:to-gray-300'
-                    : 'bg-gradient-to-r from-orange-500 to-red-500 disabled:from-gray-300 disabled:to-gray-300'
+                    : 'bg-gray-900 disabled:bg-gray-300'
                 }`}>
                 {btnLabel()}
               </button>
@@ -394,7 +401,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
               </div>
             </div>
             <button type="button" onClick={() => setPriceSummary(null)}
-              className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold text-lg shadow-lg active:scale-95">
+              className="w-full min-h-[60px] rounded-2xl bg-gray-900 text-white font-black text-lg active:scale-95">
               ตกลง รับเงิน
             </button>
           </div>
@@ -410,7 +417,7 @@ function CheckoutModal({ cart, freeLines = [], channel = 'store', platform = nul
             <p className="text-gray-400 mb-5">บาท</p>
             <button type="button"
               onClick={() => { setChangePopup(null); if (changePopup.shouldFinalize) finalizeOrder(changePopup.finalPayments) }}
-              className="w-full min-h-[56px] rounded-2xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-bold text-lg shadow-lg active:scale-95">
+              className="w-full min-h-[60px] rounded-2xl bg-gray-900 text-white font-black text-lg active:scale-95">
               เสร็จสิ้น
             </button>
           </div>

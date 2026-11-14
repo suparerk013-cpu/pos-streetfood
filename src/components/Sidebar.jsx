@@ -22,7 +22,7 @@ function Sidebar({ current, onNavigate, lowStockCount = 0 }) {
     : [displayName, '']
 
   return (
-    <nav className="group hidden sm:flex w-14 hover:w-52 shrink-0 h-full bg-gradient-to-b from-orange-600 to-red-700 text-white flex-col py-4 overflow-hidden transition-[width] duration-300 ease-in-out z-10">
+    <nav className="group hidden sm:flex w-14 hover:w-52 shrink-0 h-full bg-orange-500 text-white flex-col py-4 overflow-hidden transition-[width] duration-300 ease-in-out z-10">
       <div className="px-3 pb-4 mb-2 border-b border-white/20 overflow-hidden flex items-center gap-3 h-16">
         <div className="shrink-0 w-10 h-10 rounded-2xl bg-white/15 border border-white/25 flex items-center justify-center shadow-inner overflow-hidden">
           {logoBase64

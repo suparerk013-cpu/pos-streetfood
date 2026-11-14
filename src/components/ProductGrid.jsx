@@ -1,6 +1,7 @@
+import { colorOfCategory } from '../lib/categoryColors'
 import ProductCard from './ProductCard'
 
-function ProductGrid({ products, cartQtyByProductId, maxByProduct, onSelectProduct, emptyMessage }) {
+function ProductGrid({ products, cartQtyByProductId, maxByProduct, colorMap, onSelectProduct, emptyMessage }) {
   if (products.length === 0) {
     return (
       <div className="h-full flex items-center justify-center px-6 text-center">
@@ -12,13 +13,14 @@ function ProductGrid({ products, cartQtyByProductId, maxByProduct, onSelectProdu
   }
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 p-4">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2.5 p-3">
       {products.map((product) => (
         <ProductCard
           key={product.id}
           product={product}
           cartQty={cartQtyByProductId?.get(product.id) ?? 0}
           maxQty={maxByProduct?.get(product.id)}
+          color={colorOfCategory(colorMap, product.category)}
           onSelect={onSelectProduct}
         />
       ))}

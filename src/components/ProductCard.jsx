@@ -1,4 +1,12 @@
-function ProductCard({ product, cartQty = 0, maxQty, onSelect }) {
+import { UNCATEGORIZED_COLOR } from '../lib/categoryColors'
+
+/**
+ * การ์ดสินค้าแบบปุ่มใหญ่ สีตามหมวด
+ *
+ * ช่วงคนเยอะคนขายไม่อ่านชื่อ จำสีกับตำแหน่งเอา — ส้มคือหมึก ฟ้าคือหอย
+ * ราคาตัวโตอยู่มุมล่างซ้าย จำนวนที่กดไว้ขึ้นเป็นวงกลมขาวมุมขวาบน
+ */
+function ProductCard({ product, cartQty = 0, maxQty, color = UNCATEGORIZED_COLOR, onSelect }) {
   const stockQty = product.stock_qty ?? 0
   const outOfStock = stockQty <= 0
   // เพดานจริงอาจต่ำกว่าสต็อก เพราะโปรแถมกินของในสต็อกด้วย
@@ -11,58 +19,34 @@ function ProductCard({ product, cartQty = 0, maxQty, onSelect }) {
       type="button"
       onClick={() => !disabled && onSelect(product)}
       disabled={disabled}
-      className={`relative min-h-[100px] rounded-2xl border transition-all flex flex-col items-center justify-center gap-1.5 px-3 pt-8 pb-4 text-center overflow-hidden ${
-        disabled
-          ? 'bg-gray-100 border-gray-200 shadow-sm'
-          : 'bg-gradient-to-br from-white to-orange-50 border-orange-200 shadow-md active:scale-[0.96] active:shadow-sm'
-      }`}
+      className={`relative min-h-[132px] rounded-2xl p-3.5 text-left text-white flex flex-col justify-between gap-2 transition-transform ${
+        outOfStock ? 'bg-gray-300' : `${color.tile} shadow-sm active:scale-[0.96]`
+      } ${cartFull ? 'opacity-70' : ''}`}
     >
-      {/* ป้ายสต็อกอยู่มุมบนซ้าย เดิมอยู่มุมล่างซ้ายแล้วไปทับเลขราคาพอดี */}
-      {!outOfStock && (
-        <span
-          className={`absolute top-2 left-2 rounded-full px-2 py-0.5 text-xs font-bold shadow-sm ${
-            stockQty <= 5
-              ? 'bg-red-500 text-white'
-              : stockQty <= 10
-              ? 'bg-amber-400 text-white'
-              : 'bg-white/95 text-gray-500 border border-gray-200'
-          }`}
-        >
-          เหลือ {stockQty}
+      {cartQty > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 min-w-9 h-9 px-2 rounded-full bg-white text-gray-900 text-lg font-black flex items-center justify-center shadow-md ring-2 ring-black/10 tabular-nums">
+          {cartQty}
         </span>
       )}
 
-      {product.image_base64 && (
-        <img
-          src={product.image_base64}
-          alt=""
-          className={`w-16 h-16 rounded-xl object-cover mb-0.5 ${disabled ? 'grayscale opacity-50' : 'shadow-sm'}`}
-        />
-      )}
+      <div className="flex items-start gap-2 pr-6">
+        {product.image_base64 && (
+          <img src={product.image_base64} alt=""
+            className={`w-11 h-11 shrink-0 rounded-xl object-cover border-2 border-white/40 ${outOfStock ? 'grayscale' : ''}`} />
+        )}
+        <span className="text-base font-black leading-tight line-clamp-2">{product.name}</span>
+      </div>
 
-      <span className="font-semibold text-gray-800 text-sm leading-snug line-clamp-2 w-full">
-        {product.name}
-      </span>
-      <span className="font-extrabold text-lg bg-gradient-to-r from-orange-500 to-red-500 bg-clip-text text-transparent">
-        {product.price} ฿
-      </span>
-
-      {outOfStock && (
-        <>
-          <span className="absolute inset-0 rounded-2xl bg-black/30" />
-          <span className="absolute top-2 right-2 rounded-full bg-red-500 text-white text-xs font-bold px-2 py-0.5 shadow-md">
-            หมด
-          </span>
-        </>
-      )}
-      {cartFull && (
-        <>
-          <span className="absolute inset-0 rounded-2xl bg-orange-900/20" />
-          <span className="absolute top-2 right-2 rounded-full bg-orange-500 text-white text-xs font-bold px-2 py-0.5 shadow-md">
-            ครบแล้ว
-          </span>
-        </>
-      )}
+      <div className="flex items-end justify-between gap-1">
+        <span className="text-3xl font-black leading-none tabular-nums">
+          {product.price}<span className="text-base ml-0.5">฿</span>
+        </span>
+        <span className={`shrink-0 text-xs font-bold rounded-full px-2 py-0.5 ${
+          outOfStock ? 'bg-black/15' : cartFull ? 'bg-white text-gray-900' : stockQty <= 5 ? 'bg-red-600 ring-2 ring-white' : 'bg-black/20'
+        }`}>
+          {outOfStock ? 'หมด' : cartFull ? 'ครบแล้ว' : `เหลือ ${stockQty}`}
+        </span>
+      </div>
     </button>
   )
 }
