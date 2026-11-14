@@ -89,7 +89,10 @@ jobs:
               } catch {}
               return null
             }
-            const found = pick(process.argv[1], "FIREBASE_SERVICE_ACCOUNT") || pick(process.argv[2], "ENV_FILE")
+            // มีกุญแจหลายอัน เลือกอันที่เป็นของโปรเจกต์ร้านก่อน
+            const keys = [pick(process.argv[1], "FIREBASE_SERVICE_ACCOUNT"), pick(process.argv[2], "ENV_FILE")].filter(Boolean)
+            keys.forEach((x) => console.log("เจอกุญแจใน " + x.label + " (โปรเจกต์ " + x.k.project_id + ")"))
+            const found = keys.find((x) => x.k.project_id === "pospos-b87bf") || keys[0]
             if (!found) {
               console.error("::error::ไม่เจอกุญแจ service account ที่ถูกต้องใน Secret ไหนเลย — วางเนื้อหาไฟล์ .json จาก Firebase Console > Project settings > Service accounts ลงใน FIREBASE_SERVICE_ACCOUNT")
               process.exit(1)
