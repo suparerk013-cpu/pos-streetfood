@@ -74,19 +74,34 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         env:
           SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
-          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
-          # เช็คว่าวางไฟล์กุญแจมาครบ ไม่มีอย่างอื่นปน — บอกให้ชัดแทนที่จะไปพังตอนขึ้นเว็บ
+          # รับกุญแจจากกล่องไหนก็ได้ที่เป็นไฟล์ JSON ของ service account จริง
+          # (เคยวางสลับกล่องกัน) — ไม่พิมพ์เนื้อหากุญแจออกมาเด็ดขาด
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa-1.json"
+          printf '%s' "$ENV_FILE" > "$RUNNER_TEMP/sa-2.json"
           node -e '
-            let k
-            try { k = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")) }
-            catch { console.error("::error::FIREBASE_SERVICE_ACCOUNT ไม่ใช่ไฟล์ JSON ที่ถูกต้อง — แก้ Secret ให้มีแค่เนื้อหาไฟล์ .json (ขึ้นต้น { ลงท้าย })"); process.exit(1) }
-            if (k.type !== "service_account" || !k.client_email || !k.private_key) {
-              console.error("::error::FIREBASE_SERVICE_ACCOUNT ไม่ใช่กุญแจ service account — ใช้ไฟล์จาก Firebase Console > Project settings > Service accounts > Generate new private key"); process.exit(1)
+            const fs = require("fs")
+            const pick = (file, label) => {
+              try {
+                const k = JSON.parse(fs.readFileSync(file, "utf8"))
+                if (k.type === "service_account" && k.client_email && k.private_key) return { k, label }
+              } catch {}
+              return null
             }
-            if (k.project_id !== "pospos-b87bf") console.log("::warning::กุญแจเป็นของโปรเจกต์ " + k.project_id + " ไม่ใช่ pospos-b87bf")
-            console.log("กุญแจถูกต้อง (" + k.project_id + ")")
-          ' "$RUNNER_TEMP/sa.json"
+            const found = pick(process.argv[1], "FIREBASE_SERVICE_ACCOUNT") || pick(process.argv[2], "ENV_FILE")
+            if (!found) {
+              console.error("::error::ไม่เจอกุญแจ service account ที่ถูกต้องใน Secret ไหนเลย — วางเนื้อหาไฟล์ .json จาก Firebase Console > Project settings > Service accounts ลงใน FIREBASE_SERVICE_ACCOUNT")
+              process.exit(1)
+            }
+            if (found.k.project_id !== "pospos-b87bf") {
+              console.error("::error::กุญแจเป็นของโปรเจกต์ " + found.k.project_id + " ไม่ใช่ pospos-b87bf — โหลดกุญแจใหม่จากโปรเจกต์ pospos")
+              process.exit(1)
+            }
+            fs.writeFileSync(process.argv[3], JSON.stringify(found.k))
+            console.log("ใช้กุญแจจาก Secret " + found.label + " (โปรเจกต์ " + found.k.project_id + ")")
+          ' "$RUNNER_TEMP/sa-1.json" "$RUNNER_TEMP/sa-2.json" "$RUNNER_TEMP/sa.json"
+          rm -f "$RUNNER_TEMP/sa-1.json" "$RUNNER_TEMP/sa-2.json"
 
       - name: Deploy website
         if: env.HAS_SECRETS == 'true'
@@ -102,7 +117,7 @@ jobs:
 
       - name: Remove service account
         if: always()
-        run: rm -f "$RUNNER_TEMP/sa.json" "$RUNNER_TEMP/init.json" .env
+        run: rm -f "$RUNNER_TEMP/sa.json" "$RUNNER_TEMP/sa-1.json" "$RUNNER_TEMP/sa-2.json" "$RUNNER_TEMP/init.json" .env
 
       - name: Secrets not set
         if: env.HAS_SECRETS != 'true'
