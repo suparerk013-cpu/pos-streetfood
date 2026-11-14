@@ -68,9 +68,9 @@ export async function createOrder({
     })
     if (shortages.length > 0) throw new InsufficientStockError(shortages)
 
-    const next = nextQueueNo(counterSnap)
+    const next = nextQueueNo(counterSnap.exists() ? counterSnap.data() : null, { shiftId, today: todayKey() })
 
-    transaction.set(counterRef, { current_value: next.value, day: next.day }, { merge: true })
+    transaction.set(counterRef, { current_value: next.value, day: next.day, shift_id: next.shiftId }, { merge: true })
     transaction.set(orderRef, {
       queue_no: next.value,
       shift_id: shiftId,
@@ -113,13 +113,25 @@ export async function createOrder({
 }
 
 /**
- * เลขคิวเริ่มนับ 1 ใหม่ทุกวัน — เดิมนับสะสมไปเรื่อย ๆ จนกลายเป็น "คิว 8,432"
+ * เลขคิวเริ่มนับ 1 ใหม่ทุกกะ
+ *
+ * เดิมเริ่มใหม่ตามวันที่ในปฏิทิน ร้านขาย 4 โมงเย็นถึงตีหนึ่ง พอเลยเที่ยงคืนเลขคิว
+ * กลับไปเป็น 1 กลางกะ ลูกค้าหัวค่ำกับลูกค้าหลังเที่ยงคืนถือคิวเลขเดียวกัน
+ *
+ * - มีกะ: กะเดียวกันนับต่อ กะใหม่เริ่ม 1
+ * - ตัวนับเก่าที่ยังไม่เคยจำกะ (ก่อนอัปเดต) แต่เป็นวันเดียวกัน นับต่อไปก่อน
+ *   ไม่งั้นกะที่เปิดค้างอยู่ตอนอัปเดตจะได้คิว 1 ซ้ำกับตอนหัวค่ำ
+ * - ขายตอนไม่ได้เปิดกะ: ใช้วันที่แบบเดิม
  */
-function nextQueueNo(counterSnap) {
-  const today = todayKey()
-  const data = counterSnap.exists() ? counterSnap.data() : null
-  if (!data || data.day !== today) return { value: 1, day: today }
-  return { value: (data.current_value ?? 0) + 1, day: today }
+export function nextQueueNo(data, { shiftId = null, today }) {
+  const current = data?.current_value ?? 0
+  if (shiftId) {
+    const sameShift = data?.shift_id === shiftId
+    const legacySameDay = data && data.shift_id === undefined && data.day === today
+    return { value: sameShift || legacySameDay ? current + 1 : 1, day: today, shiftId }
+  }
+  if (!data || data.day !== today) return { value: 1, day: today, shiftId: null }
+  return { value: current + 1, day: today, shiftId: null }
 }
 
 function todayKey() {
@@ -127,6 +139,20 @@ function todayKey() {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+export class ClosedShiftError extends Error {
+  constructor() {
+    super('กะของบิลนี้ปิดไปแล้ว ยกเลิกไม่ได้ เพราะยอดปิดกะบันทึกไปแล้ว')
+    this.name = 'ClosedShiftError'
+  }
+}
+
+/**
+ * ยกเลิกบิล — เฉพาะบิลของกะที่ยังเปิดอยู่ (หรือบิลนอกกะ)
+ *
+ * กะที่ปิดแล้วเก็บยอดสรุปไว้ ถ้ายอมให้ยกเลิกบิลย้อนหลัง บิลหายแต่ยอดปิดกะยังเท่าเดิม
+ * แดชบอร์ดกับประวัติกะจะเห็นตัวเลขไม่ตรงกัน เช็คในทรานแซกชันด้วย
+ * ไม่ใช่แค่ซ่อนปุ่ม เพราะอีกเครื่องอาจปิดกะไปแล้วตอนที่หน้านี้ยังเปิดค้าง
+ */
 export async function voidOrder(orderId, items) {
   const orderRef = doc(db, 'orders', orderId)
   // เซ็ตต้องคืนสต็อกให้ส่วนประกอบ ไม่ใช่ให้ตัวเซ็ตซึ่งไม่มีสต็อกของตัวเอง
@@ -137,6 +163,11 @@ export async function voidOrder(orderId, items) {
   await runTransaction(db, async (transaction) => {
     const orderSnap = await transaction.get(orderRef)
     if (!orderSnap.exists() || orderSnap.data().is_voided) throw new Error('ไม่พบบิล หรือยกเลิกแล้ว')
+    const shiftId = orderSnap.data().shift_id
+    if (shiftId) {
+      const shiftSnap = await transaction.get(doc(db, 'shifts', shiftId))
+      if (shiftSnap.exists() && shiftSnap.data().status === 'closed') throw new ClosedShiftError()
+    }
     const productSnaps = await Promise.all(productRefs.map((ref) => transaction.get(ref)))
 
     transaction.update(orderRef, { is_voided: true, voided_at: serverTimestamp() })

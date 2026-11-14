@@ -309,7 +309,7 @@ function ReportsPage() {
 
   const lowStock = useMemo(
     () => activeProducts
-      .filter((p) => (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD)
+      .filter((p) => !p.is_bundle && (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD)
       .sort((a, b) => (a.stock_qty ?? 0) - (b.stock_qty ?? 0)),
     [activeProducts],
   )

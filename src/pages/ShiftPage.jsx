@@ -1,12 +1,8 @@
 import {
-  addDoc,
   collection,
-  doc,
   limit,
   onSnapshot,
   query,
-  serverTimestamp,
-  updateDoc,
   where,
 } from 'firebase/firestore'
 import { logSnapshotError } from '../lib/snapshotError'
@@ -21,7 +17,8 @@ import { formatTime, toDateString } from '../lib/dates'
 import { deleteDeliveryImport, importDeliveryTotal } from '../lib/delivery'
 import { db } from '../lib/firebase'
 import { calcCashExpected, shiftCashDiff } from '../lib/shifts'
-import { applyClosingCount, resetDailyStock } from '../lib/stock'
+import { applyClosingCount } from '../lib/stock'
+import { closeShift, openShift, ShiftAlreadyOpenError, shiftErrorMessage } from '../lib/shiftActions'
 import { buildCountRows, countRowsForSave, summarizeCount } from '../lib/stockCount'
 import { useOrdersForShift } from '../lib/useOrders'
 
@@ -108,6 +105,8 @@ function ShiftPage() {
   const [cashCounted, setCashCounted]       = useState('')
   const [closingNote, setClosingNote]       = useState('')
   const [closing, setClosing]               = useState(false)
+  // เปิด/ปิดกะไม่สำเร็จต้องบอก ไม่งั้นคนขายคิดว่าปิดกะแล้วทั้งที่ยังไม่ได้ปิด
+  const [shiftError, setShiftError]         = useState(null)
   const [shiftSummary, setShiftSummary]     = useState(null)
   const [selectedHistory, setSelectedHistory] = useState(null)
 
@@ -186,24 +185,19 @@ function ShiftPage() {
   const handleOpenShift = async () => {
     if (currentShift || !online) return
     setOpening(true)
+    setShiftError(null)
     try {
-      await addDoc(collection(db, 'shifts'), {
-        status: 'open', opened_at: serverTimestamp(), closed_at: null,
-        opening_float: Number(openingFloat) || 0, cash_counted: null, summary: null,
-      })
-      // สินค้าที่ตั้งเป็นสต็อกรายวันต้องเริ่มนับใหม่ทุกกะ ไม่งั้นยอดค้างจากเมื่อวาน
-      if (resetStock) {
-        const dailyProducts = activeProducts.filter(
-          (p) => p.stock_type === 'daily' && (p.stock_qty ?? 0) !== 0,
-        )
-        await Promise.all(dailyProducts.map((p) => resetDailyStock(p.id)))
-      }
+      await openShift({ openingFloat, products: activeProducts, resetDaily: resetStock })
+    } catch (err) {
+      // อีกเครื่องเปิดไว้แล้ว หน้านี้จะสลับไปเป็นกะนั้นเองเมื่อข้อมูลมาถึง ไม่ต้องขึ้นแดง
+      if (!(err instanceof ShiftAlreadyOpenError)) setShiftError(shiftErrorMessage(err, 'เปิดกะ'))
     } finally { setOpening(false) }
   }
 
   const handleCloseShift = async () => {
     if (!currentShift || cashCounted === '' || !online) return
     setClosing(true)
+    setShiftError(null)
     try {
       const counted = Number(cashCounted)
       const diff    = counted - summary.cashExpected
@@ -237,8 +231,7 @@ function ShiftPage() {
             }
           : null,
       }
-      await updateDoc(doc(db, 'shifts', currentShift.id), {
-        status: 'closed', closed_at: serverTimestamp(),
+      await closeShift(currentShift.id, {
         cash_counted: counted, closing_note: closingNote.trim() || null,
         summary: closedSummary,
       })
@@ -248,6 +241,8 @@ function ShiftPage() {
         closedAt: { toDate: () => new Date() },
       })
       setCashCounted(''); setClosingNote(''); setStockCounts({}); setStockCountOpen(false)
+    } catch (err) {
+      setShiftError(shiftErrorMessage(err, 'ปิดกะ'))
     } finally { setClosing(false) }
   }
 
@@ -330,6 +325,7 @@ function ShiftPage() {
               </span>
             </label>
 
+            {shiftError && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600">{shiftError}</p>}
             <button type="button" onClick={handleOpenShift} disabled={opening || !online}
               className="w-full min-h-[60px] rounded-2xl bg-gray-900 disabled:bg-gray-300 text-white font-black text-xl active:scale-95 transition-transform">
               {opening ? 'กำลังเปิดกะ...' : online ? '🔓 เปิดกะ' : 'ออฟไลน์ — เปิดกะไม่ได้'}
@@ -560,6 +556,7 @@ function ShiftPage() {
                 />
               )}
 
+              {shiftError && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600">{shiftError}</p>}
               {cashCounted === '' ? (
                 <p className="text-center text-sm text-gray-400 py-2">
                   นับเงินในลิ้นชักแล้วกรอกยอดด้านบนก่อนปิดกะ

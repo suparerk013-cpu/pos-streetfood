@@ -19,3 +19,13 @@ export function shiftCashDiff(shift) {
   const counted = shift?.cash_counted ?? summary.cash_counted ?? 0
   return { expected, counted, diff: counted - expected }
 }
+
+/**
+ * บิลของกะที่ปิดแล้วยกเลิกไม่ได้ — ยอดปิดกะบันทึกไปแล้ว
+ * กะที่ไม่อยู่ในรายการกะล่าสุดคือกะเก่ามาก ปิดไปนานแล้วแน่นอน
+ */
+export function isVoidLocked(order, shifts = []) {
+  if (!order?.shift_id) return false
+  const shift = shifts.find((s) => s.id === order.shift_id)
+  return !shift || shift.status !== 'open'
+}

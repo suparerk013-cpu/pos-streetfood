@@ -1,24 +1,28 @@
-import { addDoc, collection, serverTimestamp } from 'firebase/firestore'
 import { useState } from 'react'
-import { db } from '../lib/firebase'
+import { useAppData } from '../lib/appDataContext'
+import { openShift, ShiftAlreadyOpenError, shiftErrorMessage } from '../lib/shiftActions'
 import ModalBackdrop from './ModalBackdrop'
 
 function OpenShiftModal({ onClose }) {
   const [openingFloat, setOpeningFloat] = useState('500')
   const [opening, setOpening] = useState(false)
+  const [error, setError] = useState(null)
+  const { activeProducts } = useAppData()
 
+  // เปิดเหมือนหน้ากะทุกอย่าง รวมถึงล้างสต็อกสินค้ารายวัน
   const handleOpen = async () => {
     setOpening(true)
+    setError(null)
     try {
-      await addDoc(collection(db, 'shifts'), {
-        status: 'open',
-        opened_at: serverTimestamp(),
-        closed_at: null,
-        opening_float: Number(openingFloat) || 0,
-        cash_counted: null,
-        summary: null,
-      })
+      await openShift({ openingFloat, products: activeProducts })
       onClose()
+    } catch (err) {
+      // อีกเครื่องเปิดไว้แล้ว ไม่ต้องทำอะไร ปิดหน้าต่างแล้วขายต่อในกะนั้นได้เลย
+      if (err instanceof ShiftAlreadyOpenError) {
+        onClose()
+        return
+      }
+      setError(shiftErrorMessage(err, 'เปิดกะ'))
     } finally {
       setOpening(false)
     }
@@ -44,10 +48,10 @@ function OpenShiftModal({ onClose }) {
             เงินทอนเริ่มต้น (฿)
           </label>
           <input
-            type="number"
+            type="text"
             inputMode="numeric"
             value={openingFloat}
-            onChange={(e) => setOpeningFloat(e.target.value)}
+            onChange={(e) => setOpeningFloat(e.target.value.replace(/\D/g, ''))}
             placeholder="500"
             disabled={opening}
             className="w-full rounded-2xl border-2 border-gray-200 bg-gray-50 px-5 py-4 text-3xl font-extrabold text-gray-800 text-center focus:outline-none focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100 transition-all"
@@ -67,6 +71,8 @@ function OpenShiftModal({ onClose }) {
             ))}
           </div>
         </div>
+
+        {error && <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600">{error}</p>}
 
         {/* Buttons */}
         <div className="flex gap-2.5">

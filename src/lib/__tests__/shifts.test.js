@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calcCashExpected, shiftCashDiff } from '../shifts'
+import { calcCashExpected, isVoidLocked, shiftCashDiff } from '../shifts'
 
 describe('calcCashExpected', () => {
   it('เงินในลิ้นชัก = ทอนตั้งต้น + ยอดขายเงินสด', () => {
@@ -47,5 +47,21 @@ describe('shiftCashDiff', () => {
   it('กะที่ไม่มี summary ไม่ทำให้พัง', () => {
     expect(shiftCashDiff({}).diff).toBe(0)
     expect(shiftCashDiff(null).diff).toBe(0)
+  })
+})
+
+describe('isVoidLocked — ห้ามยกเลิกบิลของกะที่ปิดแล้ว', () => {
+  const shifts = [{ id: 'open1', status: 'open' }, { id: 'old1', status: 'closed' }]
+  it('กะยังเปิดอยู่ ยกเลิกได้', () => {
+    expect(isVoidLocked({ shift_id: 'open1' }, shifts)).toBe(false)
+  })
+  it('กะปิดแล้ว ยกเลิกไม่ได้', () => {
+    expect(isVoidLocked({ shift_id: 'old1' }, shifts)).toBe(true)
+  })
+  it('กะเก่ามากจนไม่อยู่ในรายการ ถือว่าปิดแล้ว', () => {
+    expect(isVoidLocked({ shift_id: 'gone' }, shifts)).toBe(true)
+  })
+  it('บิลนอกกะ ยกเลิกได้', () => {
+    expect(isVoidLocked({ shift_id: null }, shifts)).toBe(false)
   })
 })

@@ -1,30 +1,36 @@
 rules_version = '2';
 
 // ทุก collection ในแอปนี้เป็นข้อมูลหลังร้าน ไม่มีส่วนที่ลูกค้าเข้าถึง
-// จึงใช้กติกาเดียวกันหมด: ต้องล็อกอินก่อนถึงจะอ่านหรือเขียนได้
+//
+// ⚠️ กฎนี้กันได้แค่คนที่ไม่มีบัญชี — ต้องปิดการสมัครบัญชีเองใน Firebase Console ด้วย
+//    (Authentication → Settings → User actions → เอาติ๊ก "Enable create (sign-up)" ออก)
+//    ไม่งั้นคนนอกสมัครบัญชีเองผ่านรหัสเชื่อมต่อที่อยู่ในเว็บได้ แล้วผ่านกฎนี้ทันที
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function signedIn() {
-      return request.auth != null;
+    // ต้องล็อกอินด้วยชื่อผู้ใช้+รหัสผ่านที่เจ้าของร้านสร้างให้ ไม่รับบัญชีไม่ระบุตัวตน
+    function staff() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'password';
     }
 
-    // สินค้า / บิล / ประวัติสต็อก / กะ / ค่าใช้จ่าย / วัตถุดิบ / การซื้อวัตถุดิบ
-    match /products/{doc}          { allow read, write: if signedIn(); }
-    match /orders/{doc}            { allow read, write: if signedIn(); }
-    match /stock_logs/{doc}        { allow read, write: if signedIn(); }
-    match /shifts/{doc}            { allow read, write: if signedIn(); }
-    match /expenses/{doc}          { allow read, write: if signedIn(); }
-    match /ingredients/{doc}       { allow read, write: if signedIn(); }
-    match /purchases/{doc}         { allow read, write: if signedIn(); }
-    match /delivery_imports/{doc}  { allow read, write: if signedIn(); }
-    match /payouts/{doc}           { allow read, write: if signedIn(); }
-    match /sauces/{doc}            { allow read, write: if signedIn(); }
-    match /sauce_batches/{doc}     { allow read, write: if signedIn(); }
-    match /settings/{doc}          { allow read, write: if signedIn(); }
-    match /counters/{doc}          { allow read, write: if signedIn(); }
+    // บิล กะ และประวัติสต็อกคือหลักฐานการขาย แอปไม่เคยลบ จึงห้ามลบเลย
+    // ถ้ามีบัญชีหลุดไป อย่างน้อยก็ลบประวัติการขายทิ้งไม่ได้
+    match /orders/{doc}            { allow read, create, update: if staff(); }
+    match /shifts/{doc}            { allow read, create, update: if staff(); }
+    match /stock_logs/{doc}        { allow read, create: if staff(); }
 
-    // ปิดทุกอย่างที่ไม่ได้ระบุไว้ข้างบน
+    match /products/{doc}          { allow read, write: if staff(); }
+    match /expenses/{doc}          { allow read, write: if staff(); }
+    match /delivery_imports/{doc}  { allow read, write: if staff(); }
+    match /payouts/{doc}           { allow read, write: if staff(); }
+    match /settings/{doc}          { allow read, write: if staff(); }
+    match /counters/{doc}          { allow read, write: if staff(); }
+
+    // การซื้อวัตถุดิบแบบเก่า — อ่านและลบได้ ไม่มีของใหม่เขียนเข้ามาแล้ว
+    match /purchases/{doc}         { allow read, delete: if staff(); }
+
+    // ปิดทุกอย่างที่ไม่ได้ระบุไว้ข้างบน (รวมถึงระบบน้ำจิ้ม/วัตถุดิบเดิมที่ถอดออกแล้ว)
     match /{document=**} {
       allow read, write: if false;
     }

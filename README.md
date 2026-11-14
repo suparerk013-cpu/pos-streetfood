@@ -73,7 +73,12 @@ npm run dev
 firebase deploy --only firestore:rules,firestore:indexes
 ```
 
-`firestore.rules` บังคับให้ทุก collection ต้องล็อกอินก่อนถึงจะอ่าน/เขียนได้
+`firestore.rules` บังคับให้ทุก collection ต้องล็อกอินด้วยชื่อผู้ใช้+รหัสผ่านก่อนถึงจะอ่าน/เขียนได้
+และห้ามลบบิล กะ ประวัติสต็อก
+
+**ต้องปิดการสมัครบัญชีเองด้วย** — Firebase Console → Authentication → Settings → User actions
+→ เอาติ๊ก "Enable create (sign-up)" ออก แล้วกด Save ไม่งั้นคนนอกสมัครบัญชีเองได้แล้วผ่านกฎทันที
+บัญชีพนักงานใหม่ให้สร้างจาก Console (Authentication → Users → Add user) เท่านั้น
 
 ---
 
@@ -149,4 +154,5 @@ src/
   เหลือ = เงินเข้าจริง − รายจ่ายที่จด
 - **ของหาย/ของทิ้งตอนนับสต็อกปิดกะ** คิดเป็นเงินตามราคาขาย (`missing_value` `waste_value`)
   กะเก่าที่เก็บเป็นต้นทุน (`*_cost`) ยังแสดงได้ โดยขึ้นคำว่า "ต้นทุน" กำกับ
-- collection `ingredients` `sauces` `sauce_batches` ไม่มีโค้ดอ่านแล้ว ลบได้จากหน้าตั้งค่า → ล้างข้อมูล
+- collection `ingredients` `sauces` `sauce_batches` ไม่มีโค้ดอ่านแล้ว กฎฐานข้อมูลปิดไว้ ข้อมูลยังอยู่ ลบเองได้จาก Firebase Console
+- ปุ่มล้างข้อมูลทดสอบถูกเอาออกแล้ว เพราะใช้งานจริงแล้ว กดพลาดทีเดียวบิลจริงหายหมด

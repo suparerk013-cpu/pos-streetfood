@@ -46,7 +46,8 @@ function Shell() {
   const [shiftModalDismissed, setShiftModalDismissed] = useState(false)
 
   const lowStockCount = useMemo(
-    () => activeProducts.filter((p) => (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD).length,
+    // เซ็ตไม่มีสต็อกของตัวเอง (คิดจากส่วนประกอบ) ถ้านับรวมจะกลายเป็น 0 แล้วขึ้นว่าใกล้หมดทุกเซ็ต
+    () => activeProducts.filter((p) => !p.is_bundle && (p.stock_qty ?? 0) <= LOW_STOCK_THRESHOLD).length,
     [activeProducts],
   )
 

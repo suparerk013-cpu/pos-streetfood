@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useAppData } from '../lib/appDataContext'
 import { voidOrder } from '../lib/orders'
+import { isVoidLocked } from '../lib/shifts'
 
 const METHOD_LABELS = { cash: 'เงินสด', promptpay: 'โมบายแบงค์กิ้ง', delivery: 'เดลิเวอรี่' }
 
@@ -16,6 +18,7 @@ function formatDate(ts) {
 }
 
 function BillModal({ order, onClose, onVoided }) {
+  const { shifts } = useAppData()
   const [confirmVoid, setConfirmVoid] = useState(false)
   const [voiding, setVoiding]         = useState(false)
   const [voidError, setVoidError]     = useState(null)
@@ -118,6 +121,10 @@ function BillModal({ order, onClose, onVoided }) {
         {order.is_voided ? (
           <div className="border-t border-gray-100 px-5 py-3 text-center bg-gray-50">
             <p className="text-xs font-bold text-gray-400">บิลนี้ถูกยกเลิกแล้ว — สต็อกได้รับการคืนแล้ว</p>
+          </div>
+        ) : isVoidLocked(order, shifts) ? (
+          <div className="border-t border-gray-100 px-5 py-3 text-center bg-gray-50">
+            <p className="text-xs font-bold text-gray-400">กะของบิลนี้ปิดไปแล้ว ยกเลิกบิลไม่ได้</p>
           </div>
         ) : (
           <div className="border-t border-gray-100 px-5 py-3">
