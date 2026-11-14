@@ -1,0 +1,60 @@
+name: Reset data
+
+# ลบข้อมูลการขายทั้งหมดเพื่อเริ่มใหม่ — สั่งเองเท่านั้น (Actions → Reset data → Run workflow)
+# ต้องพิมพ์ RESET ในช่อง confirm ถึงจะลบ สำรองข้อมูลทุกอย่างเป็นไฟล์ไว้ 90 วันก่อนลบเสมอ
+# เก็บไว้: สินค้า/เซ็ต และตั้งค่าร้าน · สต็อกสินค้าตั้งเป็น 0
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'พิมพ์ RESET เพื่อยืนยันลบข้อมูลการขายทั้งหมด'
+        required: true
+  # push ไฟล์นี้แค่ให้ GitHub รู้จัก workflow — งานจะไม่ทำอะไรถ้าไม่ได้สั่งเอง
+  push:
+    branches: [claude/pos-streetfood-analysis-lcawl7]
+    paths: ['.github/workflows/reset-data.yml']
+
+jobs:
+  reset:
+    if: github.event_name == 'workflow_dispatch' && inputs.confirm == 'RESET'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install firebase-admin
+        run: npm i --no-save --no-package-lock firebase-admin@13.10.0
+
+      - name: Write service account
+        env:
+          SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          node -e 'const k=require(process.argv[1]); if(k.project_id!=="pospos-b87bf"){console.error("::error::กุญแจไม่ใช่ของโปรเจกต์ pospos-b87bf");process.exit(1)}' "$RUNNER_TEMP/sa.json"
+
+      - name: Backup
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: node .github/scripts/reset-data.mjs backup backup
+
+      # สำรองต้องขึ้นสำเร็จก่อน ถึงจะลบ — ไฟล์ลบไม่ได้ถ้าขั้นนี้พัง
+      - name: Upload backup
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-before-reset
+          path: backup/
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Wipe sales data
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
+        run: node .github/scripts/reset-data.mjs wipe
+
+      - name: Remove service account
+        if: always()
+        run: rm -f "$RUNNER_TEMP/sa.json"
