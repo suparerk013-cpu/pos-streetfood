@@ -103,6 +103,8 @@ jobs:
             }
             fs.writeFileSync(process.argv[3], JSON.stringify(found.k))
             console.log("ใช้กุญแจจาก Secret " + found.label + " (โปรเจกต์ " + found.k.project_id + ")")
+            // ชื่อบัญชีของกุญแจ (ไม่ใช่ความลับ) — เอาไว้เทียบว่าให้สิทธิ์ใน IAM ถูกบัญชี
+            console.log("บัญชีของกุญแจ: " + found.k.client_email)
           ' "$RUNNER_TEMP/sa-1.json" "$RUNNER_TEMP/sa-2.json" "$RUNNER_TEMP/sa.json"
           rm -f "$RUNNER_TEMP/sa-1.json" "$RUNNER_TEMP/sa-2.json"
 
@@ -116,7 +118,11 @@ jobs:
         if: env.HAS_SECRETS == 'true'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/sa.json
-        run: npx --yes firebase-tools@14.27.0 deploy --only firestore:rules,firestore:indexes --project pospos-b87bf --non-interactive
+        run: |
+          npx --yes firebase-tools@14.27.0 deploy --only firestore:rules,firestore:indexes --project pospos-b87bf --non-interactive || {
+            echo "::error::อัปเดตกฎฐานข้อมูลไม่สำเร็จ (เว็บขึ้นแล้ว) — ถ้าขึ้น Permission denied ให้เพิ่มสิทธิ์ Firebase Admin และ Service Usage Consumer ให้บัญชีของกุญแจด้านบน ที่ IAM ของโปรเจกต์ pospos-b87bf"
+            exit 1
+          }
 
       - name: Remove service account
         if: always()
