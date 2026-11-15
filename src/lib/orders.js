@@ -50,6 +50,9 @@ export async function createOrder({
 
   const effectiveGp = channel === 'delivery' ? (gpRate ?? DEFAULT_GP_RATE) : 0
 
+  // สต็อกหลังขายของแต่ละสินค้า — ส่งกลับให้หน้าขายโชว์ทันที ไม่ต้องรอข้อมูลรอบใหม่จากเซิร์ฟเวอร์
+  const stockAfter = {}
+
   const queueNo = await runTransaction(db, async (transaction) => {
     // Firestore requires all reads before any writes in a transaction.
     const counterSnap = await transaction.get(counterRef)
@@ -91,8 +94,9 @@ export async function createOrder({
 
     productIds.forEach((id, index) => {
       const soldQty = qtyByProduct.get(id)
+      stockAfter[id] = currentQtyByProduct.get(id) - soldQty
       transaction.update(productRefs[index], {
-        stock_qty: currentQtyByProduct.get(id) - soldQty,
+        stock_qty: stockAfter[id],
       })
 
       const logRef = doc(collection(db, 'stock_logs'))
@@ -109,7 +113,7 @@ export async function createOrder({
     return next.value
   })
 
-  return { orderId: orderRef.id, queueNo, payments, total, channel, platform }
+  return { orderId: orderRef.id, queueNo, payments, total, channel, platform, stockAfter }
 }
 
 /**

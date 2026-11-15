@@ -1,4 +1,4 @@
-import { collection, doc, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
+import { collection, disableNetwork, doc, enableNetwork, limit, onSnapshot, orderBy, query } from 'firebase/firestore'
 import { useEffect, useMemo, useState } from 'react'
 import { AppDataContext } from './appDataContext'
 import { DEFAULT_GP_RATE, DELIVERY_PLATFORMS } from './constants'
@@ -49,6 +49,43 @@ export function AppDataProvider({ children }) {
     return onSnapshot(doc(db, 'settings', 'store'), (snap) => {
       setStore(snap.exists() ? snap.data() : {})
     }, logSnapshotError('ตั้งค่าร้าน', setDataError))
+  }, [])
+
+  /**
+   * ต่อฐานข้อมูลใหม่เมื่อกลับมาเปิดแอปหลังพักหน้าจอไปนาน
+   *
+   * มือถือที่ปิดจอหรือสลับไปแอปอื่นนาน ๆ ตัวรอฟังข้อมูลของ Firestore บางทีไม่ฟื้นเอง
+   * ข้อมูลบนจอเลยค้างของเก่า (สต็อกไม่ลดจนต้องรีเฟรช) — ตัดแล้วต่อใหม่ครั้งเดียวให้ดึงข้อมูลล่าสุด
+   */
+  useEffect(() => {
+    let hiddenAt = null
+    let reconnecting = false
+    const reconnect = async () => {
+      if (reconnecting) return
+      reconnecting = true
+      try {
+        await disableNetwork(db)
+        await enableNetwork(db)
+      } catch (err) {
+        console.error('[POS] ต่อฐานข้อมูลใหม่ไม่สำเร็จ', err)
+      } finally {
+        reconnecting = false
+      }
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') {
+        hiddenAt = Date.now()
+      } else if (hiddenAt && Date.now() - hiddenAt > 30000) {
+        hiddenAt = null
+        reconnect()
+      }
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('online', reconnect)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('online', reconnect)
+    }
   }, [])
 
   useEffect(() => {

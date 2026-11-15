@@ -35,7 +35,7 @@ import {
   toDate,
   totalsFromSummaries,
 } from '../lib/shiftSales'
-import { useExpensesInRange, usePayouts, usePurchasesInRange } from '../lib/usePurchases'
+import { usePayouts } from '../lib/usePurchases'
 import { useOrdersBetween, useOrdersForShift, useShiftsInRange } from '../lib/useOrders'
 
 /**
@@ -208,8 +208,6 @@ function ReportsPage() {
   }, [isShiftView, viewShift, olderShift, prevShifts, comparison])
 
   const payouts = usePayouts()
-  const { purchases } = usePurchasesInRange(from, to)
-  const { expenses } = useExpensesInRange(from, to)
   const damageLogs = useDamageLogs(from, to)
 
   /** อัตราที่ถูกหักจริง — ใช้จากรอบจ่ายเงินล่าสุดถ้ามี ไม่มีก็ใช้ค่าที่ตั้งไว้ */
@@ -231,7 +229,6 @@ function ReportsPage() {
   const totalNet = useMemo(() => netOfOrders(orders, rateFor), [orders, rateFor])
 
   const deliveryRows = useMemo(() => summarizeDelivery(orders, { rateFor }), [orders, rateFor])
-  const gpFeeTotal = useMemo(() => deliveryRows.reduce((s, r) => s + r.fee, 0), [deliveryRows])
 
   // นับแค่จำนวนชิ้นที่แจกไป ไม่คิดเป็นเงิน — ระบบเลิกคิดต้นทุนต่อชิ้นแล้วเพราะตัวเลขไม่ตรงของจริง
   const freebies = useMemo(
@@ -242,18 +239,8 @@ function ReportsPage() {
   const prevTotalSales = prevTotals?.gross ?? null
   const prevOrderCount = prevTotals?.count ?? null
 
-  // รายจ่ายคือเงินที่จดไว้จริงในหน้าค่าใช้จ่าย ไม่ใช่ต้นทุนที่ระบบเดาจากสูตร
-  // ของเก่าที่บันทึกแบบซื้อวัตถุดิบยังอยู่ในอีก collection หนึ่ง ต้องรวมด้วยไม่งั้นรายจ่ายย้อนหลังหาย
-  const recordedExpense = useMemo(
-    () =>
-      purchases.reduce((s, p) => s + (p.total_amount ?? 0), 0) +
-      expenses.reduce((s, e) => s + (e.amount ?? 0), 0),
-    [purchases, expenses],
-  )
-  // เงินเหลือต้องหักค่า GP ที่แพลตฟอร์มกินไปด้วย ไม่งั้นตัวเลขสูงเกินจริง
-  const totalCost = recordedExpense + gpFeeTotal
-  const netProfit = totalSales - totalCost
-  const profitMargin = totalSales > 0 ? Math.round((netProfit / totalSales) * 100) : 0
+  // หน้ารายงานแสดงเฉพาะยอดขาย — รายจ่ายกับ "เหลือเท่าไหร่" ย้ายไปอยู่หน้ารายจ่าย แท็บรับ-จ่าย
+  // เดิมเลขใหญ่สุดคือเงินเหลือหลังหักรายจ่าย ซื้อของเข้าร้านวันไหนก็ติดลบแดง ทั้งที่ขายได้ปกติ
 
   const orderCount = orders.length
   const avgOrder = orderCount > 0 ? Math.round(totalSales / orderCount) : 0
@@ -275,6 +262,12 @@ function ReportsPage() {
   }, [isShiftView, comparison, shiftRows])
 
   const sparklineValues = useMemo(() => chartData.map((d) => d.value), [chartData])
+  /** แท่งที่ขายได้มากที่สุด — ชั่วโมงขายดีในกะ หรือกะขายดีในช่วงที่เลือก */
+  const bestLabel = useMemo(() => {
+    const best = chartData.reduce((top, d) => (!d.muted && d.value > (top?.value ?? 0) ? d : top), null)
+    if (!best) return '-'
+    return isShiftView ? best.label.replace(' น.', '') : best.shortLabel ?? best.label
+  }, [chartData, isShiftView])
 
   const selectedDetail = useMemo(() => {
     if (!selectedBar) return null
@@ -374,7 +367,7 @@ function ReportsPage() {
     return monthCursor.getFullYear() === now.getFullYear() && monthCursor.getMonth() === now.getMonth()
   })()
 
-  const hasData = totalSales > 0 || totalCost > 0
+  const hasData = totalSales > 0
 
   return (
     <div className="h-full w-full flex flex-col bg-gray-50 overflow-hidden">
@@ -471,46 +464,63 @@ function ReportsPage() {
       <div className="flex-1 min-h-0 overflow-y-auto">
         <div className="p-3 max-w-5xl mx-auto w-full grid gap-2.5 lg:grid-cols-2 items-start">
 
-          {/* ── กำไรสุทธิ + กราฟ ── */}
+          {/* ── ยอดขาย + เส้นแนวโน้ม ── */}
           <div className="lg:col-span-2 bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="px-5 pt-4 pb-2">
               <p className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-0.5">
-                เหลือหลังหักรายจ่าย · {periodLabel}
+                ยอดขาย · {periodLabel}
               </p>
               <div className="flex items-baseline gap-2">
-                <p className={`font-black tabular-nums leading-none ${
-                  netProfit > 0 ? 'text-emerald-600' : netProfit < 0 ? 'text-red-500' : 'text-gray-400'
-                }`} style={{ fontSize: 'clamp(2.1rem, 8vw, 2.9rem)' }}>
-                  {netProfit > 0 ? '+' : ''}{Math.round(netProfit).toLocaleString()}
+                <p className="font-black tabular-nums leading-none text-gray-900"
+                  style={{ fontSize: 'clamp(2.1rem, 8vw, 2.9rem)' }}>
+                  {Math.round(totalSales).toLocaleString()}
                 </p>
                 <span className="text-gray-400 font-bold text-lg">฿</span>
-                {totalSales > 0 && (
-                  <span className={`ml-auto text-sm font-bold px-2.5 py-1 rounded-full ${
-                    profitMargin > 0 ? 'bg-emerald-50 text-emerald-600' : profitMargin < 0 ? 'bg-red-50 text-red-500' : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    {profitMargin > 0 ? '+' : ''}{profitMargin}%
-                  </span>
-                )}
+                <span className="ml-auto">
+                  <DeltaBadge current={totalSales} previous={prevTotalSales}
+                    suffix={isShiftView ? (viewShift?.status === 'open' ? `${prevName}เวลาเดียวกัน` : prevName) : 'ช่วงก่อน'} />
+                </span>
               </div>
+              {/* เทียบกะก่อน — กะยังเปิดเทียบถึงเวลาเดียวกัน กะปิดแล้วเทียบทั้งกะ */}
+              {isShiftView && olderShift && comparison && (
+                <p className="text-sm text-gray-500 mt-1">
+                  {comparison.sameTime ? (
+                    <>
+                      {prevName}เวลาเดียวกัน ({comparison.sameTime.at}){' '}
+                      <b className="text-gray-700 tabular-nums">{Math.round(comparison.sameTime.previous).toLocaleString()} ฿</b>
+                      {' · '}ทั้งกะ{prevName} {Math.round(comparison.previousTotal).toLocaleString()} ฿
+                    </>
+                  ) : (
+                    <>
+                      {prevName} <b className="text-gray-700 tabular-nums">{Math.round(comparison.previousTotal).toLocaleString()} ฿</b>
+                    </>
+                  )}
+                </p>
+              )}
+              {deliveryTotal > 0 && (
+                <p className="text-xs text-gray-400 mt-1">
+                  เงินเข้าจริงหลังแอปเดลิเวอรีหัก GP <b className="text-gray-600 tabular-nums">{Math.round(totalNet).toLocaleString()} ฿</b>
+                </p>
+              )}
               <div className="mt-1 -mx-1">
-                <Sparkline values={sparklineValues} stroke={netProfit >= 0 ? '#10b981' : '#ef4444'} />
+                <Sparkline values={sparklineValues} stroke="#f97316" />
               </div>
             </div>
 
-            {/* แถวตัวเลขรอง — ไม่ทำเป็นการ์ด เพื่อไม่แย่งความสำคัญกับกำไร */}
+            {/* แถวตัวเลขรอง — ยอดขายล้วน ไม่มีรายจ่าย */}
             <div className="grid grid-cols-3 border-t border-gray-100 divide-x divide-y divide-gray-100">
-              <StatCell label="ยอดขายรวม" value={Math.round(totalSales).toLocaleString()}
-                current={totalSales} previous={prevTotalSales} />
-              <StatCell label="เงินเข้าจริง" value={Math.round(totalNet).toLocaleString()}
-                current={totalNet} previous={null} />
-              <StatCell label="รายจ่าย" value={Math.round(totalCost).toLocaleString()}
-                current={totalCost} previous={null} invert />
               <StatCell label="หน้าร้าน" value={Math.round(storeSales).toLocaleString()}
                 current={storeSales} previous={null} />
               <StatCell label="เดลิเวอรี" value={Math.round(deliveryTotal).toLocaleString()}
                 current={deliveryTotal} previous={null} />
-              <StatCell label={`บิล · เฉลี่ย ${avgOrder.toLocaleString()} ฿`} value={orderCount.toLocaleString()}
+              <StatCell label="เงินเข้าจริง" value={Math.round(totalNet).toLocaleString()}
+                current={totalNet} previous={null} />
+              <StatCell label="บิล" value={orderCount.toLocaleString()}
                 current={orderCount} previous={prevOrderCount} />
+              <StatCell label="เฉลี่ยต่อบิล" value={avgOrder.toLocaleString()}
+                current={avgOrder} previous={null} />
+              <StatCell label={isShiftView ? 'ชั่วโมงขายดี' : 'กะขายดี'} value={bestLabel}
+                current={0} previous={null} />
             </div>
           </div>
 
@@ -524,37 +534,6 @@ function ReportsPage() {
           {/* ── กราฟยอดขาย — หลายวันเป็นแท่งละกะ วันเดียวเป็นรายชั่วโมงในกะนั้น ── */}
           {hasData && (
             <div className="lg:col-span-2 bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
-              {/* เทียบกับกะก่อน — กะยังเปิด: ถึงเวลาเดียวกัน / กะปิดแล้ว: ทั้งกะ */}
-              {isShiftView && olderShift && comparison && (() => {
-                const open = Boolean(comparison.sameTime)
-                const current = open ? comparison.sameTime.current : comparison.currentTotal
-                const previous = open ? comparison.sameTime.previous : comparison.previousTotal
-                const pct = previous > 0 ? Math.round(((current - previous) / previous) * 100) : null
-                return (
-                  <div className="mb-3 rounded-2xl bg-gray-50 px-4 py-3">
-                    <p className="text-xs font-bold text-gray-400">
-                      {open ? `กะนี้ถึงตอนนี้ (${comparison.sameTime.at})` : `ทั้งกะ เทียบ${prevName}`}
-                    </p>
-                    <div className="flex items-baseline gap-2">
-                      <p className="text-3xl font-black text-gray-900 tabular-nums">{Math.round(current).toLocaleString()}</p>
-                      <span className="text-gray-400 font-bold">฿</span>
-                      {pct !== null && (
-                        <span className={`ml-auto text-sm font-black rounded-full px-3 py-1 ${
-                          pct > 0 ? 'bg-emerald-100 text-emerald-700' : pct < 0 ? 'bg-red-100 text-red-600' : 'bg-gray-200 text-gray-500'
-                        }`}>
-                          {pct > 0 ? '↑' : pct < 0 ? '↓' : ''} {pct === 0 ? 'เท่าเดิม' : `${Math.abs(pct)}%`}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-sm text-gray-500">
-                      {open ? `${prevName}เวลาเดียวกัน` : prevName}{' '}
-                      <b className="text-gray-700 tabular-nums">{Math.round(previous).toLocaleString()} ฿</b>
-                      {open && <> · ทั้งกะ{prevName} {Math.round(comparison.previousTotal).toLocaleString()} ฿</>}
-                    </p>
-                  </div>
-                )
-              })()}
-
               <div className="flex items-center justify-between mb-3 gap-2">
                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em]">
                   {isShiftView ? (olderShift ? `รายชั่วโมง เทียบ${prevName}` : 'ยอดขายรายชั่วโมงในกะ') : 'ยอดขายรายกะ'}
@@ -646,37 +625,6 @@ function ReportsPage() {
                 </div>
               )}
             </div>
-          )}
-
-          {/* ── รายจ่ายแยกส่วน — เงินที่จดไว้จริง กับค่า GP ที่แอปหัก ── */}
-          {totalCost > 0 && (
-            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 pt-3 pb-3">
-              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-2">รายจ่ายแยกส่วน</p>
-              <ShareBar
-                total={totalCost}
-                segments={[
-                  { key: 'recorded', label: 'รายจ่ายที่จดไว้', value: recordedExpense, color: 'bg-orange-400' },
-                  { key: 'gp', label: 'ค่า GP เดลิเวอรี', value: gpFeeTotal, color: 'bg-red-400' },
-                ]}
-              />
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 text-[11px]">
-                <span className="text-gray-500">
-                  <span className="inline-block w-2 h-2 rounded-sm bg-orange-400 mr-1 align-middle" />
-                  รายจ่ายที่จดไว้ {Math.round(recordedExpense).toLocaleString()} ฿
-                </span>
-                {gpFeeTotal > 0 && (
-                  <span className="text-gray-500">
-                    <span className="inline-block w-2 h-2 rounded-sm bg-red-400 mr-1 align-middle" />
-                    ค่า GP {Math.round(gpFeeTotal).toLocaleString()} ฿
-                  </span>
-                )}
-              </div>
-            </div>
-          )}
-          {totalSales > 0 && recordedExpense === 0 && (
-            <p className="rounded-2xl bg-amber-50 border border-amber-200 px-4 py-2.5 text-[11px] text-amber-700">
-              ยังไม่ได้จดรายจ่ายในช่วงนี้ — ตัวเลขเหลือหลังหักรายจ่ายจึงสูงกว่าความจริง
-            </p>
           )}
 
           {/* ── เดลิเวอรีแยกแอป ── */}

@@ -25,9 +25,9 @@ import { shiftTimeRange } from '../lib/shiftSales'
 
 function SalesPage() {
   const {
-    activeProducts,
+    activeProducts: liveProducts,
     productsLoading,
-    productById,
+    productById: liveProductById,
     shopName,
     online,
     enabledPlatforms,
@@ -42,6 +42,37 @@ function SalesPage() {
   const [search, setSearch] = useState('')
   const [pendingChannel, setPendingChannel] = useState(null)
   const [damageOpen, setDamageOpen] = useState(false)
+
+  /**
+   * สต็อกหลังขายที่รู้จากบิลที่เพิ่งออก — ใช้แทนค่าจากเซิร์ฟเวอร์ชั่วคราว
+   *
+   * ออกบิลแล้วต้องรอข้อมูลสินค้ารอบใหม่ถึงจะเห็นสต็อกลด ส่วนใหญ่ไม่กี่วินาที
+   * แต่มือถือที่พักหน้าจอไปนาน ๆ ตัวรอฟังข้อมูลบางทีค้าง ป้าย "เหลือ" เลยไม่ลดจนต้องรีเฟรช
+   * จำค่าที่ระบบเพิ่งตัดไว้แล้วโชว์ทันที พอข้อมูลจริงมาถึงตรงกันแล้ว (หรือเกิน 30 วินาที) ก็เลิกใช้
+   */
+  const [stockOverrides, setStockOverrides] = useState(() => new Map())
+  useEffect(() => {
+    setStockOverrides((prev) => {
+      if (prev.size === 0) return prev
+      const now = Date.now()
+      const next = new Map()
+      prev.forEach((o, id) => {
+        const live = liveProducts.find((p) => p.id === id)
+        if (live && (live.stock_qty ?? 0) !== o.stock && now - o.at < 30000) next.set(id, o)
+      })
+      return next.size === prev.size ? prev : next
+    })
+  }, [liveProducts])
+  const activeProducts = useMemo(
+    () => (stockOverrides.size === 0
+      ? liveProducts
+      : liveProducts.map((p) => (stockOverrides.has(p.id) ? { ...p, stock_qty: stockOverrides.get(p.id).stock } : p))),
+    [liveProducts, stockOverrides],
+  )
+  const productById = useMemo(
+    () => (stockOverrides.size === 0 ? liveProductById : new Map(activeProducts.map((p) => [p.id, p]))),
+    [stockOverrides, liveProductById, activeProducts],
+  )
 
   // สลับช่องทางแล้วราคาเปลี่ยนทั้งกระดาน ตะกร้าเดิมจึงใช้ต่อไม่ได้
   useEffect(() => {
@@ -176,6 +207,14 @@ function SalesPage() {
     })
 
   const handleCheckoutSuccess = (result) => {
+    if (result?.stockAfter) {
+      const at = Date.now()
+      setStockOverrides((prev) => {
+        const next = new Map(prev)
+        Object.entries(result.stockAfter).forEach(([id, stock]) => next.set(id, { stock, at }))
+        return next
+      })
+    }
     setCheckoutOpen(false)
     setCart([])
     setSearch('')
